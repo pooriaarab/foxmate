@@ -109,4 +109,14 @@ describe("shield", () => {
     expect(page.text).toMatch(/foxshield could not scan this page/);
     expect(scans[0]?.withheld).toMatch(/Frame not found/);
   });
+
+  it("S11: the snapshot waits until the tab has loaded", async () => {
+    let status = "loading";
+    let readAt = "";
+    setTimeout(() => { status = "complete"; }, 300);
+    const paw = { ...fakePaw, snapshot: async () => { readAt = status; return structuredClone(raw); } };
+    const browser = { ...tab(async () => [{ result: report() }]), tabs: { get: async () => ({ status }) } };
+    await shieldedPaw({ paw, browser }).snapshot(1);
+    expect(readAt).toBe("complete");
+  });
 });
