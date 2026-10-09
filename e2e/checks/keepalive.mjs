@@ -43,6 +43,27 @@ export default async function keepaliveCheck({ session, check, scripted, finish 
     const t2 = await task("Book a table for 5, after a restart.");
     check("K2 after the page unloads, the same sidebar connects again and the task finishes", { done: true, again: true },
       { done: k2.startsWith("Done"), again: (t2?.steps[0]?.attempt ?? 0) >= 2 });
+
+    // K3: two goals at once. The second one waits; the first one keeps the sidebar and Stop.
+    await page.goto(`${site.url}/table.html`);
+    await sidebar.evaluate((s) => browser.storage.local.set({ settings: s }), scripted([{ tool: "snapshot", args: {} }, { tool: "browser_task", args: { goal: "name: Sam Lee, party size: 6" } }, finish]));
+    const runsBefore = await sidebar.evaluate(() => document.querySelectorAll("#conversation > li").length);
+    await sidebar.evaluate(async (u) => {
+      const tabId = await window.foxmate.tabFor(u);
+      window.foxmate.start(tabId, "First of two goals.");
+      window.foxmate.start(tabId, "Second of two goals.");
+    }, page.url());
+    await poll(sidebar, ask, undefined, 60_000);
+    await sleep(3000);
+    const shown = await sidebar.evaluate((n) => [...document.querySelectorAll("#conversation > li")].slice(n).map((li) => li.querySelector(".goal").textContent), runsBefore);
+    await sidebar.evaluate(approve);
+    await poll(sidebar, ended, undefined, 60_000);
+    // Back to the form for the second goal, which foxrunner runs after its retry wait.
+    await page.goto(`${site.url}/table.html`);
+    await poll(sidebar, (n) => document.querySelectorAll("#conversation > li").length > n + 1 && Boolean(document.querySelector("#conversation > li:last-child li.ask .row button")), runsBefore, 120_000);
+    await sidebar.evaluate(approve);
+    const second = await poll(sidebar, ended, undefined, 60_000);
+    check("K3 two goals at once run one after the other", { first: ["First of two goals."], second: true }, { first: shown, second: second.startsWith("Done") });
   } finally {
     await site.close();
   }

@@ -2,7 +2,7 @@
 // talks to it over a "foxmate" port: it starts a goal on a tab, answers
 // approvals and stops a run. Every open sidebar gets every event of the
 // current run, so a sidebar that opens late shows the run too.
-import { storageAreaStore } from "foxgate";
+import { createFoxgate, storageAreaStore } from "foxgate";
 import { idbStore, iframeRuntime, openDen } from "foxden";
 import { createFoxlend, withDefaultRule } from "foxlend";
 import { describe as describeImage, capture } from "foxlens";
@@ -59,7 +59,10 @@ const google = async () => {
   if ((await vault.status()) === "locked") await vault.unlock();
   return googleLink.link;
 };
-const googleOn = async () => Boolean((await modules()).google) && (await google().then((l) => l.status(), () => ({ connected: false }))).connected;
+// Firefox's consent for mail can be taken back in about:addons, so each call checks it.
+const googleOn = async () => Boolean((await modules()).google)
+  && (await browser.permissions.contains({ data_collection: ["personalCommunications"] }).catch(() => false))
+  && (await google().then((l) => l.status(), () => ({ connected: false }))).connected;
 
 // foxgate and foxlend share one public suffix rule and one gate host.
 const publicSuffix = withDefaultRule(browser.publicSuffix);
@@ -73,11 +76,18 @@ const agent = createAgent({
       messages: async (max) => (await gmail(await google()).listMessages({ max })).messages.map(toPromptText),
     }),
   ],
+  // A run on a tab in a loan's container is a loan run, also when Chat started it.
+  loanFor: async (cookieStoreId) => {
+    const loan = (await lender.listLoans()).find((l) => l.cookieStoreId === cookieStoreId && l.state === "active");
+    return loan ? { cookieStoreId, scope: loan.scope } : undefined;
+  },
   moreTabTools: (tabId) => [lookTool(tabId, { enabled: async () => Boolean((await modules()).lens), look, tabDomain: async (id) => new URL((await browser.tabs.get(id)).url).hostname })], browserModel: async () => (await browserModel()).transformers({ task: "chat" }) });
 // Lend a login: foxlend copies one site's cookies into its own container,
 // blocks every request from it to a host off the allow list, and takes it
 // all back on revoke. Created at the top level, so Firefox can wake the page.
-const lender = createFoxlend({ browser, host: agent.host, publicSuffix });
+// foxlend gets a gate host of its own: its loan grant (the site and the allow
+// list) must not widen the agent's runs. Each run gets its own grants (G13).
+const lender = createFoxlend({ browser, host: createFoxgate({ tools: { lend: "read" }, publicSuffix }).host, publicSuffix });
 const blocked = [];
 // A blocked URL can carry what the page tried to steal (a cookie in the query),
 // so the log and the sidebar keep only its origin and path.
@@ -141,9 +151,22 @@ const send = (message) => {
 
 agent.approvals.onChange((waiting) => send({ waiting }));
 
+// A run is claimed before the first await, so two goals at once cannot both start (K3).
+let claimed = false;
+const busy = () => claimed || agent.busy;
+
 /** Runs a goal on a tab now and resolves with its end. Throws "busy" when a run is in progress. */
-async function runNow({ goal, tabId, loanId, taskId, signal }) {
-  if (agent.busy) throw new Error("busy");
+async function runNow(input) {
+  if (busy()) throw new Error("busy");
+  claimed = true;
+  try {
+    return await runClaimed(input);
+  } finally {
+    claimed = false;
+  }
+}
+
+async function runClaimed({ goal, tabId, loanId, taskId, signal }) {
   const { settings = {} } = await browser.storage.local.get("settings");
   // Device mode unlocks without a passphrase; the header rule needs it unlocked.
   if (settings.privacy === "own-key" && (await vault.status()) === "locked") await vault.unlock();
@@ -207,7 +230,7 @@ browser.runtime.onConnect.addListener((port) => {
   port.onMessage.addListener(async (message) => {
     try {
       if (message.op === "run") {
-        if (agent.busy) throw new Error("A run is in progress. Stop it first.");
+        if (busy()) throw new Error("A run is in progress. Stop it first.");
         await runner.start("goal", { goal: message.goal, tabId: message.tabId, ...(message.loanId ? { loanId: message.loanId } : {}) });
       }
       else if (message.op === "answer") await agent.approvals.answer(message.requestId, message.answer, message.via === "phone" ? "phone" : "sidebar");
