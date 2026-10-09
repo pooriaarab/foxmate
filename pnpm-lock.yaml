@@ -26,6 +26,9 @@ importers:
       foxpaw:
         specifier: ^0.1.0
         version: 0.1.0
+      foxrunner:
+        specifier: ^0.1.0
+        version: 0.1.0(yauzl@3.4.0)
       foxshield:
         specifier: ^0.1.0
         version: 0.1.0
@@ -1601,6 +1604,11 @@ packages:
   foxpaw@0.1.0:
     resolution: {integrity: sha512-kYYNAOjK60ExTND4JNGkScfXAvY3Uq0KrYuqRfP2gbbjmgX6FMhwrnFRDVWrZWR81gMZKolcdGxxSKvN3guUbw==}
     engines: {node: '>=24'}
+
+  foxrunner@0.1.0:
+    resolution: {integrity: sha512-v9QkrY/TMR/lF/izpF9TuUSLnrjdVZedtLGO9bG5YCDYmbw8mpXNkIeQs8+CUtyF2PHV/8hwshjDL8oNc3ADKQ==}
+    engines: {node: '>=24'}
+    hasBin: true
 
   foxshield@0.1.0:
     resolution: {integrity: sha512-cY+7Cr/MNseteH3i/8Fi2KaFpHPH6Q3NZsNSBu9LteSH7C0PDR+sFRRWks0xN+Y4MipIFvXpmwi8oAWfN4YbEQ==}
@@ -4093,6 +4101,15 @@ snapshots:
       '@huggingface/transformers': 4.3.1(@types/node@24.19.1)
 
   foxpaw@0.1.0: {}
+
+  foxrunner@0.1.0(yauzl@3.4.0):
+    dependencies:
+      puppeteer-core: 25.12.0(yauzl@3.4.0)
+    transitivePeerDependencies:
+      - bufferutil
+      - proxy-agent
+      - utf-8-validate
+      - yauzl
 
   foxshield@0.1.0:
     dependencies:
