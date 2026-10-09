@@ -105,3 +105,10 @@ runs it in a sandbox page with no network and no extension APIs.
 | D3 | A Python error passes the check, so the run says done | `run_python` returns a check that passes only when Python raised no error. | E2E space |
 | D4 | The Space tool works outside its sandbox domain, or a page host grant covers it | It has its own grant, for the domain `space.foxmate` and the tool `run_python` only. | E2E space |
 | D5 | A goal about a file needs a web page in the tab | A run on a tab with no web page gets no tab grants, but the Space tool still works. | E2E space |
+
+## Sidebar link: the background page lifecycle
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| K1 | Firefox unloads the idle background page while an approval waits (seen in Firefox 157 about 60 s after the last event, with the sidebar and its port open) | While a sidebar is open, it sends the background page a message every 20 s, so the page stays loaded. | E2E keepalive |
+| K2 | The background page restarts (an update, a crash, an unload with no sidebar), and the open sidebar keeps a dead port | The sidebar connects again, and gets the current run and the waiting approvals. | E2E keepalive |

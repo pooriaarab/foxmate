@@ -4,6 +4,8 @@
 const $ = (id) => document.getElementById(id);
 let port;
 let steps;
+// A port that connects again gets the current run once more; show it once.
+const shown = new Set();
 
 function line(kind, text, className = "") {
   const li = document.createElement("li");
@@ -67,7 +69,7 @@ function newRun(goal) {
 }
 
 function end(result) {
-  const text = { done: `Done: ${result.summary ?? ""}`, blocked: `Blocked (${result.reason}): ${result.message ?? ""}`, refused: `Refused (${result.reason}): ${result.message ?? ""}`, aborted: "Stopped." }[result.status] ?? result.status;
+  const text = { done: `Done: ${result.summary ?? ""}`, blocked: `Blocked (${result.reason}): ${result.message ?? ""}`, refused: `Refused (${result.reason}): ${result.message ?? ""}`, aborted: "Stopped.", restarted: "foxmate restarted. The task runs again from its goal." }[result.status] ?? result.status;
   const p = document.createElement("p");
   p.className = `end ${result.status === "done" ? "done" : "bad"}`;
   p.textContent = text;
@@ -80,6 +82,11 @@ function end(result) {
 export const chat = {
   init(p) {
     port = p;
+    // The background page restarted: its waiting approvals and its run are gone. foxrunner runs the task again.
+    port.onDisconnect.addListener(() => {
+      for (const row of document.querySelectorAll("li.ask .row")) row.replaceWith(document.createTextNode("Ended: foxmate restarted."));
+      if (steps && !steps.nextElementSibling) end({ status: "restarted" });
+    });
     $("goal-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
@@ -92,7 +99,14 @@ export const chat = {
     port.postMessage({ op: "run", tabId, goal, ...(loanId ? { loanId } : {}) });
   },
   message(message) {
-    if (message.run) newRun(message.run.goal);
+    if (message.run && shown.has(message.run.id)) {
+      if (message.end && !steps?.nextElementSibling) end(message.end);
+      return;
+    }
+    if (message.run) {
+      shown.add(message.run.id);
+      newRun(message.run.goal);
+    }
     for (const event of message.events ?? []) show(event);
     if (message.event) show(message.event);
     if (message.end) end(message.end);
