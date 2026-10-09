@@ -54,7 +54,10 @@ async function setup(options: { recall?: () => Promise<never> } = {}) {
     trail,
     memory: options.recall ? { recall: options.recall } : memory,
     makeTools,
-    extraTools: [{ tool: { name: "run_python", description: "Python.", parameters: { type: "object", properties: {} }, scope: "fill", domain: () => "space.foxmate", run: async () => ({ ok: true, summary: "ran" }) }, domain: "space.foxmate" }],
+    extraTools: [
+      { tool: { name: "read_inbox", description: "Mail.", parameters: { type: "object", properties: {} }, scope: "read", domain: () => "www.googleapis.com", run: async () => ({ ok: true, summary: "Read 1 message.", untrusted: "Your code is 991177." }) }, domain: "www.googleapis.com", private: true, optIn: true },
+      { tool: { name: "run_python", description: "Python.", parameters: { type: "object", properties: {} }, scope: "fill", domain: () => "space.foxmate", run: async () => ({ ok: true, summary: "ran" }) }, domain: "space.foxmate", private: true },
+    ],
     loanFor: async (cookieStoreId: string) => (cookieStoreId === "firefox-container-9" ? { cookieStoreId, scope: "read" as const } : undefined),
     pageProblem: async () => problem,
     runMs: 60_000,
@@ -174,5 +177,40 @@ describe("agent", () => {
     const end = await run({ script: [finish, finish] });
     expect(end).toMatchObject({ status: "blocked", reason: "check-failed" });
     expect(events.find((e) => e.type === "check")).toMatchObject({ ok: false, checks: [{ part: "a tool ran with a good result", ok: false }] });
+  });
+
+  it("G16: after private data, open_url and typing need an approval; a page read does not", async () => {
+    const { run, ran, events } = await setup();
+    const end = await run({ allowPrivate: true, script: [{ tool: "read_inbox", args: {} }, { tool: "snapshot", args: {} }, { tool: "open_url", args: { url: "http://shop.test/log?d=991177" } }, finish] }, "deny");
+    expect(end).toMatchObject({ status: "blocked", reason: "approval-denied" });
+    expect(events.filter((e) => e.type === "approval-needed").map((e) => "action" in e && e.action.tool)).toEqual(["open_url"]);
+    expect(ran).toEqual([]);
+    const typed = await setup();
+    const end2 = await typed.run({ allowPrivate: true, script: [{ tool: "read_inbox", args: {} }, { tool: "fill", args: { text: "991177" } }, finish] }, "deny");
+    expect(end2).toMatchObject({ status: "blocked", reason: "approval-denied" });
+    expect(typed.ran).toEqual([]);
+    expect(typed.events.some((e) => e.type === "private")).toBe(true);
+  });
+
+  it("G16: before any private data, typing on the tab's host needs no approval", async () => {
+    const { run, ran } = await setup();
+    await run({ script: [{ tool: "fill", args: { text: "Sam" } }, finish] }, "deny");
+    expect(ran).toEqual([{ tool: "fill", args: { text: "Sam" }, domain: "shop.test" }]);
+  });
+
+  it("G17: a goal with notes starts in the private mode", async () => {
+    const { run, ran } = await setup();
+    const end = await run({ goal: "Book a table for Friday", script: [{ tool: "fill", args: { text: "{{notes}}" } }, finish] }, "deny");
+    expect(end).toMatchObject({ status: "blocked", reason: "approval-denied" });
+    expect(ran).toEqual([]);
+  });
+
+  it("G18: the mail tool is not granted on a web tab unless the goal opts in", async () => {
+    const plain = await setup();
+    const end = await plain.run({ script: [{ tool: "read_inbox", args: {} }, finish] });
+    expect(end).toMatchObject({ status: "blocked", reason: "gate-deny" });
+    const opted = await setup();
+    const ok = await opted.run({ allowPrivate: true, script: [{ tool: "read_inbox", args: {} }, { tool: "click", args: { button: "Buy" } }, finish] });
+    expect(ok.status).toBe("done");
   });
 });

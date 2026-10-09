@@ -43,6 +43,20 @@ export default async function spaceCheck({ session, check, record, scripted, fin
       url: `${site.url}/table.html`, goal: "Fetch a page from Python.",
       settings: scripted([{ tool: "run_python", args: { code: `from js import XMLHttpRequest\nx = XMLHttpRequest.new()\nx.open("GET", "${probeUrl}", False)\nx.send()\nx.status` } }, finish, finish]),
     });
+    // DS4 (G16): after Python read a private file, a page asks to put its data in an
+    // open_url query on the same host. Before the fix this ran with no approval.
+    hits = 0;
+    const leak = await runGoal(session, {
+      url: `${site.url}/table.html`, goal: "Sum the amount column of sales.csv.", answer: () => "deny", shot: "chat-private",
+      settings: scripted([
+        { tool: "run_python", args: { code: "open('/drop/sales.csv').read().splitlines()[1]" } },
+        { tool: "open_url", args: { url: `${probeUrl}log?d=north,10` } },
+        finish,
+      ]),
+    });
+    record.runs.spaceLeak = { status: leak.status, steps: leak.steps, approvals: leak.approvals };
+    check("DS4 after private data, open_url on the tab's host asks first; denied, nothing leaves", { private: true, asked: ["open_url"], status: "Blocked (approval-denied)", hits: 0 },
+      { private: leak.trail.some((e) => e.kind === "run.private"), asked: leak.approvals.map((a) => JSON.parse(a.text).tool), status: leak.status.slice(0, 25), hits });
     await new Promise((done) => probe.close(done));
     record.runs.spaceNetwork = { status: net.status, steps: net.steps, probeHits: hits };
     check("DS3 Python in the Space cannot reach the network, and the check fails", { seen: 1, failed: true, done: false, hits: 0 },

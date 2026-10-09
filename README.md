@@ -110,11 +110,19 @@ One goal, step by step:
    gets `only: ["browser", "local"]`.
 4. foxmate grants the tab's host only, for this run. On a lent tab, the
    grants stop at the scope you lent.
-5. foxloop asks the planner for a tool call. foxgate allows reads, asks you
-   before a click that can send a form, and denies other hosts.
-6. Each page read passes foxshield. Hidden text, and the controls inside it,
+5. foxloop asks the planner for a tool call. On the tab's host, foxgate
+   allows page reads, typing and opening pages with no approval. It asks
+   you before each click and each foxpaw task, because they can send a
+   form. It denies other hosts.
+6. Once the run holds private data (your mail or calendar, a Space file, or
+   memory notes in the goal), foxgate also asks you before each typing and
+   each page that foxmate opens, for the rest of the run. Those are the ways
+   a page could make the planner carry the data out. Mail and calendar tools
+   work on a web tab only when you tick "This goal may read my mail and
+   calendar".
+7. Each page read passes foxshield. Hidden text, and the controls inside it,
    never reach the planner; visible instructions arrive marked as data.
-7. foxtrail records every step. The run ends when the planner says it is
+8. foxtrail records every step. The run ends when the planner says it is
    done and a check passes.
 
 ```mermaid
@@ -326,9 +334,11 @@ Read these rows with care:
 - When the newest result carries no task check, foxmate passes `finish` if a
   tool worked in the run and the page shows no error. A model can still say
   "done" after a page read, with the task not done; the small models did.
-- foxgate limits where an action goes, not what its arguments hold. A page
-  can still ask the planner to put your data in a request to the same host.
-  An approval shows the form's fields, but you must read it.
+- foxgate limits where an action goes, not what its arguments hold. Before
+  the run holds private data, typing and opening pages on the tab's host need
+  no approval, so a page can make the planner type or send what the page
+  itself shows, or what the goal says. After private data, each of those
+  asks you, and you must read the approval.
 - A denied approval ends the run. It does not try another way.
 - An approval for `browser_task` covers every field and click that foxpaw
   makes in that task.
