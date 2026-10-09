@@ -12,7 +12,11 @@ import { createMind, ollama } from "foxmind";
 import { createRunner, storageAreaStore as runnerStore } from "foxrunner";
 import { IdbStore, Log, idbKey } from "foxtrail";
 import { attachHeaderInjection, createVault, indexedDbKeyStore } from "foxvault";
-import { KEY_HANDLE, SPACE_DOMAIN, createAgent, googleTools, lookTool, spaceTool } from "../src/index.ts";
+import { sanitize, scanDocument } from "foxshield";
+import { KEY_HANDLE, SPACE_DOMAIN, createAgent, googleTools, lookTool, shieldedMailText, shieldedText, spaceTool } from "../src/index.ts";
+
+/** foxshield on an HTML string: a parsed document, scanned in static mode (no layout). */
+const sanitizeHtml = (html) => sanitize(scanDocument(new DOMParser().parseFromString(html, "text/html"), { mode: "static" }));
 
 const trailReady = Promise.all([IdbStore.open("foxmate-trail"), idbKey("foxmate-trail-key")]).then(([store, key]) => new Log({ store, key }));
 const trail = { append: async (entry) => (await trailReady).append(entry) };
@@ -74,8 +78,18 @@ const agent = createAgent({
     { tool: spaceTool(space), domain: SPACE_DOMAIN, private: true },
     ...googleTools({
       enabled: googleOn,
-      events: async (max) => (await calendar(await google()).listEvents({ max })).events.map(toPromptText),
-      messages: async (max) => (await gmail(await google()).listMessages({ max })).messages.map(toPromptText),
+      // Each body passes foxshield first; a mail says which part the planner got (MS1-MS5).
+      events: async (max) => (await calendar(await google()).listEvents({ max })).events
+        .map((e) => toPromptText({ ...e, ...(e.description ? { description: shieldedText(e.description, sanitizeHtml) } : {}) })),
+      messages: async (max) => {
+        const link = await google();
+        const { messages } = await gmail(link).listMessages({ max });
+        return Promise.all(messages.map(async (m) => {
+          const full = await (await link.fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(m.id)}?format=full`)).json();
+          const body = shieldedMailText(full.payload, sanitizeHtml);
+          return toPromptText({ ...m, text: `[The ${body.part} part, after foxshield]\n${body.text}` });
+        }));
+      },
     }),
   ],
   // A run on a tab in a loan's container is a loan run, also when Chat started it.

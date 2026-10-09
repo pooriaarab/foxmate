@@ -122,3 +122,14 @@ runs it in a sandbox page with no network and no extension APIs.
 | K1 | Firefox unloads the idle background page while an approval waits (seen in Firefox 157 about 60 s after the last event, with the sidebar and its port open) | While a sidebar is open, it sends the background page a message every 20 s, so the page stays loaded. | E2E keepalive |
 | K2 | The background page restarts (an update, a crash, an unload with no sidebar), and the open sidebar keeps a dead port | The sidebar connects again, and gets the current run and the waiting approvals. | E2E keepalive |
 | K3 | Two goals start at once (a double click, or foxrunner waking two tasks), so the second one takes over the run that Stop aborts and the sidebar shows | The background page claims the run before its first await. The second goal waits and runs later, as a task. | E2E keepalive |
+
+## Mail and events: outside text from Google (`src/mail.ts`)
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| MS1 | A multipart mail shows the user a harmless HTML part, and hides instructions in the text/plain part (or the reverse), and foxlink reads the plain part first | foxmate prefers the HTML part, passes it through foxshield (hidden text removed), and says which part it used. | `tests/mail.test.ts` MS1 |
+| MS2 | A plain-text mail holds an instruction | The text passes foxshield too; an instruction arrives in `<untrusted-data>`. | `tests/mail.test.ts` MS2 |
+| MS3 | The body is base64url with non-ASCII text, and a naive decode garbles it | foxmate decodes base64url as UTF-8. | `tests/mail.test.ts` MS3 |
+| MS4 | A mail has no text part | The text is empty, and the part is `none`. | `tests/mail.test.ts` MS4 |
+| MS5 | A calendar event's description holds an instruction | It passes foxshield like a mail body. | `tests/mail.test.ts` MS5 |
+
