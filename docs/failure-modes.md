@@ -41,9 +41,10 @@ untrusted data.
 | S2 | Visible text holds an instruction ("ignore previous instructions") | It stays, wrapped in `<untrusted-data>`, so the planner reads it as data. | `tests/shield.test.ts` S2 |
 | S3 | The scan throws in the tab (a frame went away, the page navigated) | foxmate withholds the page text and says so. Raw text never goes to the planner. | `tests/shield.test.ts` S3 |
 | S4 | The scan returns no result | The same as S3. | `tests/shield.test.ts` S4 |
-| S5 | A hidden element holds a link or button, so foxpaw lists it as a control | foxmate drops each control whose label is part of hidden text that foxshield found. | `tests/shield.test.ts` S5 |
+| S5 | A hidden element holds a link or button, so foxpaw lists it as a control | foxmate drops a control whose label is part of hidden text that foxshield flags (score at or above the threshold), and an off-screen control whose label is part of any hidden text. | `tests/shield.test.ts` S5 |
 | S6 | Findings are lost, so the trail cannot show what foxshield did | `onScan` gets the URL, the count, the top findings and the dropped controls. The agent writes them to the trail. | `tests/shield.test.ts` S6; E2E trap |
 | S7 | The wrapper changes act, settle or runTask | They are foxpaw's own functions. | `tests/shield.test.ts` S7 |
+| S8 | Harmless hidden text (the options of a `<select>`, a menu below the fold) shares words with a real control's label, so S5 drops the control | Low-score hidden text drops only off-screen controls. A visible control stays. | `tests/shield.test.ts` S8; E2E signup |
 
 ## Recall: memories in the goal (`src/recall.ts`)
 
