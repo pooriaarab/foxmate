@@ -173,7 +173,8 @@ const busy = () => claimed || agent.busy;
 
 /** Runs a goal on a tab now and resolves with its end. Throws "busy" when a run is in progress. */
 async function runNow(input) {
-  if (busy()) throw new Error("busy");
+  // A goal that meets another run ends now, refused; it does not retry later (Q2).
+  if (busy()) return refusedRun("busy", "Another goal was running, so foxmate did not start this one. Start it again.");
   claimed = true;
   try {
     return await runClaimed(input);
@@ -206,6 +207,21 @@ async function runClaimed({ goal, tabId, loanId, taskId, signal, allowPrivate })
   return end;
 }
 
+async function refusedRun(reason, message) {
+  send({ error: message });
+  await trail.append({ actor: "foxmate", kind: "run.refused", data: { reason, message } }).catch(() => undefined);
+  return { status: "refused", reason, message };
+}
+
+const hostOf = (url) => {
+  try {
+    const u = new URL(url ?? "");
+    return u.protocol === "http:" || u.protocol === "https:" ? u.hostname : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const notify = (message) => browser.notifications.create({ type: "basic", title: "foxmate", message }).catch(() => undefined);
 
 // Every goal is a foxrunner task, so a run that the event page unload cuts
@@ -227,6 +243,13 @@ runner.define("goal", [{
       };
       for (let i = 0; i < 75 && !(await loaded()); i++) await new Promise((r) => setTimeout(r, 200));
     }
+    // A replay or a retry runs only where the goal started (Q1).
+    const started = hostOf(input.startUrl ?? input.url);
+    const runTab = input.loanId ? (await lender.listLoans()).find((l) => l.id === input.loanId)?.tabId : tabId;
+    const now = hostOf((await browser.tabs.get(runTab ?? -1).catch(() => ({}))).url);
+    if (started && now !== started) {
+      return { ...(await refusedRun("tab-moved", `The tab is on ${now ?? "no web page"}, not on ${started} where this goal started. foxmate did not run it.`)), attempt: ctx.attempt };
+    }
     const end = await runNow({ goal: input.goal, tabId, loanId: input.loanId, allowPrivate: input.allowPrivate, taskId: ctx.taskId, signal: ctx.signal });
     return { ...end, attempt: ctx.attempt };
   },
@@ -247,7 +270,9 @@ browser.runtime.onConnect.addListener((port) => {
     try {
       if (message.op === "run") {
         if (busy()) throw new Error("A run is in progress. Stop it first.");
-        await runner.start("goal", { goal: message.goal, tabId: message.tabId, allowPrivate: Boolean(message.allowPrivate), ...(message.loanId ? { loanId: message.loanId } : {}) });
+        const loan = message.loanId ? (await lender.listLoans()).find((l) => l.id === message.loanId) : undefined;
+        const startUrl = (await browser.tabs.get(loan?.tabId ?? message.tabId).catch(() => ({}))).url;
+        await runner.start("goal", { goal: message.goal, tabId: message.tabId, startUrl, allowPrivate: Boolean(message.allowPrivate), ...(message.loanId ? { loanId: message.loanId } : {}) });
       }
       else if (message.op === "answer") await agent.approvals.answer(message.requestId, message.answer, message.via === "phone" ? "phone" : "sidebar");
       else if (message.op === "stop") current?.controller.abort();
