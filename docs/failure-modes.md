@@ -88,3 +88,4 @@ answer must reach the one request it names, once.
 | G8 | foxshield's findings are not in the trail | Each scan is a `shield.scan` trail entry. | E2E trap |
 | G9 | Two runs at once share the target tab | A second run is refused with `busy`. | `tests/agent.test.ts` G9 |
 | G10 | The run ends with a step that has no check (`act`, `click`) and can never pass | When the newest result has no check, foxmate reads the page and passes only when foxpaw finds no error page. The check line says so. | `tests/agent.test.ts` G10 |
+| G11 | An approval to click a button that sends a form does not show what the form holds, so a human approves "click Send" with an attacker's address in the To field | The approval detail lists the other fields of that form and their values from the newest snapshot. Passwords show as `•••`. | `tests/form.test.ts` G11; E2E mail-trap |
