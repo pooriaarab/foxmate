@@ -7,12 +7,13 @@ import { randomUUID } from "node:crypto";
 import { writeArtifact } from "create-foxkit/e2e";
 import { sites, startServer } from "foxbench";
 import activity from "./checks/activity.mjs";
+import memory from "./checks/memory.mjs";
 import privacy from "./checks/privacy.mjs";
 import signup from "./checks/signup.mjs";
 import traps from "./checks/traps.mjs";
 import { runGoal, startFox } from "./lib.mjs";
 
-const CHECKS = { signup, privacy, traps, activity };
+const CHECKS = { signup, privacy, traps, memory, activity };
 
 const record = { startedAt: new Date().toISOString(), checks: [], runs: {} };
 const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });

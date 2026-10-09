@@ -2,6 +2,7 @@
 // when the brain makes a network call that it must not make.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BrainError, KEY_HANDLE, createBrain } from "../src/brain.js";
+import { withNotes } from "../src/recall.js";
 
 let calls: { url: string; headers: Headers }[] = [];
 const reply = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
@@ -90,5 +91,16 @@ describe("brain", () => {
     const linked = await again.mind.chat([...history, { role: "tool", content: "see http://127.0.0.1:9/next", tool_call_id: "3" }], { tools: [] });
     expect(JSON.parse(linked.message.tool_calls?.[0]?.function.arguments ?? "{}")).toEqual({ url: "http://127.0.0.1:9/next" });
     expect(calls).toEqual([]);
+  });
+
+  it("B11: {{notes}} gives the notes under the goal", async () => {
+    const script = JSON.stringify([{ tool: "browser_task", args: { goal: "name: Sam Lee, {{notes}}" } }]);
+    const goal = withNotes("Book a table.", ["party size: 4", "seat: window"]);
+    const brain = await createBrain({ planner: "scripted", script }, { ...consent(false), goal });
+    const answer = await brain.mind.chat([{ role: "user", content: goal }], { tools: [] });
+    expect(JSON.parse(answer.message.tool_calls?.[0]?.function.arguments ?? "{}")).toEqual({ goal: "name: Sam Lee, party size: 4, seat: window" });
+    const none = await createBrain({ planner: "scripted", script }, { ...consent(false), goal: "Book a table." });
+    const plain = await none.mind.chat([{ role: "user", content: "Book a table." }], { tools: [] });
+    expect(JSON.parse(plain.message.tool_calls?.[0]?.function.arguments ?? "{}")).toEqual({ goal: "name: Sam Lee, " });
   });
 });

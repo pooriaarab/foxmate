@@ -3,10 +3,11 @@
 // window.foxmate.
 import { activity } from "./activity.js";
 import { chat } from "./chat.js";
+import { memory } from "./memory.js";
 import { settings } from "./settings.js";
 
 const $ = (id) => document.getElementById(id);
-const views = { chat, activity, settings };
+const views = { chat, memory, activity, settings };
 const port = browser.runtime.connect({ name: "foxmate" });
 
 function show(name) {
