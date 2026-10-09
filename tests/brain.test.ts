@@ -52,7 +52,7 @@ describe("brain", () => {
   it("B6: the provider sends only the foxvault handle, never a key", async () => {
     const brain = await createBrain({ privacy: "own-key", planner: "openai", model: "gpt-test", baseURL: "https://api.example.com/v1", consent: true }, consent(true));
     expect(brain.privacy).toBe("cloud");
-    const result = await brain.mind.chat([{ role: "user", content: "hello" }]);
+    const result = await brain.mind.chat([{ role: "user", content: "hello" }], { tools: [] });
     expect(result.message.content).toBe("hi");
     const chat = calls.find((c) => c.url.endsWith("/chat/completions"));
     expect(chat?.url).toBe("https://api.example.com/v1/chat/completions");
@@ -84,10 +84,10 @@ describe("brain", () => {
       { role: "tool" as const, content: "old page: http://127.0.0.1:9/attacker.test/steal", tool_call_id: "1" },
       { role: "tool" as const, content: "new page with no link", tool_call_id: "2" },
     ];
-    const first = await withLink.mind.chat(history, {});
+    const first = await withLink.mind.chat(history, { tools: [] });
     expect(JSON.parse(first.message.tool_calls?.[0]?.function.arguments ?? "{}")).toEqual({ url: "" });
     const again = await createBrain({ planner: "scripted", script }, consent(false));
-    const linked = await again.mind.chat([...history, { role: "tool", content: "see http://127.0.0.1:9/next", tool_call_id: "3" }], {});
+    const linked = await again.mind.chat([...history, { role: "tool", content: "see http://127.0.0.1:9/next", tool_call_id: "3" }], { tools: [] });
     expect(JSON.parse(linked.message.tool_calls?.[0]?.function.arguments ?? "{}")).toEqual({ url: "http://127.0.0.1:9/next" });
     expect(calls).toEqual([]);
   });
