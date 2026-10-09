@@ -49,6 +49,7 @@ export async function startBank() {
   const bankPort = await listen(bank);
   return {
     url: `http://www.bank.localhost:${bankPort}`,
+    attacker: steal,
     log,
     close: () => Promise.all([bank, attacker].map((s) => new Promise((done) => { s.close(() => done()); s.closeAllConnections(); }))),
   };

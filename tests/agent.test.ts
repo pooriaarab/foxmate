@@ -54,6 +54,8 @@ async function setup(options: { recall?: () => Promise<never> } = {}) {
     trail,
     memory: options.recall ? { recall: options.recall } : memory,
     makeTools,
+    extraTools: [{ tool: { name: "run_python", description: "Python.", parameters: { type: "object", properties: {} }, scope: "fill", domain: () => "space.foxmate", run: async () => ({ ok: true, summary: "ran" }) }, domain: "space.foxmate" }],
+    loanFor: async (cookieStoreId: string) => (cookieStoreId === "firefox-container-9" ? { cookieStoreId, scope: "read" as const } : undefined),
     pageProblem: async () => problem,
     runMs: 60_000,
   });
@@ -150,5 +152,27 @@ describe("agent", () => {
     bad.setProblem("error page");
     const blocked = await bad.run({ script: [{ tool: "fill", args: { text: "x" } }, finish, finish] });
     expect(blocked).toMatchObject({ status: "blocked", reason: "check-failed" });
+  });
+
+  it("G12: a run on a lent tab is a loan run, named or not", async () => {
+    const { run, ran, grantsSeen } = await setup();
+    const end = await run({ tabId: 2, script: [{ tool: "snapshot", args: {} }, { tool: "click", args: { button: "Send" } }, finish] });
+    expect(grantsSeen[0]).toEqual(["read"]);
+    expect(end).toMatchObject({ status: "blocked", reason: "gate-deny" });
+    expect(ran).toEqual([]);
+  });
+
+  it("G14: an extra tool above the loan's scope gets no grant", async () => {
+    const { run, grantsSeen } = await setup();
+    const end = await run({ tabId: 2, script: [{ tool: "snapshot", args: {} }, { tool: "run_python", args: {} }, finish] });
+    expect(grantsSeen[0]).toEqual(["read"]);
+    expect(end).toMatchObject({ status: "blocked", reason: "gate-deny" });
+  });
+
+  it("G15: finish with no tool result does not pass", async () => {
+    const { run, events } = await setup();
+    const end = await run({ script: [finish, finish] });
+    expect(end).toMatchObject({ status: "blocked", reason: "check-failed" });
+    expect(events.find((e) => e.type === "check")).toMatchObject({ ok: false, checks: [{ part: "a tool ran with a good result", ok: false }] });
   });
 });

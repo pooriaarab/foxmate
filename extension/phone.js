@@ -59,10 +59,14 @@ export const phone = {
   },
   shown: render,
   message(message) {
-    const event = message.event;
-    if (!link || event?.type !== "approval-needed") return;
-    askApproval(link, { title: `foxmate asks: ${event.detail ?? `${event.action.tool} on ${event.action.domain}`}`, detail: event.exactText ?? JSON.stringify(event.action) }, { timeoutMs: Math.max(1000, event.expiresAt - Date.now()) })
-      .then((answer) => port.postMessage({ op: "answer", requestId: event.requestId, answer, via: "phone" }))
-      .catch(() => undefined);
+    // A sidebar that opens late gets the run's events at once; their approvals go to the phone too.
+    for (const event of [...(message.events ?? []), ...(message.event ? [message.event] : [])]) ask(event);
   },
 };
+
+function ask(event) {
+  if (!link || event?.type !== "approval-needed" || event.expiresAt < Date.now()) return;
+  askApproval(link, { title: `foxmate asks: ${event.detail ?? `${event.action.tool} on ${event.action.domain}`}`, detail: event.exactText ?? JSON.stringify(event.action) }, { timeoutMs: Math.max(1000, event.expiresAt - Date.now()) })
+    .then((answer) => port.postMessage({ op: "answer", requestId: event.requestId, answer, via: "phone" }))
+    .catch(() => undefined);
+}
