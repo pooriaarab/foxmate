@@ -28,7 +28,29 @@ export interface ShieldOptions {
 
 const HIDDEN: ReadonlySet<FindingKind> = new Set(["display-none", "not-rendered", "visibility-hidden", "opacity-zero", "offscreen", "clipped", "tiny-font", "low-contrast", "aria-hidden", "covered"]);
 const MAX_TEXT = 6000;
-const norm = (text: string): string => text.replace(/\s+/g, " ").trim().toLowerCase();
+const WITHHELD = "[foxshield could not scan this page, so foxmate withheld its text.]";
+
+/**
+ * Runs in the page. The foxpaw nodes that sit inside an element that a
+ * selector matches. Self-contained, for scripting.executeScript.
+ */
+export function hiddenNodes(selectors: string[], nodes: number[]): number[] {
+  // oxlint-disable-next-line no-underscore-dangle -- foxpaw keeps its node map at window.__foxpaw.
+  const cache = (window as unknown as { __foxpaw?: { nodes: Map<number, Element> } }).__foxpaw;
+  if (!cache) throw new Error("foxpaw has not read this page.");
+  const boxes: Element[] = [];
+  for (const selector of selectors) {
+    try {
+      boxes.push(...document.querySelectorAll(selector));
+    } catch {
+      // A selector that this document cannot parse matches nothing.
+    }
+  }
+  return nodes.filter((node) => {
+    const element = cache.nodes.get(node);
+    return Boolean(element && boxes.some((box) => box === element || box.contains(element)));
+  });
+}
 const cut = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 async function scan(options: ShieldOptions, tabId: number): Promise<ScanReport> {
@@ -53,16 +75,26 @@ export function shieldedPaw(options: ShieldOptions): PawLike {
       } catch (error) {
         const why = error instanceof Error ? error.message : String(error);
         await options.onScan?.({ url: page.url, findings: 0, top: [], droppedControls: [], withheld: why });
-        return { ...page, text: "[foxshield could not scan this page, so foxmate withheld its text.]" };
+        return { ...page, text: WITHHELD };
       }
       const threshold = options.threshold ?? 0.5;
-      // Flagged hidden text drops any control in it. Low-score hidden text (the options of a
-      // closed <select>) drops only an off-screen control, so a visible field stays.
-      const hidden = report.findings.filter((f) => HIDDEN.has(f.kind));
-      const inHidden = (c: Control) => {
-        const label = norm(c.label);
-        return label.length >= 4 && hidden.some((f) => (f.score >= threshold || c.offscreen) && norm(f.text).includes(label));
-      };
+      // Ask the page which controls sit inside an element that foxshield found hidden. A word
+      // match is not enough: trap text often names real fields, such as "password".
+      const selectors = report.findings.filter((f) => HIDDEN.has(f.kind) && !f.selector.includes(">>>")).map((f) => f.selector);
+      let hiddenSet = new Set<number>();
+      if (selectors.length) {
+        try {
+          const results = await options.browser.scripting.executeScript({ target: { tabId, frameIds: [0] }, func: hiddenNodes, args: [selectors, page.controls.filter((c) => c.frameId === 0).map((c) => c.node)] });
+          const nodes = Array.isArray(results) ? (results[0] as { result?: unknown } | undefined)?.result : undefined;
+          if (!Array.isArray(nodes)) throw new Error("The page gave no answer.");
+          hiddenSet = new Set(nodes as number[]);
+        } catch (error) {
+          const why = error instanceof Error ? error.message : String(error);
+          await options.onScan?.({ url: page.url, findings: report.findings.length, top: [], droppedControls: [], withheld: why });
+          return { ...page, text: WITHHELD };
+        }
+      }
+      const inHidden = (c: Control) => c.frameId === 0 && hiddenSet.has(c.node);
       const controls = page.controls.filter((c) => !inHidden(c));
       const dropped = page.controls.filter(inHidden).map((c) => c.label);
       await options.onScan?.({
