@@ -51,7 +51,7 @@ describe("brain", () => {
   });
 
   it("B6: the provider sends only the foxvault handle, never a key", async () => {
-    const brain = await createBrain({ privacy: "own-key", planner: "openai", model: "gpt-test", baseURL: "https://api.example.com/v1", consent: true }, consent(true));
+    const brain = await createBrain({ privacy: "own-key", planner: "openai", model: "gpt-test", baseURL: "https://api.example.com/v1", consent: true, consentHost: "api.example.com" }, consent(true));
     expect(brain.privacy).toBe("cloud");
     const result = await brain.mind.chat([{ role: "user", content: "hello" }], { tools: [] });
     expect(result.message.content).toBe("hi");

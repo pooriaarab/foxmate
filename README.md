@@ -175,6 +175,7 @@ This section says exactly what leaves your computer.
 - **Own key.** You pick a cloud provider (OpenAI-compatible or Anthropic).
   Page text goes to that provider after you tick "Send page text to this
   provider" and Firefox's own `websiteContent` data consent says yes. The
+  box holds for the provider's host only; a new server address clears it. The
   goal goes there too, with the memories that foxmate adds to it, and so do
   the results of the optional tools (mail, events, screenshot text).
   foxvault keeps the key encrypted. The planner code gets only the handle

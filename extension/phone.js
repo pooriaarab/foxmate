@@ -66,7 +66,9 @@ export const phone = {
 
 function ask(event) {
   if (!link || event?.type !== "approval-needed" || event.expiresAt < Date.now()) return;
-  askApproval(link, { title: `foxmate asks: ${event.detail ?? `${event.action.tool} on ${event.action.domain}`}`, detail: event.exactText ?? JSON.stringify(event.action) }, { timeoutMs: Math.max(1000, event.expiresAt - Date.now()) })
+  // Lead with the exact action that foxgate will allow; the planner's words come after.
+  const exact = event.exactText ?? JSON.stringify(event.action);
+  askApproval(link, { title: `foxmate asks: ${event.action.tool} on ${event.action.domain}`, detail: `${exact}${event.detail ? `\n\nfoxmate says: ${event.detail}` : ""}` }, { timeoutMs: Math.max(1000, event.expiresAt - Date.now()) })
     .then((answer) => port.postMessage({ op: "answer", requestId: event.requestId, answer, via: "phone" }))
     .catch(() => undefined);
 }

@@ -94,8 +94,9 @@ const agent = createAgent({
   ],
   // A run on a tab in a loan's container is a loan run, also when Chat started it.
   loanFor: async (cookieStoreId) => {
-    const loan = (await lender.listLoans()).find((l) => l.cookieStoreId === cookieStoreId && l.state === "active");
-    return loan ? { cookieStoreId, scope: loan.scope } : undefined;
+    // Any state: a loan that is being created or revoked refuses the run (G19).
+    const loan = (await lender.listLoans()).find((l) => l.cookieStoreId === cookieStoreId);
+    return loan ? { cookieStoreId, scope: loan.scope, domain: loan.domain, site: loan.match === "site" ? loan.site : undefined, state: loan.state } : undefined;
   },
   moreTabTools: (tabId) => [lookTool(tabId, { enabled: async () => Boolean((await modules()).lens), look, tabDomain: async (id) => new URL((await browser.tabs.get(id)).url).hostname })], browserModel: async () => (await browserModel()).transformers({ task: "chat" }) });
 // Lend a login: foxlend copies one site's cookies into its own container,
@@ -199,7 +200,7 @@ async function runClaimed({ goal, tabId, loanId, taskId, signal, allowPrivate })
     run.events.push(event);
     send({ runId: run.id, event });
   };
-  const end = await agent.run({ goal, tabId, settings, allowPrivate: Boolean(allowPrivate), signal: run.controller.signal, onEvent, ...(loan ? { loan: { cookieStoreId: loan.cookieStoreId, scope: loan.scope } } : {}) })
+  const end = await agent.run({ goal, tabId, settings, allowPrivate: Boolean(allowPrivate), signal: run.controller.signal, onEvent, ...(loan ? { loan: { cookieStoreId: loan.cookieStoreId, scope: loan.scope, domain: loan.domain, ...(loan.match === "site" ? { site: loan.site } : {}), state: loan.state } } : {}) })
     .catch((error) => ({ status: "blocked", reason: "error", message: error instanceof Error ? error.message : String(error) }));
   run.end = end;
   send({ runId: run.id, end });
