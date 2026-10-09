@@ -15,8 +15,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0(zod@3.25.76)
       foxden:
-        specifier: npm:@pooriaarab/foxden@^0.1.0
-        version: '@pooriaarab/foxden@0.1.0'
+        specifier: npm:foxden-sandbox@^0.1.0
+        version: foxden-sandbox@0.1.0
       foxgate:
         specifier: ^0.1.0
         version: 0.1.0
@@ -27,8 +27,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1))
       foxlink:
-        specifier: npm:@pooriaarab/foxlink@^0.1.0
-        version: '@pooriaarab/foxlink@0.1.0'
+        specifier: npm:foxlink-oauth@^0.1.0
+        version: foxlink-oauth@0.1.0
       foxloop:
         specifier: ^0.1.0
         version: 0.1.0
@@ -670,14 +670,6 @@ packages:
   '@pnpm/npm-conf@3.0.3':
     resolution: {integrity: sha512-//0sR/cow/s4ICQaYoAobOl4aU8cjU6x/V24V7XkKotb9+O+3zySIYp146vpaobYHnxa4pZX8NkV54Z5AwbDKA==}
     engines: {node: '>=12'}
-
-  '@pooriaarab/foxden@0.1.0':
-    resolution: {integrity: sha512-0Ky1euFHhN6blcfPSPhG5wu1y5GLrFRjlyR7IKLfV7GNXhBZShf0vx/blQtIQA6wdPj2XWs1TcuxIn6nxOPz8g==}
-    engines: {node: '>=24'}
-
-  '@pooriaarab/foxlink@0.1.0':
-    resolution: {integrity: sha512-pybfo2fgEo8znDXSwRLWlT/NmguT+KDeCQ5MW8btk7sZrDlqY8cuylg+x1b6MKpajvAXTSgjwBnDQKCvpiwQTg==}
-    engines: {node: '>=24'}
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -1597,6 +1589,10 @@ packages:
     engines: {node: '>=24'}
     hasBin: true
 
+  foxden-sandbox@0.1.0:
+    resolution: {integrity: sha512-YhrFMPelIlNdxjOp3FMR6xQm0rV+dBz6whnr/eYGwGL2oYWH9Xm1SDStHsOTUkebW1giLe8XiHM2VIc2xx1eqg==}
+    engines: {node: '>=24'}
+
   foxgate@0.1.0:
     resolution: {integrity: sha512-2LcqcDZ5z9nVCHgG/k22qY688Njy53d6e38+mYVY6VpU70iAKQunIK23NUu8lQif3TSrSCaj3XVHpB+lRhOFzQ==}
     engines: {node: '>=24'}
@@ -1607,6 +1603,10 @@ packages:
 
   foxlens@0.1.0:
     resolution: {integrity: sha512-DcY2HcnQUduLdDC0edIAOdH1W4qbnKfloxggwqI8R16C/RUkKqrI80nB40om+yn4Z1sw/nIr4LZuTPArIt2A+Q==}
+    engines: {node: '>=24'}
+
+  foxlink-oauth@0.1.0:
+    resolution: {integrity: sha512-v0b3MlcnsHSRp4InDaAUAcmteB2GgOx5RDwsHJA3WivPUiKGuSMPLCTabJPXhelCIrNBAwYJ5lTSqMtN4g9DMw==}
     engines: {node: '>=24'}
 
   foxloop@0.1.0:
@@ -3264,18 +3264,6 @@ snapshots:
       '@pnpm/network.ca-file': 1.0.2
       config-chain: 1.1.13
 
-  '@pooriaarab/foxden@0.1.0':
-    dependencies:
-      pyodide: 314.0.7
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@pooriaarab/foxlink@0.1.0':
-    dependencies:
-      foxgate: 0.1.0
-      foxvault: 0.1.0
-
   '@protobufjs/aspromise@1.1.2': {}
 
   '@protobufjs/base64@1.1.2': {}
@@ -4132,6 +4120,13 @@ snapshots:
       - supports-color
       - zod
 
+  foxden-sandbox@0.1.0:
+    dependencies:
+      pyodide: 314.0.7
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   foxgate@0.1.0: {}
 
   foxlend@0.1.0:
@@ -4143,6 +4138,11 @@ snapshots:
       foxmind: 0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1))
     transitivePeerDependencies:
       - '@huggingface/transformers'
+
+  foxlink-oauth@0.1.0:
+    dependencies:
+      foxgate: 0.1.0
+      foxvault: 0.1.0
 
   foxloop@0.1.0:
     dependencies:

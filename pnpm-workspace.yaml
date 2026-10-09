@@ -22,3 +22,5 @@ minimumReleaseAgeExclude:
   - foxsync@0.1.0
   - '@pooriaarab/foxlink@0.1.0'
   - foxlens@0.1.0
+  - foxden-sandbox@0.1.0
+  - foxlink-oauth@0.1.0
