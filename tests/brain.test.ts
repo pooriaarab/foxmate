@@ -97,8 +97,8 @@ describe("brain", () => {
     const script = JSON.stringify([{ tool: "browser_task", args: { goal: "name: Sam Lee, {{notes}}" } }]);
     const goal = withNotes("Book a table.", ["party size: 4", "seat: window"]);
     const brain = await createBrain({ planner: "scripted", script }, { ...consent(false), goal });
-    const reply = await brain.mind.chat([{ role: "user", content: goal }], { tools: [] });
-    expect(JSON.parse(reply.message.tool_calls?.[0]?.function.arguments ?? "{}")).toEqual({ goal: "name: Sam Lee, party size: 4, seat: window" });
+    const answer = await brain.mind.chat([{ role: "user", content: goal }], { tools: [] });
+    expect(JSON.parse(answer.message.tool_calls?.[0]?.function.arguments ?? "{}")).toEqual({ goal: "name: Sam Lee, party size: 4, seat: window" });
     const none = await createBrain({ planner: "scripted", script }, { ...consent(false), goal: "Book a table." });
     const plain = await none.mind.chat([{ role: "user", content: "Book a table." }], { tools: [] });
     expect(JSON.parse(plain.message.tool_calls?.[0]?.function.arguments ?? "{}")).toEqual({ goal: "name: Sam Lee, " });

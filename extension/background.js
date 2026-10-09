@@ -3,13 +3,28 @@
 // approvals and stops a run. Every open sidebar gets every event of the
 // current run, so a sidebar that opens late shows the run too.
 import { storageAreaStore } from "foxgate";
+import { createMemory, indexedDbStore } from "foxmemory";
+import { createMind } from "foxmind";
 import { IdbStore, Log, idbKey } from "foxtrail";
 import { attachHeaderInjection, createVault, indexedDbKeyStore } from "foxvault";
 import { KEY_HANDLE, createAgent } from "../src/index.ts";
 
 const trailReady = Promise.all([IdbStore.open("foxmate-trail"), idbKey("foxmate-trail-key")]).then(([store, key]) => new Log({ store, key }));
 const trail = { append: async (entry) => (await trailReady).append(entry) };
-const agent = createAgent({ browser, trail, maxSteps: 30 });
+// The in-browser models load on first use. Memories are private: the
+// embedder runs in Firefox only, with foxmind's only: ["browser"].
+const browserModel = () => import("./browser-model.js");
+let embedder;
+const memory = createMemory({
+  store: indexedDbStore("foxmate-memory"),
+  embedder: {
+    async embed(texts) {
+      embedder ??= browserModel().then(({ transformers }) => createMind({ providers: [transformers({ task: "embed" })], only: ["browser"] }));
+      return (await embedder).embed(texts);
+    },
+  },
+});
+const agent = createAgent({ browser, trail, memory, maxSteps: 30, browserModel: async () => (await browserModel()).transformers({ task: "chat" }) });
 // The own key lives in foxvault. foxvault puts it in the request header as
 // the request leaves Firefox, for the key's host only.
 const vault = createVault({ store: storageAreaStore(browser.storage.local), keyStore: indexedDbKeyStore("foxmate-vault") });
@@ -93,6 +108,11 @@ browser.runtime.onMessage.addListener(async (message) => {
     const log = await trailReady;
     return { entries: await log.entries(), verify: await log.verify() };
   }
+  if (message?.op === "memory-list") return { memories: await memory.list() };
+  // The Memory page is the user's own hand, so its memories have the source "user".
+  if (message?.op === "memory-add") return memory.remember(message.text, { kind: message.kind, source: "user" }).then(({ memory: m }) => ({ memory: m }), (error) => ({ error: error.message }));
+  if (message?.op === "memory-update") return memory.update(message.id, message.patch).then((m) => ({ memory: m }), (error) => ({ error: error.message }));
+  if (message?.op === "memory-forget") return { forgot: await memory.forget(message.id) };
   if (message?.op === "trail-export") return { jsonl: await (await trailReady).exportJsonl() };
   return undefined;
 });

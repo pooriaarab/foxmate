@@ -60,7 +60,7 @@ describe("recall", () => {
 
   it("M6: zero-width and bidi characters are removed", async () => {
     const memory = fresh();
-    await memory.remember("Book a table​ for a party‮ of 4", { kind: "preference" });
+    await memory.remember("Book a table\u200b for a party\u202e of 4", { kind: "preference" });
     const { notes } = await recallNotes(memory, "book a table party");
     expect(notes[0]).toBe("Book a table for a party of 4");
   });

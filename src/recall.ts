@@ -7,7 +7,7 @@ import type { FoxMemory } from "foxmemory";
 export interface RecallOptions {
   /** The most notes. Default 5. */
   k?: number;
-  /** The lowest cosine similarity. Default 0.3. */
+  /** The lowest cosine similarity. Default 0.2: in our test, MiniLM gave a fitting note 0.26 and an unrelated one 0.06. */
   minScore?: number;
 }
 
@@ -18,9 +18,11 @@ export interface Recalled {
 }
 
 const MAX_NOTE = 300;
+/** The line above the notes in a goal. */
+export const NOTES_HEADER = "Notes the user saved in foxmate:";
 // Zero-width, bidi and other format characters, and control characters.
 // oxlint-disable-next-line no-control-regex
-const HIDDEN = /[\u0000-\u0008\u000b-\u001f\u007f­؜᠎​-‏‪-‮⁠-⁤⁦-⁯﻿]/g;
+const HIDDEN = /[\u0000-\u0008\u000b-\u001f\u007f\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff]/g;
 
 function clean(text: string): string {
   const plain = text.replace(HIDDEN, "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim();
@@ -32,7 +34,7 @@ export async function recallNotes(memory: Pick<FoxMemory, "recall">, goal: strin
   const k = options.k ?? 5;
   try {
     // Ask for more than k: memories from other sources are dropped after.
-    const hits = await memory.recall(goal, { k: k * 3, minScore: options.minScore ?? 0.3 });
+    const hits = await memory.recall(goal, { k: k * 3, minScore: options.minScore ?? 0.2 });
     const notes = hits.filter((h) => h.memory.source === "user").map((h) => clean(h.memory.text)).filter(Boolean);
     return { notes: [...new Set(notes)].slice(0, k) };
   } catch (error) {
@@ -42,5 +44,5 @@ export async function recallNotes(memory: Pick<FoxMemory, "recall">, goal: strin
 
 /** The goal with the notes under it. A goal with no notes stays as it is. */
 export function withNotes(goal: string, notes: readonly string[]): string {
-  return notes.length ? `${goal}\n\nNotes the user saved in foxmate:\n${notes.map((n) => `- ${n}`).join("\n")}` : goal;
+  return notes.length ? `${goal}\n\n${NOTES_HEADER}\n${notes.map((n) => `- ${n}`).join("\n")}` : goal;
 }
