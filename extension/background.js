@@ -174,7 +174,7 @@ browser.runtime.onConnect.addListener((port) => {
         if (agent.busy) throw new Error("A run is in progress. Stop it first.");
         await runner.start("goal", { goal: message.goal, tabId: message.tabId, ...(message.loanId ? { loanId: message.loanId } : {}) });
       }
-      else if (message.op === "answer") await agent.approvals.answer(message.requestId, message.answer, "sidebar");
+      else if (message.op === "answer") await agent.approvals.answer(message.requestId, message.answer, message.via === "phone" ? "phone" : "sidebar");
       else if (message.op === "stop") current?.controller.abort();
       else if (message.op === "set-key") {
         const saved = await setKey(message).then((host) => ({ keySaved: host }), (error) => ({ keyError: error.message }));

@@ -68,6 +68,11 @@ export async function runGoal({ fox, sidebar }, { url, goal, settings, answer = 
     }
     const choice = await answer(state.ask);
     approvals.push({ ...state.ask, answer: choice });
+    if (choice === "wait") {
+      // Another channel (the phone) answers. Wait until the sidebar shows it as answered.
+      await poll(sidebar, (id) => !document.querySelector(`li.ask[data-request-id="${id}"] .row`), state.ask.requestId, timeoutMs);
+      continue;
+    }
     await sidebar.evaluate((id, a) => document.querySelector(`li.ask[data-request-id="${id}"] button[data-answer="${a}"]`).click(), state.ask.requestId, choice);
   }
 }

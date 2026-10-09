@@ -35,6 +35,9 @@ importers:
       foxshield:
         specifier: ^0.1.0
         version: 0.1.0
+      foxsync:
+        specifier: ^0.1.0
+        version: 0.1.0
       foxtrail:
         specifier: ^0.1.0
         version: 0.1.0
@@ -1624,6 +1627,10 @@ packages:
     resolution: {integrity: sha512-cY+7Cr/MNseteH3i/8Fi2KaFpHPH6Q3NZsNSBu9LteSH7C0PDR+sFRRWks0xN+Y4MipIFvXpmwi8oAWfN4YbEQ==}
     engines: {node: '>=24'}
     hasBin: true
+
+  foxsync@0.1.0:
+    resolution: {integrity: sha512-eLPe4Wm2ENaCwXFLGVVTEC/bG5vCmKy7YsOrrLm1wCFMz48csjSKesheb4d2CLOlHk5UeADdOF6F9ntxmK3PKQ==}
+    engines: {node: '>=24'}
 
   foxtrail@0.1.0:
     resolution: {integrity: sha512-jz2YusCAzyDYgZu9RH+5K14LNkdiayy4ySMLrNiUCmdKVvryYwuMs/4HI6IGfxTedDnwjtSl38sy0SP97BiN7Q==}
@@ -4139,6 +4146,8 @@ snapshots:
       linkedom: 0.18.13
     transitivePeerDependencies:
       - canvas
+
+  foxsync@0.1.0: {}
 
   foxtrail@0.1.0: {}
 

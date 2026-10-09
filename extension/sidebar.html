@@ -110,6 +110,17 @@
         <label class="inline"><input id="consent" type="checkbox" /> Send page text to this provider</label>
       </div>
       <div data-for="scripted"><label for="script">Script (JSON tool calls)</label><textarea id="script" rows="6"></textarea></div>
+      <h2>Optional modules</h2>
+      <p class="hint">Each one is off until you turn it on.</p>
+      <label class="inline"><input id="module-phone" type="checkbox" /> Phone approvals (foxsync)</label>
+      <div id="phone-panel" hidden>
+        <p class="hint">Your phone gets each approval too, over an encrypted peer-to-peer link. The first answer counts. The link lives in this sidebar: keep it open.</p>
+        <div class="row"><button id="phone-pair" type="button">Pair a phone</button></div>
+        <label for="phone-offer">Pairing text for the phone page</label><textarea id="phone-offer" rows="3" readonly></textarea>
+        <label for="phone-answer">The phone's answer</label><textarea id="phone-answer" rows="3"></textarea>
+        <div class="row"><button id="phone-connect" type="button">Connect</button></div>
+        <p id="phone-status" class="muted" role="status">Not paired.</p>
+      </div>
     </section>
     <script type="module" src="sidebar.js"></script>
   </body>
