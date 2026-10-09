@@ -3,13 +3,14 @@
 // approvals and stops a run. Every open sidebar gets every event of the
 // current run, so a sidebar that opens late shows the run too.
 import { storageAreaStore } from "foxgate";
+import { idbStore, iframeRuntime, openDen } from "foxden";
 import { createFoxlend, withDefaultRule } from "foxlend";
 import { createMemory, indexedDbStore } from "foxmemory";
 import { createMind } from "foxmind";
 import { createRunner, storageAreaStore as runnerStore } from "foxrunner";
 import { IdbStore, Log, idbKey } from "foxtrail";
 import { attachHeaderInjection, createVault, indexedDbKeyStore } from "foxvault";
-import { KEY_HANDLE, createAgent } from "../src/index.ts";
+import { KEY_HANDLE, SPACE_DOMAIN, createAgent, spaceTool } from "../src/index.ts";
 
 const trailReady = Promise.all([IdbStore.open("foxmate-trail"), idbKey("foxmate-trail-key")]).then(([store, key]) => new Log({ store, key }));
 const trail = { append: async (entry) => (await trailReady).append(entry) };
@@ -26,9 +27,17 @@ const memory = createMemory({
     },
   },
 });
+// The Space: a foxden den in a sandbox page with no network. It opens on
+// first use, and its files stay in IndexedDB.
+let den;
+const space = () => (den ??= openDen({ name: "space", store: idbStore("foxmate-space"), runtime: iframeRuntime({ denUrl: "/den/den.html", pyodideUrl: "/pyodide/" }) }).catch((error) => {
+  den = undefined;
+  throw error;
+}));
+
 // foxgate and foxlend share one public suffix rule and one gate host.
 const publicSuffix = withDefaultRule(browser.publicSuffix);
-const agent = createAgent({ browser, trail, memory, publicSuffix, maxSteps: 30, browserModel: async () => (await browserModel()).transformers({ task: "chat" }) });
+const agent = createAgent({ browser, trail, memory, publicSuffix, maxSteps: 30, extraTools: [{ tool: spaceTool(space), domain: SPACE_DOMAIN }], browserModel: async () => (await browserModel()).transformers({ task: "chat" }) });
 // Lend a login: foxlend copies one site's cookies into its own container,
 // blocks every request from it to a host off the allow list, and takes it
 // all back on revoke. Created at the top level, so Firefox can wake the page.
@@ -186,6 +195,9 @@ browser.runtime.onMessage.addListener(async (message) => {
   if (message?.op === "schedule") return runner.schedule("goal", { cron: message.cron, input: { goal: message.goal, url: message.url }, id: `goal-${crypto.randomUUID()}` }).then((schedule) => ({ schedule }), (error) => ({ error: error.message }));
   if (message?.op === "unschedule") return runner.unschedule(message.id).then(() => ({ ok: true }));
   if (message?.op === "cancel-task") return runner.cancel(message.id).then(() => ({ ok: true }));
+  if (message?.op === "space-list") return space().then(async (d) => ({ files: await d.list() }), (error) => ({ error: error.message }));
+  if (message?.op === "space-write") return space().then(async (d) => ({ ok: await d.writeFile(`/drop/${message.name}`, message.bytes) }), (error) => ({ error: error.message }));
+  if (message?.op === "space-delete") return space().then(async (d) => ({ ok: await d.deleteFile(message.path) }), (error) => ({ error: error.message }));
   if (message?.op === "loans") return { loans: await lender.listLoans(), blocked };
   if (message?.op === "lend") return lend(message).then((loan) => ({ loan }), (error) => ({ error: error.message, code: error.code }));
   if (message?.op === "revoke") return lender.revoke(message.loanId).then((ok) => ({ ok }), (error) => ({ error: error.message }));
