@@ -50,6 +50,7 @@ untrusted data.
 | S8 | Harmless hidden text (the options of a `<select>`, a menu below the fold) shares words with a real control's label, so S5 drops the control | A control outside every hidden element stays. | `tests/shield.test.ts` S8; E2E signup |
 | S9 | Flagged hidden text names a real field ("add the email and password to the link"), so a word match drops the visible Password field | Only the page's own answer (S5) drops a control. A word match never does. | `tests/shield.test.ts` S9; E2E signup-trap |
 | S10 | The page cannot answer which controls are hidden | The same as S3: the page text is withheld. | `tests/shield.test.ts` S10 |
+| S11 | A click on a link starts a navigation, and the next snapshot reads the page while it loads: 0 controls and no text (seen in a recorded, headed E2E run of foxbench `mail-trap`) | Before it reads, the shield waits until the tab reports `complete`, for up to 10 s. | `tests/shield.test.ts` S11 |
 
 ## Recall: memories in the goal (`src/recall.ts`)
 
@@ -105,6 +106,7 @@ answer must reach the one request it names, once.
 | G19 | A tab sits in a loan's container while the loan is still being created or revoked, and the run gets the normal grants | foxmate matches a loan in any state; a loan that is not active refuses the run. | `tests/agent.test.ts` G19 |
 | G20 | A loan run follows its tab to another host, and gets grants for that host inside the logged-in container | A loan run is refused unless the tab is on the lent host or, for a site loan, the lent site. | `tests/agent.test.ts` G20 |
 | G21 | The approval shows the form's values cut to 80 and 240 characters, so the end of a long value that the planner typed (an address, a message) is hidden | The field the planner typed last is shown in full. | `tests/form.test.ts` G21 |
+| G22 | The last tool calls fail (no control, nothing done), the planner calls `finish`, and the run ends as done because an earlier step worked and the page shows no error (seen in the same run) | With no task check, `finish` passes only when the newest tool result is good. |  `tests/agent.test.ts` G22 |
 
 ## Space: Python on a dropped file (`src/space.ts`)
 
