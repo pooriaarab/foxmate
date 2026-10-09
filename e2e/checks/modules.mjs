@@ -13,7 +13,14 @@ export default async function modulesCheck({ session, check, record, scripted, f
     });
     const results = off.trail.filter((e) => e.kind === "loop.tool-result").map((e) => [e.data.name, e.data.ok, e.data.summary]);
     check("O1 the look tool refuses while screenshots are off", ["look", false, "Screenshots are off. The user can turn them on in Settings."], results[0]);
-    check("O2 the Google tools refuse while Google is not connected", ["read_calendar", false, "Google is not connected. The user can connect it in Settings."], results[1]);
+    // O2 (G18): with no opt-in, the gate does not grant the mail tools on a web tab at all.
+    const decisions = off.trail.filter((e) => e.kind === "loop.decision").map((e) => [e.data.action?.tool, e.data.decision, e.data.reason]);
+    check("O2 without the goal's opt-in, the Google tools get no grant on a web tab", ["read_calendar", "deny", "no-grant"], decisions.find((d) => d[0] === "read_calendar"));
+    await session.sidebar.evaluate(() => { document.getElementById("allow-private").checked = true; });
+    const opted = await runGoal(session, { url: `${site.url}/canvas.html`, goal: "List my meetings.", settings: scripted([{ tool: "read_calendar", args: {} }, finish, finish]) });
+    await session.sidebar.evaluate(() => { document.getElementById("allow-private").checked = false; });
+    const optedResult = opted.trail.find((e) => e.kind === "loop.tool-result")?.data;
+    check("O2 with the opt-in, the Google tools refuse while Google is not connected", ["read_calendar", false, "Google is not connected. The user can connect it in Settings."], [optedResult?.name, optedResult?.ok, optedResult?.summary]);
 
     const vision = process.env.FOXMATE_VISION;
     if (!vision) {

@@ -35,6 +35,8 @@ export interface RunInput {
   settings: BrainSettings;
   /** Run in a lent tab: the tab must be in the loan's container. */
   loan?: Loan;
+  /** The user lets this goal read private data (mail, calendar) on a web tab (G18). */
+  allowPrivate?: boolean;
   signal?: AbortSignal;
   onEvent?: (event: AgentEvent) => void;
 }
@@ -43,7 +45,8 @@ export type AgentEvent =
   | (LoopEvent & { exactText?: string })
   | { type: "start"; planner: string; privacy: string; goal: string }
   | { type: "recall"; notes: string[]; error?: string }
-  | { type: "refused"; reason: string; message: string };
+  | { type: "refused"; reason: string; message: string }
+  | { type: "private"; source: string };
 
 export interface RunEnd {
   status: "done" | "blocked" | "aborted" | "refused";
@@ -63,8 +66,12 @@ export interface AgentOptions {
   loanFor?: (cookieStoreId: string) => Promise<Loan | undefined>;
   /** More tools on the run's tab, for example a screenshot tool. The tab's grants cover them. */
   moreTabTools?: (tabId: () => number) => LoopTool[];
-  /** More tools, for example the Space. Each one names its own domain. */
-  extraTools?: { tool: LoopTool; domain: string }[];
+  /**
+   * More tools, for example the Space. Each one names its own domain.
+   * `private`: its good result is private data (G16). `optIn`: granted on a
+   * web tab only when the goal sets `allowPrivate` (G18).
+   */
+  extraTools?: { tool: LoopTool; domain: string; private?: boolean; optIn?: boolean }[];
   /** Why the page is not a good end page, or undefined. Default: foxpaw's problemOf. */
   pageProblem?: (tabId: number) => Promise<string | undefined>;
   browserModel?: () => Promise<Provider>;
@@ -157,8 +164,43 @@ export function createAgent(options: AgentOptions): Agent {
       target = input.tabId;
       const expiresAt = Date.now() + runMs;
       const scopes = loan ? SCOPES.slice(0, SCOPES.indexOf(loan.scope) + 1) : SCOPES;
-      if (domain) for (const scope of scopes) grants.push((await host.addGrant({ scope, domains: [domain], expiresAt })).id);
-      for (const { tool, domain: own } of extra.filter((e) => scopes.includes(e.tool.scope))) grants.push((await host.addGrant({ scope: tool.scope, domains: [own], tools: [tool.name], expiresAt })).id);
+      // The tab's grants. Once the run holds private data, open_url and every fill tool
+      // need an approval: their arguments can carry the data to the page (G16, G17).
+      let tabGrants: string[] = [];
+      let privateSource: string | undefined;
+      const grantTab = async () => {
+        if (!domain) return;
+        for (const id of tabGrants) await host.revokeGrant(id).catch(() => undefined);
+        tabGrants = [];
+        const add = async (grant: Parameters<Host["addGrant"]>[0]) => {
+          const { id } = await host.addGrant(grant);
+          tabGrants.push(id);
+          grants.push(id);
+        };
+        for (const scope of scopes) {
+          if (!privateSource || scope === "submit") {
+            await add({ scope, domains: [domain], expiresAt });
+          } else if (scope === "fill") {
+            await add({ scope, domains: [domain], expiresAt, approval: "always" });
+          } else {
+            const reads = tabTools.filter((t) => t.scope === "read" && t.name !== "open_url").map((t) => t.name);
+            if (reads.length) await add({ scope, domains: [domain], expiresAt, tools: reads });
+            if (tabTools.some((t) => t.name === "open_url")) await add({ scope, domains: [domain], expiresAt, tools: ["open_url"], approval: "always" });
+          }
+        }
+      };
+      const goPrivate = async (source: string) => {
+        if (privateSource) return;
+        privateSource = source;
+        emit({ type: "private", source });
+        await trail.append({ actor: "foxmate", kind: "run.private", data: { source } });
+        await grantTab();
+      };
+      if (recalled.notes.length) await goPrivate("memory notes");
+      else await grantTab();
+      const privateTools = new Set(extra.filter((e) => e.private).map((e) => e.tool.name));
+      const granted = extra.filter((e) => scopes.includes(e.tool.scope) && (!e.optIn || input.allowPrivate || !domain));
+      for (const { tool, domain: own } of granted) grants.push((await host.addGrant({ scope: tool.scope, domains: [own], tools: [tool.name], expiresAt })).id);
       const loop = createLoop({ mind: brain.mind, gate, tools, trail, check, maxSteps: options.maxSteps ?? 20, budget: { ms: runMs }, onApproval: (request) => approvals.ask(request) });
       let end: RunEnd = { status: "aborted" };
       worked = 0;
@@ -170,6 +212,7 @@ export function createAgent(options: AgentOptions): Agent {
           emit({ ...event, ...(text ? { exactText: text } : {}) });
         } else emit(event);
         if (event.type === "tool-result" && event.ok) worked += 1;
+        if (event.type === "tool-result" && event.ok && privateTools.has(event.name)) await goPrivate(event.name);
         if (event.type === "done") end = { status: "done", summary: event.summary };
         if (event.type === "blocked") end = { status: "blocked", reason: event.reason, message: event.message };
       }

@@ -69,7 +69,9 @@ const publicSuffix = withDefaultRule(browser.publicSuffix);
 const agent = createAgent({
   browser, trail, memory, publicSuffix, maxSteps: 30,
   extraTools: [
-    { tool: spaceTool(space), domain: SPACE_DOMAIN },
+    // The Space's files and the user's mail are private data: after either, foxmate asks
+    // before each typing and each page it opens (G16). Mail needs the goal to opt in on a web tab (G18).
+    { tool: spaceTool(space), domain: SPACE_DOMAIN, private: true },
     ...googleTools({
       enabled: googleOn,
       events: async (max) => (await calendar(await google()).listEvents({ max })).events.map(toPromptText),
@@ -166,7 +168,7 @@ async function runNow(input) {
   }
 }
 
-async function runClaimed({ goal, tabId, loanId, taskId, signal }) {
+async function runClaimed({ goal, tabId, loanId, taskId, signal, allowPrivate }) {
   const { settings = {} } = await browser.storage.local.get("settings");
   // Device mode unlocks without a passphrase; the header rule needs it unlocked.
   if (settings.privacy === "own-key" && (await vault.status()) === "locked") await vault.unlock();
@@ -182,7 +184,7 @@ async function runClaimed({ goal, tabId, loanId, taskId, signal }) {
     run.events.push(event);
     send({ runId: run.id, event });
   };
-  const end = await agent.run({ goal, tabId, settings, signal: run.controller.signal, onEvent, ...(loan ? { loan: { cookieStoreId: loan.cookieStoreId, scope: loan.scope } } : {}) })
+  const end = await agent.run({ goal, tabId, settings, allowPrivate: Boolean(allowPrivate), signal: run.controller.signal, onEvent, ...(loan ? { loan: { cookieStoreId: loan.cookieStoreId, scope: loan.scope } } : {}) })
     .catch((error) => ({ status: "blocked", reason: "error", message: error instanceof Error ? error.message : String(error) }));
   run.end = end;
   send({ runId: run.id, end });
@@ -211,7 +213,7 @@ runner.define("goal", [{
       };
       for (let i = 0; i < 75 && !(await loaded()); i++) await new Promise((r) => setTimeout(r, 200));
     }
-    const end = await runNow({ goal: input.goal, tabId, loanId: input.loanId, taskId: ctx.taskId, signal: ctx.signal });
+    const end = await runNow({ goal: input.goal, tabId, loanId: input.loanId, allowPrivate: input.allowPrivate, taskId: ctx.taskId, signal: ctx.signal });
     return { ...end, attempt: ctx.attempt };
   },
 }]);
@@ -231,7 +233,7 @@ browser.runtime.onConnect.addListener((port) => {
     try {
       if (message.op === "run") {
         if (busy()) throw new Error("A run is in progress. Stop it first.");
-        await runner.start("goal", { goal: message.goal, tabId: message.tabId, ...(message.loanId ? { loanId: message.loanId } : {}) });
+        await runner.start("goal", { goal: message.goal, tabId: message.tabId, allowPrivate: Boolean(message.allowPrivate), ...(message.loanId ? { loanId: message.loanId } : {}) });
       }
       else if (message.op === "answer") await agent.approvals.answer(message.requestId, message.answer, message.via === "phone" ? "phone" : "sidebar");
       else if (message.op === "stop") current?.controller.abort();
@@ -251,7 +253,7 @@ browser.runtime.onMessage.addListener(async (message) => {
     return { entries: await log.entries(), verify: await log.verify() };
   }
   if (message?.op === "tasks") return { tasks: (await runner.list()).filter((t) => t.name === "goal").slice(0, 20), schedules: await runner.schedules(), waiting: agent.approvals.waiting().length };
-  if (message?.op === "schedule") return runner.schedule("goal", { cron: message.cron, input: { goal: message.goal, url: message.url }, id: `goal-${crypto.randomUUID()}` }).then((schedule) => ({ schedule }), (error) => ({ error: error.message }));
+  if (message?.op === "schedule") return runner.schedule("goal", { cron: message.cron, input: { goal: message.goal, url: message.url, allowPrivate: Boolean(message.allowPrivate) }, id: `goal-${crypto.randomUUID()}` }).then((schedule) => ({ schedule }), (error) => ({ error: error.message }));
   if (message?.op === "unschedule") return runner.unschedule(message.id).then(() => ({ ok: true }));
   if (message?.op === "cancel-task") return runner.cancel(message.id).then(() => ({ ok: true }));
   if (message?.op === "space-list") return space().then(async (d) => ({ files: await d.list() }), (error) => ({ error: error.message }));
