@@ -63,6 +63,28 @@ export default async function lendCheck({ session, check, record, scripted, fini
     await own.reload();
     check("L4 Revoke removes the loan and its container; your own tab stays signed in", { status: "Revoked. The container and its cookies are gone.", loans: 0, containers: 0, own: "Signed in as sam" },
       { ...revoked, own: await own.evaluate(() => document.querySelector("h1").textContent) });
+
+    // L5 (G13): a read loan whose allow list has attacker.test. A normal run in your own tab must not reach it.
+    await sidebar.evaluate(async (url) => {
+      window.foxmate.show("lend");
+      document.getElementById("lend-url").value = url;
+      document.getElementById("lend-scope").value = "read";
+      document.getElementById("lend-allow").value = "attacker.test";
+      document.getElementById("lend-form").requestSubmit();
+      for (let i = 0; i < 100 && !/^(Lent|Not lent)/.test(document.getElementById("lend-status").textContent); i++) await new Promise((r) => setTimeout(r, 100));
+      document.getElementById("lend-allow").value = "";
+      window.foxmate.show("chat");
+    }, `${bank.url}/`);
+    const stray = await runGoal(session, {
+      page: own, goal: "Check my balance.",
+      settings: scripted([{ tool: "open_url", args: { url: `${bank.attacker}/collect` } }, finish]),
+    });
+    const decision = stray.trail.filter((e) => e.kind === "loop.decision").at(-1)?.data;
+    check("L5 a loan's allow list does not widen a normal run", { decision: "deny", reason: "no-grant", attacker: [] }, { decision: decision?.decision, reason: decision?.reason, attacker: bank.log.attacker });
+    await sidebar.evaluate(async () => {
+      const { loans } = await browser.runtime.sendMessage({ op: "loans" });
+      for (const loan of loans) await browser.runtime.sendMessage({ op: "revoke", loanId: loan.id });
+    });
   } finally {
     await bank.close();
   }

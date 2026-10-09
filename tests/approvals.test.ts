@@ -12,6 +12,8 @@ async function setup(now = Date.now) {
     const action = { tool: "click", args: { button }, domain: "shop.test", scope: "submit" as const };
     const decision = await gate.check(action);
     if (decision.decision !== "ask") throw new Error("expected ask");
+    // The agent announces each request of its run before it shows it.
+    approvals.expect(decision.requestId);
     return { gate, action, request: { step: 1, requestId: decision.requestId, action, expiresAt: Date.now() + 1000 } };
   };
   return { gate, host, approvals, trail, ask };

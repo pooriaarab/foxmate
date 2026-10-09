@@ -59,6 +59,8 @@ export interface AgentOptions {
   publicSuffix?: PublicSuffix;
   /** The tools for a tab. Default: foxloop's browser tools over foxshield. */
   makeTools?: (tabId: () => number) => LoopTool[];
+  /** The active loan whose container holds this cookie store, if any. A run on that tab is a loan run (G12). */
+  loanFor?: (cookieStoreId: string) => Promise<Loan | undefined>;
   /** More tools on the run's tab, for example a screenshot tool. The tab's grants cover them. */
   moreTabTools?: (tabId: () => number) => LoopTool[];
   /** More tools, for example the Space. Each one names its own domain. */
@@ -130,7 +132,9 @@ export function createAgent(options: AgentOptions): Agent {
       }
       if (!domain && !extra.length) return await refuse("no-page", "The tab shows no web page.");
       if (input.loan && tab.cookieStoreId !== input.loan.cookieStoreId) return await refuse("loan-mismatch", "The tab is not in the lent container.");
-      await trail.append({ actor: "user", kind: "run.start", data: { goal: input.goal, domain: domain ?? null, planner: input.settings.planner ?? "saluki", loan: Boolean(input.loan) } });
+      // A goal from Chat on a lent tab names no loan, but it is a loan run all the same.
+      const loan = input.loan ?? (tab.cookieStoreId ? await options.loanFor?.(tab.cookieStoreId) : undefined);
+      await trail.append({ actor: "user", kind: "run.start", data: { goal: input.goal, domain: domain ?? null, planner: input.settings.planner ?? "saluki", loan: Boolean(loan) } });
       const recalled = options.memory ? await recallNotes(options.memory, input.goal) : { notes: [] };
       emit({ type: "recall", ...recalled });
       const goal = withNotes(input.goal, recalled.notes);
@@ -148,13 +152,14 @@ export function createAgent(options: AgentOptions): Agent {
       emit({ type: "start", planner: brain.planner, privacy: brain.privacy, goal });
       target = input.tabId;
       const expiresAt = Date.now() + runMs;
-      const scopes = input.loan ? SCOPES.slice(0, SCOPES.indexOf(input.loan.scope) + 1) : SCOPES;
+      const scopes = loan ? SCOPES.slice(0, SCOPES.indexOf(loan.scope) + 1) : SCOPES;
       if (domain) for (const scope of scopes) grants.push((await host.addGrant({ scope, domains: [domain], expiresAt })).id);
-      for (const { tool, domain: own } of extra) grants.push((await host.addGrant({ scope: tool.scope, domains: [own], tools: [tool.name], expiresAt })).id);
+      for (const { tool, domain: own } of extra.filter((e) => scopes.includes(e.tool.scope))) grants.push((await host.addGrant({ scope: tool.scope, domains: [own], tools: [tool.name], expiresAt })).id);
       const loop = createLoop({ mind: brain.mind, gate, tools, trail, check, maxSteps: options.maxSteps ?? 20, budget: { ms: runMs }, onApproval: (request) => approvals.ask(request) });
       let end: RunEnd = { status: "aborted" };
       for await (const event of loop.run(goal, input.signal ? { signal: input.signal } : {})) {
         if (event.type === "approval-needed") {
+          approvals.expect(event.requestId);
           // ask() reads foxgate's text when foxloop calls it; read it here too, for the event.
           const text = (await host.pending()).find((r) => r.id === event.requestId)?.text;
           emit({ ...event, ...(text ? { exactText: text } : {}) });

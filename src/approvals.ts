@@ -26,7 +26,9 @@ export interface Approvals {
   /** `decided` when this answer decided the request, `late` when another one did, `unknown` for no such request. */
   answer(requestId: string, answer: Answer, via: string): Promise<"decided" | "late" | "unknown">;
   waiting(): Waiting[];
-  /** Ends every waiting request as no. */
+  /** The current run announced this request: only such requests can be answered (A7). */
+  expect(requestId: string): void;
+  /** Ends every waiting request as no, and rejects the run's open requests in foxgate. */
   cancelAll(): void;
   /** Calls fn when the list of waiting requests changes. Returns a function that removes it. */
   onChange(fn: (waiting: Waiting[]) => void): () => void;
@@ -37,6 +39,8 @@ export function createApprovals(options: ApprovalsOptions): Approvals {
   // Answers that came before foxloop asked, and requests already decided.
   const early = new Map<string, string | null>();
   const decided = new Set<string>();
+  // Requests that the current run announced. An answer to any other request is unknown.
+  const live = new Set<string>();
   const listeners = new Set<(waiting: Waiting[]) => void>();
   const changed = () => {
     const list = [...open.values()].map((o) => o.waiting);
@@ -70,7 +74,7 @@ export function createApprovals(options: ApprovalsOptions): Approvals {
     },
     async answer(requestId, answer, via) {
       if (decided.has(requestId)) return "late";
-      if (!open.has(requestId) && !(await options.host.pending()).some((r) => r.id === requestId)) return "unknown";
+      if (!open.has(requestId) && !(live.has(requestId) && (await options.host.pending()).some((r) => r.id === requestId))) return "unknown";
       if (decided.has(requestId)) return "late";
       decided.add(requestId);
       let token: string | null = null;
@@ -84,8 +88,17 @@ export function createApprovals(options: ApprovalsOptions): Approvals {
       return "decided";
     },
     waiting: () => [...open.values()].map((o) => o.waiting),
+    expect(requestId) {
+      live.add(requestId);
+    },
     cancelAll() {
+      // foxgate keeps a pending request for 10 minutes and reuses it for the same action,
+      // so a late answer could approve the next run. Reject them all now.
+      for (const requestId of new Set([...live, ...open.keys()])) {
+        if (!decided.has(requestId)) void options.host.reject(requestId).catch(() => undefined);
+      }
       for (const requestId of open.keys()) settle(requestId, null);
+      live.clear();
       early.clear();
     },
     onChange(fn) {
