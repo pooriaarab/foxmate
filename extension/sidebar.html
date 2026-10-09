@@ -12,6 +12,7 @@
     </header>
     <nav id="nav">
       <button type="button" data-view="chat" aria-pressed="true">Chat</button>
+      <button type="button" data-view="activity">Activity</button>
       <button type="button" data-view="settings">Settings</button>
     </nav>
     <section data-view="chat">
@@ -25,6 +26,11 @@
           <span id="status" role="status"></span>
         </div>
       </form>
+    </section>
+    <section data-view="activity" hidden>
+      <div class="row"><p id="trail-status" class="muted">Reading the log…</p><button id="trail-export" type="button">Export</button></div>
+      <p class="hint">foxtrail keeps every step of every run in a log that shows any change. It keeps short quotes of what foxshield flagged, not whole pages.</p>
+      <ol id="trail" class="steps"></ol>
     </section>
     <section data-view="settings" hidden>
       <h2>Privacy</h2>
