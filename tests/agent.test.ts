@@ -233,4 +233,10 @@ describe("agent", () => {
     expect(end).toMatchObject({ status: "refused", reason: "loan-host" });
     expect(ran).toEqual([]);
   });
+
+  it("G22: finish after a failed last step does not pass", async () => {
+    const { run } = await setup();
+    const end = await run({ script: [{ tool: "fill", args: { text: "x" } }, { tool: "nope", args: {} }, finish, finish] });
+    expect(end).toMatchObject({ status: "blocked", reason: "check-failed" });
+  });
 });
