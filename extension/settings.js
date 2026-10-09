@@ -38,7 +38,7 @@ function render() {
 async function save() {
   const privacy = document.querySelector('input[name="privacy"]:checked')?.value ?? "private";
   const planner = privacy !== current.privacy && privacy === "private" && PLANNERS.find((p) => p.id === $("planner").value)?.cloud ? "saluki" : $("planner").value;
-  current = { privacy, planner, model: $("model").value.trim(), baseURL: $("base-url").value.trim(), consent: $("consent").checked && privacy === "own-key", script: $("script").value };
+  current = { ...current, privacy, planner, model: $("model").value.trim(), baseURL: $("base-url").value.trim(), consent: $("consent").checked && privacy === "own-key", script: $("script").value };
   await browser.storage.local.set({ settings: current });
   render();
 }
@@ -52,7 +52,7 @@ export const settings = {
   init(p) {
     port = p;
     $("nav").closest("body").querySelector('section[data-view="settings"]').addEventListener("change", (event) => {
-      if (event.target.id !== "api-key") save();
+      if (event.target.id !== "api-key" && !event.target.id.startsWith("module-") && !event.target.id.startsWith("phone-")) save();
     });
     $("consent").addEventListener("click", async () => {
       if (!$("consent").checked) return;

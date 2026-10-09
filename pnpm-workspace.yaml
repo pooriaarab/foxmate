@@ -19,3 +19,4 @@ minimumReleaseAgeExclude:
   - foxlend@0.1.0
   - foxrunner@0.1.0
   - '@pooriaarab/foxden@0.1.0'
+  - foxsync@0.1.0
