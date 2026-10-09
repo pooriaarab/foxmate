@@ -4,7 +4,7 @@
 // is withheld (docs/failure-modes.md S1-S7).
 import type { PawLike } from "foxloop";
 import * as foxpaw from "foxpaw";
-import type { ScriptingApi, Snapshot } from "foxpaw";
+import type { Control, ScriptingApi, Snapshot } from "foxpaw";
 import { sanitize, scanDocument, type FindingKind, type ScanReport } from "foxshield";
 
 /** What foxshield did to one page, for the trail. */
@@ -28,7 +28,7 @@ export interface ShieldOptions {
 
 const HIDDEN: ReadonlySet<FindingKind> = new Set(["display-none", "not-rendered", "visibility-hidden", "opacity-zero", "offscreen", "clipped", "tiny-font", "low-contrast", "aria-hidden", "covered"]);
 const MAX_TEXT = 6000;
-const norm = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
+const norm = (text: string): string => text.replace(/\s+/g, " ").trim().toLowerCase();
 const cut = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 async function scan(options: ShieldOptions, tabId: number): Promise<ScanReport> {
@@ -55,17 +55,23 @@ export function shieldedPaw(options: ShieldOptions): PawLike {
         await options.onScan?.({ url: page.url, findings: 0, top: [], droppedControls: [], withheld: why });
         return { ...page, text: "[foxshield could not scan this page, so foxmate withheld its text.]" };
       }
-      const hidden = report.findings.filter((f) => HIDDEN.has(f.kind)).map((f) => norm(f.text));
-      const inHidden = (label: string) => norm(label).length >= 4 && hidden.some((text) => text.includes(norm(label)));
-      const controls = page.controls.filter((c) => !inHidden(c.label));
-      const dropped = page.controls.filter((c) => inHidden(c.label)).map((c) => c.label);
+      const threshold = options.threshold ?? 0.5;
+      // Flagged hidden text drops any control in it. Low-score hidden text (the options of a
+      // closed <select>) drops only an off-screen control, so a visible field stays.
+      const hidden = report.findings.filter((f) => HIDDEN.has(f.kind));
+      const inHidden = (c: Control) => {
+        const label = norm(c.label);
+        return label.length >= 4 && hidden.some((f) => (f.score >= threshold || c.offscreen) && norm(f.text).includes(label));
+      };
+      const controls = page.controls.filter((c) => !inHidden(c));
+      const dropped = page.controls.filter(inHidden).map((c) => c.label);
       await options.onScan?.({
         url: page.url,
         findings: report.findings.length,
         top: report.findings.slice(0, 5).map((f) => ({ kind: f.kind, reason: f.reason, score: f.score, text: cut(f.text, 120) })),
         droppedControls: dropped,
       });
-      return { ...page, controls, text: cut(sanitize(report, { threshold: options.threshold ?? 0.5 }), MAX_TEXT) };
+      return { ...page, controls, text: cut(sanitize(report, { threshold }), MAX_TEXT) };
     },
   };
 }
