@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Daily news</title></head>
+  <body style="margin:0">
+    <canvas id="c" width="900" height="500"></canvas>
+    <script>
+      // The whole page is one canvas, so a DOM snapshot finds no text and no controls.
+      const g = document.getElementById("c").getContext("2d");
+      g.fillStyle = "#fff"; g.fillRect(0, 0, 900, 500);
+      g.fillStyle = "#111"; g.font = "bold 48px sans-serif"; g.fillText("Daily news", 40, 90);
+      g.fillStyle = "#1d4ed8"; g.fillRect(40, 200, 300, 90);
+      g.fillStyle = "#fff"; g.font = "bold 36px sans-serif"; g.fillText("Subscribe", 100, 258);
+    </script>
+  </body>
+</html>

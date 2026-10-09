@@ -17,6 +17,12 @@ importers:
       foxlend:
         specifier: ^0.1.0
         version: 0.1.0
+      foxlens:
+        specifier: ^0.1.0
+        version: 0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1))
+      foxlink:
+        specifier: npm:@pooriaarab/foxlink@^0.1.0
+        version: '@pooriaarab/foxlink@0.1.0'
       foxloop:
         specifier: ^0.1.0
         version: 0.1.0
@@ -667,6 +673,10 @@ packages:
 
   '@pooriaarab/foxden@0.1.0':
     resolution: {integrity: sha512-0Ky1euFHhN6blcfPSPhG5wu1y5GLrFRjlyR7IKLfV7GNXhBZShf0vx/blQtIQA6wdPj2XWs1TcuxIn6nxOPz8g==}
+    engines: {node: '>=24'}
+
+  '@pooriaarab/foxlink@0.1.0':
+    resolution: {integrity: sha512-pybfo2fgEo8znDXSwRLWlT/NmguT+KDeCQ5MW8btk7sZrDlqY8cuylg+x1b6MKpajvAXTSgjwBnDQKCvpiwQTg==}
     engines: {node: '>=24'}
 
   '@protobufjs/aspromise@1.1.2':
@@ -1593,6 +1603,10 @@ packages:
 
   foxlend@0.1.0:
     resolution: {integrity: sha512-6OzCd7dThP8s0/9wKzmaxheoZ/J9SmlQbhMZy+xQLew1IuvAaw7AxFZC5tugZ+kqk3PttVzkNdHHaC1IRDBgUQ==}
+    engines: {node: '>=24'}
+
+  foxlens@0.1.0:
+    resolution: {integrity: sha512-DcY2HcnQUduLdDC0edIAOdH1W4qbnKfloxggwqI8R16C/RUkKqrI80nB40om+yn4Z1sw/nIr4LZuTPArIt2A+Q==}
     engines: {node: '>=24'}
 
   foxloop@0.1.0:
@@ -3257,6 +3271,11 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
+  '@pooriaarab/foxlink@0.1.0':
+    dependencies:
+      foxgate: 0.1.0
+      foxvault: 0.1.0
+
   '@protobufjs/aspromise@1.1.2': {}
 
   '@protobufjs/base64@1.1.2': {}
@@ -4118,6 +4137,12 @@ snapshots:
   foxlend@0.1.0:
     dependencies:
       foxgate: 0.1.0
+
+  foxlens@0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1)):
+    dependencies:
+      foxmind: 0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1))
+    transitivePeerDependencies:
+      - '@huggingface/transformers'
 
   foxloop@0.1.0:
     dependencies:

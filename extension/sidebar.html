@@ -121,6 +121,20 @@
         <div class="row"><button id="phone-connect" type="button">Connect</button></div>
         <p id="phone-status" class="muted" role="status">Not paired.</p>
       </div>
+      <label class="inline"><input id="module-lens" type="checkbox" /> Screenshots for canvas pages (foxlens)</label>
+      <div id="lens-panel" hidden>
+        <p class="hint">The look tool sends a screenshot of the tab to a vision model in Ollama on this computer, never to a cloud model.</p>
+        <label for="lens-model">Vision model</label><input id="lens-model" autocomplete="off" placeholder="qwen3-vl:2b-instruct" />
+        <label for="lens-url">Ollama address</label><input id="lens-url" autocomplete="off" placeholder="http://127.0.0.1:11434/v1" />
+      </div>
+      <label class="inline"><input id="module-google" type="checkbox" /> Gmail and Calendar, read only (foxlink)</label>
+      <div id="google-panel" hidden>
+        <p class="hint">Use your own Google OAuth client id. foxvault keeps the tokens. Mail and events go to the planner as data.</p>
+        <label for="google-client">OAuth client id</label><input id="google-client" autocomplete="off" placeholder="123-abc.apps.googleusercontent.com" />
+        <div class="row"><button id="google-connect" type="button">Connect Google</button></div>
+        <p id="google-status" class="muted" role="status"></p>
+      </div>
+      <p class="hint">Later: payments with spend caps (foxpay), and outside agents over MCP (foxbridge).</p>
     </section>
     <script type="module" src="sidebar.js"></script>
   </body>
