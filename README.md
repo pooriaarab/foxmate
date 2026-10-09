@@ -239,7 +239,7 @@ payment apply.
 
 ## Tests
 
-`pnpm ci:local` runs lint, typecheck, 52 isolated tests, the build and
+`pnpm ci:local` runs lint, typecheck, 67 isolated tests, the build and
 `web-ext lint`. Each isolated test covers a failure mode in
 [docs/failure-modes.md](docs/failure-modes.md), written before the code.
 
@@ -372,8 +372,7 @@ Read these rows with care:
 - The Gmail and Calendar tools are read only, and we did not test them
   against Google. Screenshots need Ollama with
   `OLLAMA_ORIGINS="moz-extension://*"`; so does the Ollama planner.
-- foxmate is not signed on AMO yet. The fox packages it uses are not on npm
-  yet.
+- foxmate is not signed on AMO yet.
 - foxpay and foxbridge are not part of foxmate yet.
 
 ## Part of the fox primitives
@@ -420,7 +419,10 @@ flowchart LR
 ```
 
 foxmate uses every primitive except foxpay and foxbridge. Nothing depends
-on foxmate.
+on foxmate. Two primitives have other names on npm: foxden is
+[`foxden-sandbox`](https://www.npmjs.com/package/foxden-sandbox) and foxlink
+is [`foxlink-oauth`](https://www.npmjs.com/package/foxlink-oauth).
+`package.json` installs them under the names `foxden` and `foxlink`.
 
 ## Development
 
