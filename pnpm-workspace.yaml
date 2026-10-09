@@ -8,3 +8,5 @@ minimumReleaseAgeExclude:
   - foxloop@0.1.0
   - foxmind@0.1.0
   - foxpaw@0.1.0
+  - foxmemory@0.1.0
+  - foxshield@0.1.0
