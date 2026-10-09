@@ -30,6 +30,7 @@ the user and Firefox both agree. The key must not pass through the brain.
 | B10 | The scripted planner copies a link from a page that foxshield removed | `{{lastUrl}}` reads only the newest tool result, so a removed link gives an empty value and no call to it. | `tests/brain.test.ts` B10 |
 | B11 | The scripted planner cannot use a recalled note on its own, so a memory test proves nothing about the plan | `{{notes}}` gives the notes that foxmate added to the goal, joined with commas, and an empty value when there are none. | `tests/brain.test.ts` B11; E2E memory |
 | B12 | A gullible scripted step (it obeys an injection) runs even when foxshield removed the injection, so the bench cannot show what the shield does | A step with `ifText` runs only when the newest tool result holds that text, and one with `ifSeen` only when an earlier result did. | `tests/brain.test.ts` B12; foxbench |
+| B13 | The user ticks the consent box for one provider, then changes the server address to another host, and page text goes there under the old consent | The settings keep the host the user consented to (`consentHost`). The own-key planner needs it to equal the provider's host. | `tests/brain.test.ts` B13 |
 
 ## Shield: page text before the planner (`src/shield.ts`)
 
@@ -101,6 +102,9 @@ answer must reach the one request it names, once.
 | G16 | The planner reads private data (mail, events, Space files), then a page tells it to put that data in an `open_url` query on the tab's host, or to type it into a field that page script can read. Both are on the run's grants (read and fill), and foxgate asks only for submit and pay, so the data leaves with no approval | Once a run has read private data, every `open_url` and every fill tool (`act`) needs an approval for the rest of the run. Page reads (`snapshot`) do not. | `tests/agent.test.ts` G16 |
 | G17 | The goal carries memory notes, which are private, and the same leak happens from the first step | A run whose goal has notes starts in the same mode as G16. | `tests/agent.test.ts` G17 |
 | G18 | A goal on a web tab can read the user's mail and calendar although the user asked for nothing of the kind, for example a goal planted by a page or a schedule | The Google tools get a grant only when the goal opts in (`allowPrivate`), or when the tab shows no web page. | `tests/agent.test.ts` G18 |
+| G19 | A tab sits in a loan's container while the loan is still being created or revoked, and the run gets the normal grants | foxmate matches a loan in any state; a loan that is not active refuses the run. | `tests/agent.test.ts` G19 |
+| G20 | A loan run follows its tab to another host, and gets grants for that host inside the logged-in container | A loan run is refused unless the tab is on the lent host or, for a site loan, the lent site. | `tests/agent.test.ts` G20 |
+| G21 | The approval shows the form's values cut to 80 and 240 characters, so the end of a long value that the planner typed (an address, a message) is hidden | The field the planner typed last is shown in full. | `tests/form.test.ts` G21 |
 
 ## Space: Python on a dropped file (`src/space.ts`)
 

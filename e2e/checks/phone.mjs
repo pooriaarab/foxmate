@@ -50,8 +50,9 @@ export default async function phoneCheck({ session, check, record, scripted, fin
     const requests = await phone.evaluate(() => window.phone.requests);
     record.runs.phone = { requests, yes: yes.status, no: no.status };
     check("F2 the phone gets the exact action, and its answer decides", { first: true, exact: true, yes: true, no: "Blocked (approval-denied)", via: ["phone", "phone"] }, {
-      first: requests[0]?.title.includes("name: Ana Silva, party size: 2"),
-      exact: Boolean(requests[0]?.detail) && yes.steps.some((s) => s.includes(requests[0].detail)),
+      // The phone leads with the exact action that foxgate allows; the planner's words come after.
+      first: requests[0]?.title === "foxmate asks: browser_task on 127.0.0.1" && requests[0]?.detail.includes("foxmate says: let foxpaw fill the form") && requests[0]?.detail.includes("name: Ana Silva, party size: 2"),
+      exact: Boolean(requests[0]?.detail) && yes.steps.some((s) => s.includes(requests[0].detail.split("\n\n")[0])),
       yes: yes.done && new URL(yes.url).searchParams.get("name") === "Ana Silva",
       no: no.status.slice(0, 25),
       via: [...yes.trail, ...no.trail].filter((e) => e.kind === "approval.answer").map((e) => e.data.via),

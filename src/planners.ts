@@ -20,3 +20,13 @@ export const PLANNERS: readonly PlannerInfo[] = [
   { id: "openai", label: "Your own key: OpenAI-compatible", cloud: true, model: "gpt-4.1-mini", baseURL: "https://api.openai.com/v1", hint: "Any OpenAI-compatible API, for example OpenRouter. Page text goes to this provider." },
   { id: "anthropic", label: "Your own key: Anthropic", cloud: true, hint: "Page text goes to Anthropic." },
 ];
+
+/** The host a cloud planner sends page text to. The consent box is for this host. */
+export function providerHost(settings: { planner?: string; baseURL?: string }): string | undefined {
+  const fallback = settings.planner === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1";
+  try {
+    return new URL(settings.baseURL?.trim() || fallback).hostname;
+  } catch {
+    return undefined;
+  }
+}

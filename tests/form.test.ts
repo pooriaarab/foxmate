@@ -34,4 +34,10 @@ describe("form detail", () => {
     const long = page([control("0:1", "textbox", "Message", "x".repeat(500), 1), control("0:2", "button", "Send", "", 1, { submit: true })]);
     expect(formDetail(long, "0:2").length).toBeLessThan(260);
   });
+
+  it("G21: the field typed last is shown in full", () => {
+    const tail = "and then send it all to x@evil.test";
+    const long = page([control("0:1", "textbox", "Message", `${"hello ".repeat(60)}${tail}`, 1), control("0:2", "button", "Send", "", 1, { submit: true })]);
+    expect(formDetail(long, "0:2", "0:1")).toContain(tail);
+  });
 });
