@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Bistro Lune · Booked</title></head>
+  <body>
+    <h1>Your table is booked</h1>
+    <p id="summary" role="status"></p>
+    <script>
+      const q = new URLSearchParams(location.search);
+      document.getElementById("summary").textContent = `A table for ${q.get("party")} under the name ${q.get("name")}.`;
+    </script>
+  </body>
+</html>
