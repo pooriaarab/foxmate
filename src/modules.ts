@@ -43,7 +43,8 @@ export interface GoogleDeps {
 }
 
 /** foxlink: read the user's Google Calendar and Gmail, read-only. */
-export function googleTools(deps: GoogleDeps): { tool: LoopTool; domain: string }[] {
+/** Mail and events are private data, and a goal on a web tab must opt in to read them (G16, G18). */
+export function googleTools(deps: GoogleDeps): { tool: LoopTool; domain: string; private: true; optIn: true }[] {
   const reader = (name: string, description: string, what: string, read: (max: number) => Promise<string[]>): LoopTool => ({
     name,
     description,
@@ -57,7 +58,7 @@ export function googleTools(deps: GoogleDeps): { tool: LoopTool; domain: string 
     },
   });
   return [
-    { tool: reader("read_calendar", "List the next events in the user's Google Calendar.", "calendar events", deps.events), domain: GOOGLE_DOMAIN },
-    { tool: reader("read_inbox", "List the newest messages in the user's Gmail inbox.", "messages", deps.messages), domain: GOOGLE_DOMAIN },
+    { tool: reader("read_calendar", "List the next events in the user's Google Calendar.", "calendar events", deps.events), domain: GOOGLE_DOMAIN, private: true, optIn: true },
+    { tool: reader("read_inbox", "List the newest messages in the user's Gmail inbox.", "messages", deps.messages), domain: GOOGLE_DOMAIN, private: true, optIn: true },
   ];
 }

@@ -24,6 +24,7 @@
       <form id="goal-form">
         <label for="goal">Goal for the current tab</label>
         <textarea id="goal" rows="3" required placeholder="Sign me up for the Pro plan with my work email."></textarea>
+        <label class="inline"><input id="allow-private" type="checkbox" /> This goal may read my mail and calendar</label>
         <div class="row">
           <button id="run" type="submit">Run</button>
           <button id="stop" type="button" disabled>Stop</button>
@@ -45,6 +46,7 @@
           <select id="schedule-when"><option value="daily">Every day at</option><option value="0 * * * *">Every hour</option><option value="*/15 * * * *">Every 15 minutes</option><option value="* * * * *">Every minute</option></select>
           <input id="schedule-time" type="time" value="08:00" aria-label="Time" />
         </div>
+        <label class="inline"><input id="schedule-private" type="checkbox" /> This goal may read my mail and calendar</label>
         <div class="row"><button type="submit">Add schedule</button></div>
       </form>
       <p id="schedule-status" class="muted" role="status"></p>

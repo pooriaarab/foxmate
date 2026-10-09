@@ -62,7 +62,7 @@ export const today = {
       const [hour, minute] = $("schedule-time").value.split(":").map(Number);
       const cron = $("schedule-when").value === "daily" ? `${minute} ${hour} * * *` : $("schedule-when").value;
       try {
-        await send({ op: "schedule", goal: $("schedule-goal").value, url: $("schedule-url").value, cron });
+        await send({ op: "schedule", goal: $("schedule-goal").value, url: $("schedule-url").value, cron, allowPrivate: $("schedule-private").checked });
         $("schedule-status").textContent = "Added.";
         await load();
       } catch (error) {

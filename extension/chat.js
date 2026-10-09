@@ -52,6 +52,7 @@ function show(event) {
   else if (event.type === "tool-result") line(event.ok ? "Result" : "Failed", ` ${event.name}: ${event.summary}${event.detail ? ` (${event.detail})` : ""}`, event.ok ? "ok" : "bad");
   else if (event.type === "check") line(event.ok ? "Check passed" : "Check failed", ` ${event.checks.map((c) => `${c.ok ? "ok" : "not ok"} ${c.part}`).join("; ")}`, event.ok ? "ok" : "bad");
   else if (event.type === "refused") line("Refused", ` ${event.message}`, "bad");
+  else if (event.type === "private") line("Private data", ` from ${event.source}. From now on foxmate asks you before it types or opens a page.`, "ask-note");
 }
 
 function newRun(goal) {
@@ -96,7 +97,7 @@ export const chat = {
   },
   start(tabId, goal, loanId) {
     $("goal").value = goal;
-    port.postMessage({ op: "run", tabId, goal, ...(loanId ? { loanId } : {}) });
+    port.postMessage({ op: "run", tabId, goal, allowPrivate: $("allow-private").checked, ...(loanId ? { loanId } : {}) });
   },
   message(message) {
     if (message.run && shown.has(message.run.id)) {
