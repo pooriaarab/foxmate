@@ -12,6 +12,7 @@
     </header>
     <nav id="nav">
       <button type="button" data-view="chat" aria-pressed="true">Chat</button>
+      <button type="button" data-view="today">Today</button>
       <button type="button" data-view="lend">Lend</button>
       <button type="button" data-view="memory">Memory</button>
       <button type="button" data-view="activity">Activity</button>
@@ -28,6 +29,25 @@
           <span id="status" role="status"></span>
         </div>
       </form>
+    </section>
+    <section data-view="today" hidden>
+      <p id="waiting" class="end" hidden></p>
+      <h2>Tasks</h2>
+      <p class="hint">Each goal runs as a foxrunner task. If Firefox unloads the background page, the task runs again from its goal at the next wake. Nothing runs while Firefox is closed.</p>
+      <ul id="tasks" class="memories"></ul>
+      <h2>Schedules</h2>
+      <form id="schedule-form">
+        <label for="schedule-goal">Goal</label><textarea id="schedule-goal" rows="2" required placeholder="Check my calendar and list today's meetings."></textarea>
+        <label for="schedule-url">Start page</label><input id="schedule-url" type="url" required placeholder="https://calendar.example.com/" />
+        <label for="schedule-when">When</label>
+        <div class="row">
+          <select id="schedule-when"><option value="daily">Every day at</option><option value="0 * * * *">Every hour</option><option value="*/15 * * * *">Every 15 minutes</option><option value="* * * * *">Every minute</option></select>
+          <input id="schedule-time" type="time" value="08:00" aria-label="Time" />
+        </div>
+        <div class="row"><button type="submit">Add schedule</button></div>
+      </form>
+      <p id="schedule-status" class="muted" role="status"></p>
+      <ul id="schedules" class="memories"></ul>
     </section>
     <section data-view="lend" hidden>
       <p class="hint">Lend one login for one task. foxmate copies that site's cookies into its own container tab. Pages there can reach only the hosts you allow. Revoke takes it all back.</p>

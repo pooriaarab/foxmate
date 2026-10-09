@@ -6,6 +6,7 @@ import { storageAreaStore } from "foxgate";
 import { createFoxlend, withDefaultRule } from "foxlend";
 import { createMemory, indexedDbStore } from "foxmemory";
 import { createMind } from "foxmind";
+import { createRunner, storageAreaStore as runnerStore } from "foxrunner";
 import { IdbStore, Log, idbKey } from "foxtrail";
 import { attachHeaderInjection, createVault, indexedDbKeyStore } from "foxvault";
 import { KEY_HANDLE, createAgent } from "../src/index.ts";
@@ -95,31 +96,60 @@ const send = (message) => {
 
 agent.approvals.onChange((waiting) => send({ waiting }));
 
-/** Starts a goal on a tab. Returns the run id, or throws when a run is in progress. */
-async function startRun({ goal, tabId, loanId }) {
-  if (agent.busy) throw new Error("A run is in progress. Stop it first.");
+/** Runs a goal on a tab now and resolves with its end. Throws "busy" when a run is in progress. */
+async function runNow({ goal, tabId, loanId, taskId, signal }) {
+  if (agent.busy) throw new Error("busy");
   const { settings = {} } = await browser.storage.local.get("settings");
   // Device mode unlocks without a passphrase; the header rule needs it unlocked.
   if (settings.privacy === "own-key" && (await vault.status()) === "locked") await vault.unlock();
   // A run on a loan works in the loan's tab, with the loan's scope at most.
   const loan = loanId ? (await lender.listLoans()).find((l) => l.id === loanId && l.state === "active") : undefined;
-  if (loanId && !loan) throw new Error("That loan is not active.");
+  if (loanId && !loan) return { status: "refused", reason: "no-loan", message: "That loan is not active." };
   if (loan) tabId = loan.tabId;
-  const run = { id: crypto.randomUUID(), goal, tabId, events: [], controller: new AbortController() };
+  const run = { id: crypto.randomUUID(), taskId, goal, tabId, events: [], controller: new AbortController() };
+  signal?.addEventListener("abort", () => run.controller.abort(), { once: true });
   current = run;
   send({ run: { id: run.id, goal } });
   const onEvent = (event) => {
     run.events.push(event);
     send({ runId: run.id, event });
   };
-  agent.run({ goal, tabId, settings, signal: run.controller.signal, onEvent, ...(loan ? { loan: { cookieStoreId: loan.cookieStoreId, scope: loan.scope } } : {}) })
-    .catch((error) => ({ status: "blocked", reason: "error", message: error instanceof Error ? error.message : String(error) }))
-    .then((end) => {
-      run.end = end;
-      send({ runId: run.id, end });
-    });
-  return run.id;
+  const end = await agent.run({ goal, tabId, settings, signal: run.controller.signal, onEvent, ...(loan ? { loan: { cookieStoreId: loan.cookieStoreId, scope: loan.scope } } : {}) })
+    .catch((error) => ({ status: "blocked", reason: "error", message: error instanceof Error ? error.message : String(error) }));
+  run.end = end;
+  send({ runId: run.id, end });
+  if (agent.approvals.waiting().length === 0 && end.status !== "done" && !ports.size) notify(`foxmate stopped: ${end.message ?? end.status}`);
+  return end;
 }
+
+const notify = (message) => browser.notifications.create({ type: "basic", title: "foxmate", message }).catch(() => undefined);
+
+// Every goal is a foxrunner task, so a run that the event page unload cuts
+// short runs again at the next wake (at least once, from the goal). A
+// scheduled task opens its page in a new tab first.
+const runner = createRunner({ store: runnerStore(browser.storage.local), browser });
+runner.define("goal", [{
+  name: "run",
+  retry: { maxAttempts: 4, backoffMs: 30_000 },
+  async run(ctx) {
+    const input = ctx.input;
+    let tabId = input.tabId;
+    if (input.url) {
+      tabId = (await browser.tabs.create({ url: input.url, active: false })).id;
+      // A new tab reports about:blank as complete before it starts to load the page.
+      const loaded = async () => {
+        const tab = await browser.tabs.get(tabId);
+        return tab.status === "complete" && tab.url?.startsWith("http");
+      };
+      for (let i = 0; i < 75 && !(await loaded()); i++) await new Promise((r) => setTimeout(r, 200));
+    }
+    const end = await runNow({ goal: input.goal, tabId, loanId: input.loanId, taskId: ctx.taskId, signal: ctx.signal });
+    return { ...end, attempt: ctx.attempt };
+  },
+}]);
+agent.approvals.onChange((waiting) => {
+  if (waiting.length && !ports.size) notify("foxmate waits for your approval. Open the sidebar.");
+});
 
 browser.action.onClicked.addListener(() => browser.sidebarAction.toggle());
 
@@ -131,7 +161,10 @@ browser.runtime.onConnect.addListener((port) => {
   port.onDisconnect.addListener(() => ports.delete(port));
   port.onMessage.addListener(async (message) => {
     try {
-      if (message.op === "run") await startRun(message);
+      if (message.op === "run") {
+        if (agent.busy) throw new Error("A run is in progress. Stop it first.");
+        await runner.start("goal", { goal: message.goal, tabId: message.tabId, ...(message.loanId ? { loanId: message.loanId } : {}) });
+      }
       else if (message.op === "answer") await agent.approvals.answer(message.requestId, message.answer, "sidebar");
       else if (message.op === "stop") current?.controller.abort();
       else if (message.op === "set-key") {
@@ -149,6 +182,10 @@ browser.runtime.onMessage.addListener(async (message) => {
     const log = await trailReady;
     return { entries: await log.entries(), verify: await log.verify() };
   }
+  if (message?.op === "tasks") return { tasks: (await runner.list()).filter((t) => t.name === "goal").slice(0, 20), schedules: await runner.schedules(), waiting: agent.approvals.waiting().length };
+  if (message?.op === "schedule") return runner.schedule("goal", { cron: message.cron, input: { goal: message.goal, url: message.url }, id: `goal-${crypto.randomUUID()}` }).then((schedule) => ({ schedule }), (error) => ({ error: error.message }));
+  if (message?.op === "unschedule") return runner.unschedule(message.id).then(() => ({ ok: true }));
+  if (message?.op === "cancel-task") return runner.cancel(message.id).then(() => ({ ok: true }));
   if (message?.op === "loans") return { loans: await lender.listLoans(), blocked };
   if (message?.op === "lend") return lend(message).then((loan) => ({ loan }), (error) => ({ error: error.message, code: error.code }));
   if (message?.op === "revoke") return lender.revoke(message.loanId).then((ok) => ({ ok }), (error) => ({ error: error.message }));
