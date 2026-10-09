@@ -32,6 +32,25 @@ export default async function tasksCheck({ session, check, record, scripted, fin
     check("D2 a run cut short by a reload runs again and finishes", { status: "done", end: "done", again: true, party: "3" },
       { status: task?.status, end: task?.steps[0]?.output?.status, again: (task?.steps[0]?.attempt ?? 0) >= 2, party: new URL(page.url()).searchParams.get("party") });
 
+    // Q1: a run waits at an approval, the tab moves to another host, and the extension reloads.
+    // foxrunner runs the task again, but the tab is no longer where the goal started.
+    await page.goto(`${site.url}/table.html`);
+    await page.bringToFront();
+    await session.sidebar.evaluate((s) => browser.storage.local.set({ settings: s }), scripted([{ tool: "snapshot", args: {} }, { tool: "browser_task", args: { goal: "name: Sam Lee, party size: 2" } }, finish]));
+    await session.sidebar.evaluate(async (u) => window.foxmate.start(await window.foxmate.tabFor(u), "Book a table, then move away."), page.url());
+    await poll(session.sidebar, () => Boolean(document.querySelector("#conversation > li:last-child li.ask .row button")), undefined, 60_000);
+    await page.goto(`${site.url.replace("127.0.0.1", "localhost")}/table.html`);
+    await session.sidebar.evaluate(() => browser.runtime.reload()).catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 1500));
+    session.sidebar = await session.fox.openExtensionPage("sidebar.html");
+    await poll(session.sidebar, () => Boolean(window.foxmate));
+    const moved = await poll(session.sidebar, async () => {
+      const { tasks: list } = await browser.runtime.sendMessage({ op: "tasks" });
+      const t = list.find((x) => x.input.goal === "Book a table, then move away.");
+      return t?.status === "done" ? t : null;
+    }, undefined, 90_000);
+    check("Q1 a replayed goal refuses a tab that moved to another host", { reason: "tab-moved", party: null }, { reason: moved.steps[0]?.output?.reason, party: new URL(page.url()).searchParams.get("party") });
+
     // D3: a schedule through the Today view. "Every minute" fires within about a minute.
     await session.sidebar.evaluate((s) => browser.storage.local.set({ settings: s }), scripted([{ tool: "snapshot", args: {} }, finish]));
     const added = await session.sidebar.evaluate(async (url) => {

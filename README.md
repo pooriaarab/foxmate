@@ -102,8 +102,9 @@ flowchart TB
 
 One goal, step by step:
 
-1. foxrunner saves the goal as a task, so a run that the background page
-   loses runs again from its goal at the next wake.
+1. foxrunner saves the goal as a task, with the host where it started. A
+   run that the background page loses runs again from its goal at the next
+   wake, if the tab is still on that host.
 2. foxmemory recalls your own memories that fit the goal, and foxmate adds
    them under the goal as notes.
 3. The brain builds the planner from your settings. In private mode, foxmind
@@ -263,7 +264,8 @@ address that allows extension origins (44 without it). Some of them:
 | Reload the extension while an approval waits | foxrunner runs the task again, and it finishes |
 | Wait 90 s at an approval | The run goes on; the sidebar keeps the page loaded |
 | A read loan allows `attacker.test`; a normal run opens it | foxgate denies it: the loan's grant is not the run's |
-| Two goals at once | They run one after the other |
+| Two goals at once | The first runs; the second ends as refused, and you start it again |
+| A run waits, the tab moves to another host, the extension reloads | The task runs again, sees the other host, and refuses |
 | A canvas page, with `FOXMATE_VISION` | `qwen3-vl:2b` in Ollama describes the screenshot |
 
 ## Scores on foxbench
@@ -351,8 +353,9 @@ Read these rows with care:
   Controls in a frame that its parent hides still reach the planner, as
   data, and a click on them still needs your approval.
 - Nothing runs while Firefox is closed, unless you run the foxrunner helper
-  yourself. A task cut short runs again from its goal: steps that already
-  ran (a sent form) can run again, after a new approval. Each new attempt
+  yourself. A task cut short runs again from its goal, but only while its
+  tab is on the host where the goal started: steps that already ran (a sent
+  form) can run again, after a new approval. Each new attempt
   of a scheduled task opens its start page in a new tab.
 - Firefox unloads the background page about 60 s after the last event. The
   open sidebar keeps it loaded. A scheduled run with no sidebar open can be

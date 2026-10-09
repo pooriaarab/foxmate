@@ -121,7 +121,9 @@ runs it in a sandbox page with no network and no extension APIs.
 |---|---|---|---|
 | K1 | Firefox unloads the idle background page while an approval waits (seen in Firefox 157 about 60 s after the last event, with the sidebar and its port open) | While a sidebar is open, it sends the background page a message every 20 s, so the page stays loaded. | E2E keepalive |
 | K2 | The background page restarts (an update, a crash, an unload with no sidebar), and the open sidebar keeps a dead port | The sidebar connects again, and gets the current run and the waiting approvals. | E2E keepalive |
-| K3 | Two goals start at once (a double click, or foxrunner waking two tasks), so the second one takes over the run that Stop aborts and the sidebar shows | The background page claims the run before its first await. The second goal waits and runs later, as a task. | E2E keepalive |
+| K3 | Two goals start at once (a double click, or foxrunner waking two tasks), so the second one takes over the run that Stop aborts and the sidebar shows | The background page claims the run before its first await. The second goal ends as refused (`busy`), see Q2. | E2E keepalive |
+| Q1 | A goal runs again (after an unload, or a retry) on whatever the tab shows now, with no human watching, for example a page that the tab moved to in the meantime | Each task keeps the host where it started. A run whose tab is now on another host is refused, and the trail records it. | E2E tasks Q1 |
+| Q2 | A goal that meets another run retries every 30, 60 and 120 s and starts later, when nobody expects it | A goal that meets another run ends at once as refused (`busy`). The user starts it again. | E2E keepalive K3 |
 
 ## Mail and events: outside text from Google (`src/mail.ts`)
 
