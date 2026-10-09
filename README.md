@@ -187,7 +187,9 @@ This section says exactly what leaves your computer.
 - **Gmail and Calendar (off by default).** foxlink talks to Google with your
   own OAuth client id, after Firefox's consent for mail and sign-in data.
   Mail and events then go to your planner, so in private mode they stay on
-  this computer.
+  this computer. Each mail body and event description passes foxshield
+  first. foxmate prefers a mail's HTML part, which is what you see, and tells
+  the planner which part it used.
 - **Phone approvals (off by default).** foxsync sends each approval to your
   phone over an encrypted peer-to-peer WebRTC link.
 - **The log.** foxtrail stays in this browser. It holds each tool call, its
