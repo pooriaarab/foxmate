@@ -7,6 +7,13 @@ settings:
 importers:
 
   .:
+    dependencies:
+      foxloop:
+        specifier: ^0.1.0
+        version: 0.1.0
+      foxmind:
+        specifier: ^0.1.0
+        version: 0.1.0
     devDependencies:
       '@types/node':
         specifier: ^24.19.1
@@ -1155,6 +1162,28 @@ packages:
 
   flatted@3.4.4:
     resolution: {integrity: sha512-5+ybhBZANEJxaH3X5evAFatUxLfEHSr7n6kYJ+1Qd0mUqr4eu9gIf6GDbWHf8RJijHrjjO8G+la14SlL2SeS1Q==}
+
+  foxgate@0.1.0:
+    resolution: {integrity: sha512-2LcqcDZ5z9nVCHgG/k22qY688Njy53d6e38+mYVY6VpU70iAKQunIK23NUu8lQif3TSrSCaj3XVHpB+lRhOFzQ==}
+    engines: {node: '>=24'}
+
+  foxloop@0.1.0:
+    resolution: {integrity: sha512-NHBOlGoJhRYjAzEpQKUA2PUHK+ZvTKfi0Gf64O36k/ujZWKhdWQuNjVOM4w16HB6QHT9rJz2u4urpyzyBjtD7Q==}
+    engines: {node: '>=24'}
+
+  foxmind@0.1.0:
+    resolution: {integrity: sha512-4M6Zu4TT9T5DLCqG9oAb4TUyPU2cwVq4awlUXcrmYl4N6rfP2DnIMYSs4xvniVvuXpNsCVUVEP3G4AhiKXu65w==}
+    engines: {node: '>=24'}
+    hasBin: true
+    peerDependencies:
+      '@huggingface/transformers': ^4.3.1
+    peerDependenciesMeta:
+      '@huggingface/transformers':
+        optional: true
+
+  foxpaw@0.1.0:
+    resolution: {integrity: sha512-kYYNAOjK60ExTND4JNGkScfXAvY3Uq0KrYuqRfP2gbbjmgX6FMhwrnFRDVWrZWR81gMZKolcdGxxSKvN3guUbw==}
+    engines: {node: '>=24'}
 
   fs-extra@11.4.1:
     resolution: {integrity: sha512-KYAb4c9BJQI6QqGKthV68OHe0badztdXJWKo0WtBA9IuCFPTKvE5ZdUBglP833aMjhaSPNO4A5j/EkzZtGlKjA==}
@@ -2986,6 +3015,17 @@ snapshots:
       keyv: 4.5.4
 
   flatted@3.4.4: {}
+
+  foxgate@0.1.0: {}
+
+  foxloop@0.1.0:
+    dependencies:
+      foxgate: 0.1.0
+      foxpaw: 0.1.0
+
+  foxmind@0.1.0: {}
+
+  foxpaw@0.1.0: {}
 
   fs-extra@11.4.1:
     dependencies:
