@@ -5,12 +5,14 @@
 import { storageAreaStore } from "foxgate";
 import { idbStore, iframeRuntime, openDen } from "foxden";
 import { createFoxlend, withDefaultRule } from "foxlend";
+import { describe as describeImage, capture } from "foxlens";
+import { calendar, createLink, gmail, googleProvider, toPromptText } from "foxlink";
 import { createMemory, indexedDbStore } from "foxmemory";
-import { createMind } from "foxmind";
+import { createMind, ollama } from "foxmind";
 import { createRunner, storageAreaStore as runnerStore } from "foxrunner";
 import { IdbStore, Log, idbKey } from "foxtrail";
 import { attachHeaderInjection, createVault, indexedDbKeyStore } from "foxvault";
-import { KEY_HANDLE, SPACE_DOMAIN, createAgent, spaceTool } from "../src/index.ts";
+import { KEY_HANDLE, SPACE_DOMAIN, createAgent, googleTools, lookTool, spaceTool } from "../src/index.ts";
 
 const trailReady = Promise.all([IdbStore.open("foxmate-trail"), idbKey("foxmate-trail-key")]).then(([store, key]) => new Log({ store, key }));
 const trail = { append: async (entry) => (await trailReady).append(entry) };
@@ -35,9 +37,43 @@ const space = () => (den ??= openDen({ name: "space", store: idbStore("foxmate-s
   throw error;
 }));
 
+// Optional modules, off by default (Settings > Optional modules).
+const modules = async () => (await browser.storage.local.get("settings")).settings?.modules ?? {};
+// foxlens: a screenshot described by a vision model on this computer only.
+const look = async (tabId, signal) => {
+  const { lensModel = "qwen3-vl:2b-instruct", lensURL } = await modules();
+  const mind = createMind({ providers: [ollama({ model: lensModel, ...(lensURL ? { baseURL: lensURL } : {}) })], only: ["browser", "local"] });
+  const seen = await describeImage(await capture(tabId), { mind, signal });
+  return { text: seen.text, tier: seen.privacy.tier };
+};
+// foxlink: Gmail and Calendar with the user's own OAuth client id. foxvault
+// keeps the tokens and adds them to the request header.
+let googleLink;
+const google = async () => {
+  const { googleClientId } = await modules();
+  if (!googleClientId) throw new Error("Add your Google OAuth client id in Settings first.");
+  if (googleLink?.clientId !== googleClientId) {
+    if ((await vault.status()) === "new") await vault.initialize();
+    googleLink = { clientId: googleClientId, link: createLink({ provider: googleProvider({ clientId: googleClientId }), vault, store: storageAreaStore(browser.storage.local), identity: browser.identity, transport: "inject" }) };
+  }
+  if ((await vault.status()) === "locked") await vault.unlock();
+  return googleLink.link;
+};
+const googleOn = async () => Boolean((await modules()).google) && (await google().then((l) => l.status(), () => ({ connected: false }))).connected;
+
 // foxgate and foxlend share one public suffix rule and one gate host.
 const publicSuffix = withDefaultRule(browser.publicSuffix);
-const agent = createAgent({ browser, trail, memory, publicSuffix, maxSteps: 30, extraTools: [{ tool: spaceTool(space), domain: SPACE_DOMAIN }], browserModel: async () => (await browserModel()).transformers({ task: "chat" }) });
+const agent = createAgent({
+  browser, trail, memory, publicSuffix, maxSteps: 30,
+  extraTools: [
+    { tool: spaceTool(space), domain: SPACE_DOMAIN },
+    ...googleTools({
+      enabled: googleOn,
+      events: async (max) => (await calendar(await google()).listEvents({ max })).events.map(toPromptText),
+      messages: async (max) => (await gmail(await google()).listMessages({ max })).messages.map(toPromptText),
+    }),
+  ],
+  moreTabTools: (tabId) => [lookTool(tabId, { enabled: async () => Boolean((await modules()).lens), look, tabDomain: async (id) => new URL((await browser.tabs.get(id)).url).hostname })], browserModel: async () => (await browserModel()).transformers({ task: "chat" }) });
 // Lend a login: foxlend copies one site's cookies into its own container,
 // blocks every request from it to a host off the allow list, and takes it
 // all back on revoke. Created at the top level, so Firefox can wake the page.
@@ -198,6 +234,9 @@ browser.runtime.onMessage.addListener(async (message) => {
   if (message?.op === "space-list") return space().then(async (d) => ({ files: await d.list() }), (error) => ({ error: error.message }));
   if (message?.op === "space-write") return space().then(async (d) => ({ ok: await d.writeFile(`/drop/${message.name}`, message.bytes) }), (error) => ({ error: error.message }));
   if (message?.op === "space-delete") return space().then(async (d) => ({ ok: await d.deleteFile(message.path) }), (error) => ({ error: error.message }));
+  if (message?.op === "google-connect") {
+    return google().then(async (l) => ({ status: await l.connect() }), (error) => ({ error: error.message }));
+  }
   if (message?.op === "loans") return { loans: await lender.listLoans(), blocked };
   if (message?.op === "lend") return lend(message).then((loan) => ({ loan }), (error) => ({ error: error.message, code: error.code }));
   if (message?.op === "revoke") return lender.revoke(message.loanId).then((ok) => ({ ok }), (error) => ({ error: error.message }));

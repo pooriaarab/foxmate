@@ -18,6 +18,12 @@ async function render() {
   const on = await enabled();
   $("module-phone").checked = on;
   $("phone-panel").hidden = !on;
+  if (!on && link) {
+    // Turned off, also from another view: no approval goes to the phone.
+    link.close();
+    link = undefined;
+    $("phone-status").textContent = "Not paired.";
+  }
 }
 
 export const phone = {
@@ -26,11 +32,6 @@ export const phone = {
     $("module-phone").addEventListener("change", async () => {
       const { settings = {} } = await browser.storage.local.get("settings");
       await browser.storage.local.set({ settings: { ...settings, modules: { ...settings.modules, phone: $("module-phone").checked } } });
-      if (!$("module-phone").checked) {
-        link?.close();
-        link = undefined;
-        $("phone-status").textContent = "Not paired.";
-      }
       await render();
     });
     $("phone-pair").addEventListener("click", async () => {
@@ -50,6 +51,9 @@ export const phone = {
       } catch (error) {
         $("phone-status").textContent = `Not paired: ${error.message}`;
       }
+    });
+    browser.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && changes.settings) render();
     });
     render();
   },

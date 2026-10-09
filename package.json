@@ -48,6 +48,8 @@
     "foxden": "npm:@pooriaarab/foxden@^0.1.0",
     "foxgate": "^0.1.0",
     "foxlend": "^0.1.0",
+    "foxlens": "^0.1.0",
+    "foxlink": "npm:@pooriaarab/foxlink@^0.1.0",
     "foxloop": "^0.1.0",
     "foxmemory": "^0.1.0",
     "foxmind": "^0.1.0",
