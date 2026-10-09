@@ -73,3 +73,18 @@ answer must reach the one request it names, once.
 | A4 | Nobody answers | The request ends as no at its foxgate expiry. The run does not hang. | `tests/approvals.test.ts` A4 |
 | A5 | The run ends while a request waits | Every waiting request ends as no. | `tests/approvals.test.ts` A5 |
 | A6 | An answer is lost, so the trail cannot show who approved | Each deciding answer goes to the trail with the request id, the decision and the channel. | `tests/approvals.test.ts` A6 |
+
+## Agent: one goal, all the parts (`src/agent.ts`)
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| G1 | The approval shows one action and another one runs | The text shown is foxgate's canonical JSON of the request. The tool runs only the action that foxgate redeemed. | `tests/agent.test.ts` G1; E2E |
+| G2 | Grants outlive the run (done, blocked, refused or thrown) | Every grant of the run is revoked when the run ends. Each grant also expires with the run's time budget, so an unloaded page cannot leave one. | `tests/agent.test.ts` G2 |
+| G3 | The planner reaches another host | Grants cover the tab's host only. Another host gets `no-grant`. | `tests/agent.test.ts` G3; E2E trap |
+| G4 | A lent tab gets more than the lent scope | The run's grants stop at the loan's scope. A `read` loan gets no `fill` or `submit` grant. | `tests/agent.test.ts` G4 |
+| G5 | A run starts on a loan, but the tab is not in the loan's container | The run is refused before any model call. | `tests/agent.test.ts` G5 |
+| G6 | The brain refuses (private mode, consent) | The run ends with `refused` and a reason. No tool runs. The trail records it. | `tests/agent.test.ts` G6 |
+| G7 | Notes do not reach the planner, or a recall error stops the run | The planner's goal holds the notes. A recall error is an event, and the run goes on. | `tests/agent.test.ts` G7 |
+| G8 | foxshield's findings are not in the trail | Each scan is a `shield.scan` trail entry. | E2E trap |
+| G9 | Two runs at once share the target tab | A second run is refused with `busy`. | `tests/agent.test.ts` G9 |
+| G10 | The run ends with a step that has no check (`act`, `click`) and can never pass | When the newest result has no check, foxmate reads the page and passes only when foxpaw finds no error page. The check line says so. | `tests/agent.test.ts` G10 |
