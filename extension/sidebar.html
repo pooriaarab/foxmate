@@ -12,6 +12,7 @@
     </header>
     <nav id="nav">
       <button type="button" data-view="chat" aria-pressed="true">Chat</button>
+      <button type="button" data-view="memory">Memory</button>
       <button type="button" data-view="activity">Activity</button>
       <button type="button" data-view="settings">Settings</button>
     </nav>
@@ -26,6 +27,19 @@
           <span id="status" role="status"></span>
         </div>
       </form>
+    </section>
+    <section data-view="memory" hidden>
+      <p class="hint">foxmate adds the memories that fit a goal to that goal. They stay in this browser, and the model that matches them runs in Firefox.</p>
+      <form id="memory-form">
+        <label for="memory-text">Remember</label>
+        <textarea id="memory-text" rows="2" required placeholder="When I book a table, my party size: 4"></textarea>
+        <div class="row">
+          <select id="memory-kind" aria-label="Kind"><option value="preference">Preference</option><option value="fact">Fact</option><option value="task-note">Task note</option></select>
+          <button type="submit">Add</button>
+        </div>
+      </form>
+      <p id="memory-status" class="muted" role="status"></p>
+      <ul id="memories" class="memories"></ul>
     </section>
     <section data-view="activity" hidden>
       <div class="row"><p id="trail-status" class="muted">Reading the log…</p><button id="trail-export" type="button">Export</button></div>

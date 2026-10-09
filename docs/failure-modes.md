@@ -28,6 +28,7 @@ the user and Firefox both agree. The key must not pass through the brain.
 | B8 | A planner name foxmate does not know | Refuse with `unknown-planner`. | `tests/brain.test.ts` B8 |
 | B9 | The scripted planner gets a script that is not a JSON array | Refuse with `bad-script`. | `tests/brain.test.ts` B9 |
 | B10 | The scripted planner copies a link from a page that foxshield removed | `{{lastUrl}}` reads only the newest tool result, so a removed link gives an empty value and no call to it. | `tests/brain.test.ts` B10 |
+| B11 | The scripted planner cannot use a recalled note on its own, so a memory test proves nothing about the plan | `{{notes}}` gives the notes that foxmate added to the goal, joined with commas, and an empty value when there are none. | `tests/brain.test.ts` B11; E2E memory |
 
 ## Shield: page text before the planner (`src/shield.ts`)
 

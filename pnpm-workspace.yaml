@@ -2,6 +2,9 @@
 # esbuild needs its script to check its platform binary.
 allowBuilds:
   esbuild: true
+  # transformers.js pulls these in. The browser build does not need their scripts.
+  onnxruntime-node: false
+  protobufjs: false
 minimumReleaseAgeExclude:
   - create-foxkit@0.1.0
   - foxgate@0.1.0
