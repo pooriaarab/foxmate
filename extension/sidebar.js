@@ -3,11 +3,12 @@
 // window.foxmate.
 import { activity } from "./activity.js";
 import { chat } from "./chat.js";
+import { lend } from "./lend.js";
 import { memory } from "./memory.js";
 import { settings } from "./settings.js";
 
 const $ = (id) => document.getElementById(id);
-const views = { chat, memory, activity, settings };
+const views = { chat, lend, memory, activity, settings };
 const port = browser.runtime.connect({ name: "foxmate" });
 
 function show(name) {
@@ -20,7 +21,7 @@ $("nav").addEventListener("click", (event) => {
   if (name) show(name);
 });
 
-for (const view of Object.values(views)) view.init?.(port);
+for (const view of Object.values(views)) view.init?.(port, { show });
 port.onMessage.addListener((message) => {
   for (const view of Object.values(views)) view.message?.(message);
 });
@@ -33,4 +34,4 @@ async function tabFor(prefix) {
 }
 
 show("chat");
-window.foxmate = { port, show, tabFor, start: (tabId, goal) => chat.start(tabId, goal) };
+window.foxmate = { port, show, tabFor, start: (tabId, goal, loanId) => chat.start(tabId, goal, loanId) };

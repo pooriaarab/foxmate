@@ -7,13 +7,15 @@ import { randomUUID } from "node:crypto";
 import { writeArtifact } from "create-foxkit/e2e";
 import { sites, startServer } from "foxbench";
 import activity from "./checks/activity.mjs";
+import lend from "./checks/lend.mjs";
 import memory from "./checks/memory.mjs";
 import privacy from "./checks/privacy.mjs";
 import signup from "./checks/signup.mjs";
 import traps from "./checks/traps.mjs";
+import { BANK_HOSTS } from "./bank.mjs";
 import { runGoal, startFox } from "./lib.mjs";
 
-const CHECKS = { signup, privacy, traps, memory, activity };
+const CHECKS = { signup, privacy, traps, memory, lend, activity };
 
 const record = { startedAt: new Date().toISOString(), checks: [], runs: {} };
 const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });
@@ -23,7 +25,7 @@ const finish = { tool: "finish", args: { summary: "The task is done." } };
 const bench = await startServer({ sites, controlKey: randomUUID() });
 let session;
 try {
-  session = await startFox({ headless: !process.argv.includes("--headed") });
+  session = await startFox({ headless: !process.argv.includes("--headed"), prefs: { "network.dns.localDomains": BANK_HOSTS } });
   record.firefox = await session.fox.browser.version();
 
   for (const [name, run] of Object.entries(CHECKS)) {

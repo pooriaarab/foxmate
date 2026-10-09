@@ -11,6 +11,9 @@ importers:
       foxgate:
         specifier: ^0.1.0
         version: 0.1.0
+      foxlend:
+        specifier: ^0.1.0
+        version: 0.1.0
       foxloop:
         specifier: ^0.1.0
         version: 0.1.0
@@ -1570,6 +1573,10 @@ packages:
 
   foxgate@0.1.0:
     resolution: {integrity: sha512-2LcqcDZ5z9nVCHgG/k22qY688Njy53d6e38+mYVY6VpU70iAKQunIK23NUu8lQif3TSrSCaj3XVHpB+lRhOFzQ==}
+    engines: {node: '>=24'}
+
+  foxlend@0.1.0:
+    resolution: {integrity: sha512-6OzCd7dThP8s0/9wKzmaxheoZ/J9SmlQbhMZy+xQLew1IuvAaw7AxFZC5tugZ+kqk3PttVzkNdHHaC1IRDBgUQ==}
     engines: {node: '>=24'}
 
   foxloop@0.1.0:
@@ -4069,6 +4076,10 @@ snapshots:
       - zod
 
   foxgate@0.1.0: {}
+
+  foxlend@0.1.0:
+    dependencies:
+      foxgate: 0.1.0
 
   foxloop@0.1.0:
     dependencies:
