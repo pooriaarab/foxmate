@@ -8,3 +8,4 @@ export { createAgent, type Agent, type AgentBrowser, type AgentEvent, type Agent
 export { createApprovals, type Answer, type Approvals, type ApprovalsOptions, type Waiting } from "./approvals.js";
 export type { PlannerInfo } from "./planners.js";
 export { formDetail } from "./form.js";
+export { SPACE_DOMAIN, spaceTool, type DenLike } from "./space.js";

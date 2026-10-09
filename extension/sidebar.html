@@ -14,6 +14,7 @@
       <button type="button" data-view="chat" aria-pressed="true">Chat</button>
       <button type="button" data-view="today">Today</button>
       <button type="button" data-view="lend">Lend</button>
+      <button type="button" data-view="space">Space</button>
       <button type="button" data-view="memory">Memory</button>
       <button type="button" data-view="activity">Activity</button>
       <button type="button" data-view="settings">Settings</button>
@@ -65,6 +66,12 @@
       <ul id="loans" class="memories"></ul>
       <h2>Blocked requests</h2>
       <ul id="blocked" class="steps"></ul>
+    </section>
+    <section data-view="space" hidden>
+      <p class="hint">Drop files here for foxmate to work on with Python. The Space runs in a sandbox page in Firefox: no network, no extension APIs. Ask in Chat, for example "Sum the amount column of sales.csv".</p>
+      <label for="space-files">Add files</label><input id="space-files" type="file" multiple />
+      <p id="space-status" class="muted" role="status">Network: off</p>
+      <ul id="space-list" class="memories"></ul>
     </section>
     <section data-view="memory" hidden>
       <p class="hint">foxmate adds the memories that fit a goal to that goal. They stay in this browser, and the model that matches them runs in Firefox.</p>

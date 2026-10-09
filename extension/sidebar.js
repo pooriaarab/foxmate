@@ -6,10 +6,11 @@ import { chat } from "./chat.js";
 import { lend } from "./lend.js";
 import { memory } from "./memory.js";
 import { settings } from "./settings.js";
+import { space } from "./space.js";
 import { today } from "./today.js";
 
 const $ = (id) => document.getElementById(id);
-const views = { chat, today, lend, memory, activity, settings };
+const views = { chat, today, lend, space, memory, activity, settings };
 const port = browser.runtime.connect({ name: "foxmate" });
 
 function show(name) {

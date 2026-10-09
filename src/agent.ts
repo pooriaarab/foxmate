@@ -118,16 +118,17 @@ export function createAgent(options: AgentOptions): Agent {
     const grants: string[] = [];
     try {
       const tab = await browser.tabs.get(input.tabId);
-      let domain: string;
+      // A tab with no web page gets no tab grants. The extra tools, such as the Space, still work.
+      let domain: string | undefined;
       try {
         const url = new URL(tab.url ?? "");
-        if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("not a web page");
-        domain = url.hostname;
+        if (url.protocol === "http:" || url.protocol === "https:") domain = url.hostname;
       } catch {
-        return await refuse("no-page", "The tab shows no web page.");
+        domain = undefined;
       }
+      if (!domain && !extra.length) return await refuse("no-page", "The tab shows no web page.");
       if (input.loan && tab.cookieStoreId !== input.loan.cookieStoreId) return await refuse("loan-mismatch", "The tab is not in the lent container.");
-      await trail.append({ actor: "user", kind: "run.start", data: { goal: input.goal, domain, planner: input.settings.planner ?? "saluki", loan: Boolean(input.loan) } });
+      await trail.append({ actor: "user", kind: "run.start", data: { goal: input.goal, domain: domain ?? null, planner: input.settings.planner ?? "saluki", loan: Boolean(input.loan) } });
       const recalled = options.memory ? await recallNotes(options.memory, input.goal) : { notes: [] };
       emit({ type: "recall", ...recalled });
       const goal = withNotes(input.goal, recalled.notes);
@@ -146,7 +147,7 @@ export function createAgent(options: AgentOptions): Agent {
       target = input.tabId;
       const expiresAt = Date.now() + runMs;
       const scopes = input.loan ? SCOPES.slice(0, SCOPES.indexOf(input.loan.scope) + 1) : SCOPES;
-      for (const scope of scopes) grants.push((await host.addGrant({ scope, domains: [domain], expiresAt })).id);
+      if (domain) for (const scope of scopes) grants.push((await host.addGrant({ scope, domains: [domain], expiresAt })).id);
       for (const { tool, domain: own } of extra) grants.push((await host.addGrant({ scope: tool.scope, domains: [own], tools: [tool.name], expiresAt })).id);
       const loop = createLoop({ mind: brain.mind, gate, tools, trail, check, maxSteps: options.maxSteps ?? 20, budget: { ms: runMs }, onApproval: (request) => approvals.ask(request) });
       let end: RunEnd = { status: "aborted" };

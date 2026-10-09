@@ -92,3 +92,16 @@ answer must reach the one request it names, once.
 | G9 | Two runs at once share the target tab | A second run is refused with `busy`. | `tests/agent.test.ts` G9 |
 | G10 | The run ends with a step that has no check (`act`, `click`) and can never pass | When the newest result has no check, foxmate reads the page and passes only when foxpaw finds no error page. The check line says so. | `tests/agent.test.ts` G10 |
 | G11 | An approval to click a button that sends a form does not show what the form holds, so a human approves "click Send" with an attacker's address in the To field | The approval detail lists the other fields of that form and their values from the newest snapshot. Passwords show as `•••`. | `tests/form.test.ts` G11; E2E mail-trap |
+
+## Space: Python on a dropped file (`src/space.ts`)
+
+The planner can run Python on files the user drops into the Space. foxden
+runs it in a sandbox page with no network and no extension APIs.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| D1 | The Python that the planner writes reaches the network | foxden's sandbox page has `connect-src 'none'`. The call fails. | E2E space |
+| D2 | Python output goes to the planner as trusted text (the file can hold an injection) | The output goes in `untrusted`, as data. | E2E space |
+| D3 | A Python error passes the check, so the run says done | `run_python` returns a check that passes only when Python raised no error. | E2E space |
+| D4 | The Space tool works outside its sandbox domain, or a page host grant covers it | It has its own grant, for the domain `space.foxmate` and the tool `run_python` only. | E2E space |
+| D5 | A goal about a file needs a web page in the tab | A run on a tab with no web page gets no tab grants, but the Space tool still works. | E2E space |

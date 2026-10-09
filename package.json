@@ -30,7 +30,7 @@
     "test": "vitest run --passWithNoTests",
     "ci:local": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm build:ext && pnpm lint:ext",
     "build:ext": "node scripts/build-ext.mjs",
-    "lint:ext": "web-ext lint -s dist-ext --warnings-as-errors --ignore-files browser-model.js 'ort/*'",
+    "lint:ext": "node scripts/lint-ext.mjs",
     "e2e": "pnpm build:ext && node e2e/run.mjs"
   },
   "devDependencies": {
@@ -45,6 +45,7 @@
     "web-ext": "^10.7.0"
   },
   "dependencies": {
+    "foxden": "npm:@pooriaarab/foxden@^0.1.0",
     "foxgate": "^0.1.0",
     "foxlend": "^0.1.0",
     "foxloop": "^0.1.0",
