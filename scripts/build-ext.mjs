@@ -2,7 +2,8 @@
 // (with src/ and the fox primitives), and the other files are copied. It
 // stops when the manifest version is not the package.json version, so AMO
 // signs the version that npm publishes.
-import { cpSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { build } from "esbuild";
 
@@ -40,4 +41,12 @@ for (const file of readdirSync("extension").filter((f) => !f.endsWith(".js"))) c
 const ort = join(dirname(dirname(realpathSync("node_modules/@huggingface/transformers"))), "onnxruntime-web", "dist");
 mkdirSync("dist-ext/ort");
 for (const file of ["ort-wasm-simd-threaded.asyncify.mjs", "ort-wasm-simd-threaded.asyncify.wasm"]) cpSync(join(ort, file), join("dist-ext/ort", file));
+// The Space: foxden's sandbox page and the Pyodide files, unmodified, so the
+// den loads nothing from the network.
+cpSync("node_modules/foxden/dist/den", "dist-ext/den", { recursive: true });
+const pyodide = dirname(createRequire(realpathSync("node_modules/foxden/package.json")).resolve("pyodide/package.json"));
+mkdirSync("dist-ext/pyodide");
+for (const file of ["pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"]) cpSync(join(pyodide, file), join("dist-ext/pyodide", file));
+const pyVersion = JSON.parse(readFileSync(join(pyodide, "package.json"), "utf8")).version;
+writeFileSync("dist-ext/pyodide/NOTICE.txt", `Pyodide ${pyVersion}, unmodified, from the npm package "pyodide".\nLicense: MPL-2.0. Source: https://github.com/pyodide/pyodide\n`);
 console.log(`Built dist-ext/ (version ${pkg.version}).`);
