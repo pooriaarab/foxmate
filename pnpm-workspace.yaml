@@ -17,3 +17,4 @@ minimumReleaseAgeExclude:
   - foxbench@0.1.0
   - foxvault@0.1.0
   - foxlend@0.1.0
+  - foxrunner@0.1.0
