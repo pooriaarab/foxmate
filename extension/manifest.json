@@ -13,7 +13,7 @@
       }
     }
   },
-  "permissions": ["storage", "unlimitedStorage", "scripting", "tabs"],
+  "permissions": ["storage", "unlimitedStorage", "scripting", "tabs", "webRequest", "webRequestBlocking"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "scripts": ["background.js"],

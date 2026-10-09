@@ -2,9 +2,10 @@
 // Each view is a module. The E2E test drives the same code through
 // window.foxmate.
 import { chat } from "./chat.js";
+import { settings } from "./settings.js";
 
 const $ = (id) => document.getElementById(id);
-const views = { chat };
+const views = { chat, settings };
 const port = browser.runtime.connect({ name: "foxmate" });
 
 function show(name) {

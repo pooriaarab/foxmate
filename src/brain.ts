@@ -6,10 +6,12 @@
 // leaves Firefox (docs/failure-modes.md B1-B10).
 import { anthropic, createMind, llamaServer, ollama, openaiCompatible, saluki, type Mind, type Provider } from "foxmind";
 import type { MindLike } from "foxloop";
+import { PLANNERS, type PlannerId } from "./planners.js";
 import { ScriptError, scriptMind } from "./scripted.js";
 
+export { PLANNERS, type PlannerId };
+
 export type Privacy = "private" | "own-key";
-export type PlannerId = "saluki" | "llama-server" | "ollama" | "browser" | "scripted" | "openai" | "anthropic";
 
 export interface BrainSettings {
   privacy?: Privacy;
@@ -50,15 +52,6 @@ export class BrainError extends Error {
 /** The handle that the provider gets in place of the key. */
 export const KEY_HANDLE = "vault:model-key";
 
-export const PLANNERS: readonly { id: PlannerId; label: string; cloud?: boolean; model?: string; baseURL?: string }[] = [
-  { id: "saluki", label: "Underdog Saluki 27B (llama-server)", baseURL: "http://127.0.0.1:8080/v1" },
-  { id: "ollama", label: "Ollama on this computer", model: "qwen3:0.6b", baseURL: "http://127.0.0.1:11434/v1" },
-  { id: "llama-server", label: "llama-server on this computer", baseURL: "http://127.0.0.1:8080/v1" },
-  { id: "browser", label: "In-browser small model (Qwen3-0.6B)" },
-  { id: "scripted", label: "Scripted (no model)" },
-  { id: "openai", label: "Your own key: OpenAI-compatible", cloud: true, model: "gpt-4.1-mini", baseURL: "https://api.openai.com/v1" },
-  { id: "anthropic", label: "Your own key: Anthropic", cloud: true },
-];
 
 async function provider(id: PlannerId, settings: BrainSettings, deps: BrainDeps): Promise<Provider> {
   const model = settings.model?.trim() || undefined;

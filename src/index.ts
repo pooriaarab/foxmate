@@ -6,3 +6,4 @@ export { recallNotes, withNotes, type Recalled, type RecallOptions } from "./rec
 export { shieldedPaw, type ShieldOptions, type ShieldScan } from "./shield.js";
 export { createAgent, type Agent, type AgentBrowser, type AgentEvent, type AgentOptions, type Loan, type RunEnd, type RunInput, type Trail } from "./agent.js";
 export { createApprovals, type Answer, type Approvals, type ApprovalsOptions, type Waiting } from "./approvals.js";
+export type { PlannerInfo } from "./planners.js";
