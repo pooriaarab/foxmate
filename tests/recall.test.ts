@@ -8,7 +8,7 @@ import { recallNotes, withNotes } from "../src/recall.js";
 const WORDS = ["table", "party", "people", "restaurant", "book", "coffee", "milk", "flight", "seat", "window"];
 const embedder = {
   async embed(texts: string[]) {
-    return { model: "bag", vectors: texts.map((t) => WORDS.map((w) => (t.toLowerCase().includes(w) ? 1 : 0)).concat(0.01)) };
+    return { model: "bag", vectors: texts.map((t) => [...WORDS.map((w) => (t.toLowerCase().includes(w) ? 1 : 0)), 0.01]) };
   },
 };
 const fresh = () => createMemory({ store: memoryStore(), embedder });
@@ -32,7 +32,10 @@ describe("recall", () => {
   });
 
   it("M3: an embedder failure gives no notes and a reason", async () => {
-    const broken = createMemory({ store: memoryStore(), embedder: { embed: async () => { throw new Error("model not loaded"); } } });
+    let up = true;
+    const broken = createMemory({ store: memoryStore(), embedder: { embed: async (texts: string[]) => { if (up) return embedder.embed(texts); throw new Error("model not loaded"); } } });
+    await broken.remember("Book a table for 4.", { kind: "preference" });
+    up = false;
     const result = await recallNotes(broken, "book a table");
     expect(result.notes).toEqual([]);
     expect(result.error).toMatch(/model not loaded/);
