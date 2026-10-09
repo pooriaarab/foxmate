@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      create-foxkit:
+        specifier: ^0.1.0
+        version: 0.1.0(yauzl@3.4.0)
+      foxbench:
+        specifier: ^0.1.0
+        version: 0.1.0(zod@3.25.76)
       foxden:
         specifier: npm:@pooriaarab/foxden@^0.1.0
         version: '@pooriaarab/foxden@0.1.0'
@@ -57,15 +63,9 @@ importers:
       '@types/node':
         specifier: ^24.19.1
         version: 24.19.1
-      create-foxkit:
-        specifier: ^0.1.0
-        version: 0.1.0(yauzl@3.4.0)
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
-      foxbench:
-        specifier: ^0.1.0
-        version: 0.1.0(zod@3.25.76)
       oxlint:
         specifier: ^1.87.0
         version: 1.87.0
