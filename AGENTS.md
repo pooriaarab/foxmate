@@ -62,13 +62,13 @@ transcripts. Full rule: pooriaarab/agents-private `rules/fleet-claim.md`.
 ## Layout
 
 ```text
-src/              the library source, built to dist/ by tsc
-tests/            tests for the failure modes in docs/failure-modes.md
-docs/failure-modes.md  every way the code can fail, written before the code
-.github/          CI, release, PR and issue standards
-extension/        the demo extension that shows this repo working in Firefox
-scripts/build-ext.mjs  bundles extension/ into dist-ext/ with esbuild
-e2e/run.mjs       the Firefox E2E test; writes artifacts/e2e-<date>.json
+src/              the agent core (brain, shield, recall, approvals, agent, tools), built to dist/
+tests/            isolated tests for the failure modes in docs/failure-modes.md
+docs/failure-modes.md  every way the wiring can fail, written before the code
+extension/        the foxmate extension: background page and sidebar views
+scripts/          build-ext.mjs (extension/ -> dist-ext/) and lint-ext.mjs
+cli/              the foxmate command (try, bench), the Firefox driver and the bench scripts
+e2e/              the Firefox E2E test (run.mjs, checks/, local sites); writes artifacts/e2e-<date>.json
 ```
 
 ## Commands
@@ -79,6 +79,7 @@ pnpm ci:local   # lint + typecheck + test + build; run before every hand-off
 pnpm build:ext  # extension/ -> dist-ext/; fails if the manifest and package.json versions differ
 pnpm lint:ext   # web-ext lint on dist-ext/ (part of ci:local)
 pnpm e2e        # Firefox E2E; set FIREFOX if Firefox is not in the usual place
+pnpm bench      # foxmate bench with the scripted planner; writes artifacts/score-*
 ```
 
 ## Testing
