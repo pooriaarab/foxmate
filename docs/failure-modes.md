@@ -59,3 +59,17 @@ notes. The goal is trusted text, so a note must come from the user.
 | M4 | A memory that does not fit the goal | Memories under the minimum similarity stay out. | `tests/recall.test.ts` M4 |
 | M5 | A very long memory, or many memories | Each note is cut to 300 characters. At most 5 notes. | `tests/recall.test.ts` M5 |
 | M6 | A note holds zero-width or bidi characters that hide text | foxmate removes them. | `tests/recall.test.ts` M6 |
+
+## Approvals: one answer per exact action (`src/approvals.ts`)
+
+The sidebar and, when it is on, the phone can both answer an approval. The
+answer must reach the one request it names, once.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| A1 | An answer names another request | It does not decide any other request. | `tests/approvals.test.ts` A1 |
+| A2 | Two channels answer (the sidebar approves, then the phone denies) | The first answer decides. The second one is ignored and reported as late. | `tests/approvals.test.ts` A2 |
+| A3 | An answer comes before foxloop asks (a fast click) | It is kept for that request only, if foxgate holds the request. | `tests/approvals.test.ts` A3 |
+| A4 | Nobody answers | The request ends as no at its foxgate expiry. The run does not hang. | `tests/approvals.test.ts` A4 |
+| A5 | The run ends while a request waits | Every waiting request ends as no. | `tests/approvals.test.ts` A5 |
+| A6 | An answer is lost, so the trail cannot show who approved | Each deciding answer goes to the trail with the request id, the decision and the channel. | `tests/approvals.test.ts` A6 |

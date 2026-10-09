@@ -4,3 +4,4 @@ export { BrainError, KEY_HANDLE, PLANNERS, createBrain, type Brain, type BrainDe
 export { ScriptError, parseScript, scriptMind, type ScriptStepJson } from "./scripted.js";
 export { recallNotes, withNotes, type Recalled, type RecallOptions } from "./recall.js";
 export { shieldedPaw, type ShieldOptions, type ShieldScan } from "./shield.js";
+export { createApprovals, type Answer, type Approvals, type ApprovalsOptions, type Waiting } from "./approvals.js";

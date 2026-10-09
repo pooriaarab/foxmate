@@ -43,10 +43,12 @@
     "web-ext": "^10.7.0"
   },
   "dependencies": {
+    "foxgate": "^0.1.0",
     "foxloop": "^0.1.0",
     "foxmemory": "^0.1.0",
     "foxmind": "^0.1.0",
     "foxpaw": "^0.1.0",
-    "foxshield": "^0.1.0"
+    "foxshield": "^0.1.0",
+    "foxtrail": "^0.1.0"
   }
 }

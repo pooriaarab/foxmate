@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      foxgate:
+        specifier: ^0.1.0
+        version: 0.1.0
       foxloop:
         specifier: ^0.1.0
         version: 0.1.0
@@ -21,6 +24,9 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0
       foxshield:
+        specifier: ^0.1.0
+        version: 0.1.0
+      foxtrail:
         specifier: ^0.1.0
         version: 0.1.0
     devDependencies:
@@ -1236,6 +1242,11 @@ packages:
 
   foxshield@0.1.0:
     resolution: {integrity: sha512-cY+7Cr/MNseteH3i/8Fi2KaFpHPH6Q3NZsNSBu9LteSH7C0PDR+sFRRWks0xN+Y4MipIFvXpmwi8oAWfN4YbEQ==}
+    engines: {node: '>=24'}
+    hasBin: true
+
+  foxtrail@0.1.0:
+    resolution: {integrity: sha512-jz2YusCAzyDYgZu9RH+5K14LNkdiayy4ySMLrNiUCmdKVvryYwuMs/4HI6IGfxTedDnwjtSl38sy0SP97BiN7Q==}
     engines: {node: '>=24'}
     hasBin: true
 
@@ -3141,6 +3152,8 @@ snapshots:
       linkedom: 0.18.13
     transitivePeerDependencies:
       - canvas
+
+  foxtrail@0.1.0: {}
 
   fs-extra@11.4.1:
     dependencies:
