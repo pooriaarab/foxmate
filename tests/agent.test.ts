@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 import { createAgent, type AgentEvent, type RunInput } from "../src/agent.js";
 
 const TABS: Record<number, { url: string; cookieStoreId: string }> = {
+  3: { url: "http://evil.test/page", cookieStoreId: "firefox-container-9" },
+  4: { url: "http://bank.test/inbox", cookieStoreId: "firefox-container-5" },
   1: { url: "http://shop.test/cart", cookieStoreId: "firefox-default" },
   2: { url: "http://bank.test/inbox", cookieStoreId: "firefox-container-9" },
 };
@@ -58,7 +60,11 @@ async function setup(options: { recall?: () => Promise<never> } = {}) {
       { tool: { name: "read_inbox", description: "Mail.", parameters: { type: "object", properties: {} }, scope: "read", domain: () => "www.googleapis.com", run: async () => ({ ok: true, summary: "Read 1 message.", untrusted: "Your code is 991177." }) }, domain: "www.googleapis.com", private: true, optIn: true },
       { tool: { name: "run_python", description: "Python.", parameters: { type: "object", properties: {} }, scope: "fill", domain: () => "space.foxmate", run: async () => ({ ok: true, summary: "ran" }) }, domain: "space.foxmate", private: true },
     ],
-    loanFor: async (cookieStoreId: string) => (cookieStoreId === "firefox-container-9" ? { cookieStoreId, scope: "read" as const } : undefined),
+    loanFor: async (cookieStoreId: string) => {
+      if (cookieStoreId === "firefox-container-9") return { cookieStoreId, scope: "read" as const, domain: "bank.test", site: "bank.test", state: "active" };
+      if (cookieStoreId === "firefox-container-5") return { cookieStoreId, scope: "submit" as const, domain: "bank.test", site: "bank.test", state: "revoking" };
+      return undefined;
+    },
     pageProblem: async () => problem,
     runMs: 60_000,
   });
@@ -212,5 +218,19 @@ describe("agent", () => {
     const opted = await setup();
     const ok = await opted.run({ allowPrivate: true, script: [{ tool: "read_inbox", args: {} }, { tool: "click", args: { button: "Buy" } }, finish] });
     expect(ok.status).toBe("done");
+  });
+
+  it("G19: a loan that is not active refuses the run", async () => {
+    const { run, ran } = await setup();
+    const end = await run({ tabId: 4, script: [{ tool: "fill", args: { text: "x" } }, finish] });
+    expect(end).toMatchObject({ status: "refused", reason: "loan-not-active" });
+    expect(ran).toEqual([]);
+  });
+
+  it("G20: a loan run on another host is refused", async () => {
+    const { run, ran } = await setup();
+    const end = await run({ tabId: 3, script: [{ tool: "snapshot", args: {} }, finish] });
+    expect(end).toMatchObject({ status: "refused", reason: "loan-host" });
+    expect(ran).toEqual([]);
   });
 });
