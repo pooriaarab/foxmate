@@ -98,6 +98,9 @@ answer must reach the one request it names, once.
 | G13 | foxlend's grant for a loan (its site and its allow list) sits on the agent's gate, so every run can reach those hosts | foxlend gets a gate host of its own. The agent's runs get only their own grants. | E2E lend |
 | G14 | The extra tools (the Space, Google) get grants above a loan's scope | On a loan run, an extra tool gets a grant only when its scope is within the loan's scope. | `tests/agent.test.ts` G14 |
 | G15 | A small model says "done" before it calls any tool, and the page check passes because the page shows no error (seen with Qwen3 on foxbench) | With no task check, `finish` passes only when a tool ran with a good result in this run, and the page shows no error. |  `tests/agent.test.ts` G15 |
+| G16 | The planner reads private data (mail, events, Space files), then a page tells it to put that data in an `open_url` query on the tab's host, or to type it into a field that page script can read. Both are on the run's grants (read and fill), and foxgate asks only for submit and pay, so the data leaves with no approval | Once a run has read private data, every `open_url` and every fill tool (`act`) needs an approval for the rest of the run. Page reads (`snapshot`) do not. | `tests/agent.test.ts` G16 |
+| G17 | The goal carries memory notes, which are private, and the same leak happens from the first step | A run whose goal has notes starts in the same mode as G16. | `tests/agent.test.ts` G17 |
+| G18 | A goal on a web tab can read the user's mail and calendar although the user asked for nothing of the kind, for example a goal planted by a page or a schedule | The Google tools get a grant only when the goal opts in (`allowPrivate`), or when the tab shows no web page. | `tests/agent.test.ts` G18 |
 
 ## Space: Python on a dropped file (`src/space.ts`)
 
