@@ -77,6 +77,7 @@ answer must reach the one request it names, once.
 | A4 | Nobody answers | The request ends as no at its foxgate expiry. The run does not hang. | `tests/approvals.test.ts` A4 |
 | A5 | The run ends while a request waits | Every waiting request ends as no. | `tests/approvals.test.ts` A5 |
 | A6 | An answer is lost, so the trail cannot show who approved | Each deciding answer goes to the trail with the request id, the decision and the channel. | `tests/approvals.test.ts` A6 |
+| A7 | An answer comes after its run ended (the phone prompt stayed open), and foxgate reuses the still-pending request for the same action in the next run, so the old answer approves it | Only requests that the current run announced can be answered. When a run ends, foxmate rejects its open requests in foxgate. | `tests/approvals.test.ts` A7 |
 
 ## Agent: one goal, all the parts (`src/agent.ts`)
 
@@ -93,6 +94,9 @@ answer must reach the one request it names, once.
 | G9 | Two runs at once share the target tab | A second run is refused with `busy`. | `tests/agent.test.ts` G9 |
 | G10 | The run ends with a step that has no check (`act`, `click`) and can never pass | When the newest result has no check, foxmate reads the page and passes only when foxpaw finds no error page. The check line says so. | `tests/agent.test.ts` G10 |
 | G11 | An approval to click a button that sends a form does not show what the form holds, so a human approves "click Send" with an attacker's address in the To field | The approval detail lists the other fields of that form and their values from the newest snapshot. Passwords show as `•••`. | `tests/form.test.ts` G11; E2E mail-trap |
+| G12 | A goal from Chat runs on a lent tab without naming the loan, so it gets fill and submit grants inside the logged-in container | When the tab is in a loan's container, the run is a loan run with that loan's scope, named or not. | `tests/agent.test.ts` G12 |
+| G13 | foxlend's grant for a loan (its site and its allow list) sits on the agent's gate, so every run can reach those hosts | foxlend gets a gate host of its own. The agent's runs get only their own grants. | E2E lend |
+| G14 | The extra tools (the Space, Google) get grants above a loan's scope | On a loan run, an extra tool gets a grant only when its scope is within the loan's scope. | `tests/agent.test.ts` G14 |
 
 ## Space: Python on a dropped file (`src/space.ts`)
 
@@ -113,3 +117,4 @@ runs it in a sandbox page with no network and no extension APIs.
 |---|---|---|---|
 | K1 | Firefox unloads the idle background page while an approval waits (seen in Firefox 157 about 60 s after the last event, with the sidebar and its port open) | While a sidebar is open, it sends the background page a message every 20 s, so the page stays loaded. | E2E keepalive |
 | K2 | The background page restarts (an update, a crash, an unload with no sidebar), and the open sidebar keeps a dead port | The sidebar connects again, and gets the current run and the waiting approvals. | E2E keepalive |
+| K3 | Two goals start at once (a double click, or foxrunner waking two tasks), so the second one takes over the run that Stop aborts and the sidebar shows | The background page claims the run before its first await. The second goal waits and runs later, as a task. | E2E keepalive |
