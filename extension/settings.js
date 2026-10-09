@@ -66,6 +66,9 @@ export const settings = {
       $("api-key").value = "";
       $("key-status").textContent = "Saving the key…";
     });
+    browser.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && changes.settings) load();
+    });
     load();
   },
   shown: load,
