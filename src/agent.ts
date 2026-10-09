@@ -27,6 +27,11 @@ export interface AgentBrowser {
 export interface Loan {
   cookieStoreId: string;
   scope: Scope;
+  /** The lent host and its registrable site. A loan run stays on them (G20). */
+  domain?: string;
+  site?: string;
+  /** foxlend's state. A loan that is not active refuses the run (G19). */
+  state?: string;
 }
 
 export interface RunInput {
@@ -94,14 +99,15 @@ export function createAgent(options: AgentOptions): Agent {
   const { browser, trail } = options;
   let target = 0;
   let busy = false;
-  // The newest snapshot the planner got, for the form detail of an approval.
+  // The newest snapshot the planner got, and the control it typed into last, for the form detail of an approval.
   let lastPage: Snapshot | undefined;
+  let lastTyped: string | undefined;
   const shielded = shieldedPaw({ browser: browser as never, onScan: async (scan) => { await trail.append({ actor: "foxshield", kind: "shield.scan", data: scan }); } });
   const paw = { ...shielded, snapshot: async (tabId: number, api?: ScriptingApi) => (lastPage = await shielded.snapshot(tabId, api)) };
   const tabTools = [...(options.makeTools?.(() => target) ?? browserTools({ tabId: () => target, browser: browser as never, paw })), ...(options.moreTabTools?.(() => target) ?? [])]
     .map((tool) => (tool.name !== "click" ? tool : {
       ...tool,
-      describe: async (args: Record<string, unknown>, ctx: ToolContext) => [await tool.describe?.(args, ctx), formDetail(lastPage, String(args.controlId))].filter(Boolean).join(" "),
+      describe: async (args: Record<string, unknown>, ctx: ToolContext) => [await tool.describe?.(args, ctx), formDetail(lastPage, String(args.controlId), lastTyped)].filter(Boolean).join(" "),
     }));
   const extra = options.extraTools ?? [];
   const tools = [...tabTools, ...extra.map((e) => e.tool)];
@@ -145,6 +151,9 @@ export function createAgent(options: AgentOptions): Agent {
       if (input.loan && tab.cookieStoreId !== input.loan.cookieStoreId) return await refuse("loan-mismatch", "The tab is not in the lent container.");
       // A goal from Chat on a lent tab names no loan, but it is a loan run all the same.
       const loan = input.loan ?? (tab.cookieStoreId ? await options.loanFor?.(tab.cookieStoreId) : undefined);
+      if (loan?.state && loan.state !== "active") return await refuse("loan-not-active", "The loan for this tab is not active.");
+      const onLoan = (h: string) => h === loan?.domain || (loan?.site !== undefined && (h === loan.site || h.endsWith(`.${loan.site}`)));
+      if (loan && (loan.domain || loan.site) && !(domain && onLoan(domain))) return await refuse("loan-host", `The lent tab is on ${domain ?? "no web page"}, not on the lent site.`);
       await trail.append({ actor: "user", kind: "run.start", data: { goal: input.goal, domain: domain ?? null, planner: input.settings.planner ?? "saluki", loan: Boolean(loan) } });
       const recalled = options.memory ? await recallNotes(options.memory, input.goal) : { notes: [] };
       emit({ type: "recall", ...recalled });
@@ -204,6 +213,7 @@ export function createAgent(options: AgentOptions): Agent {
       const loop = createLoop({ mind: brain.mind, gate, tools, trail, check, maxSteps: options.maxSteps ?? 20, budget: { ms: runMs }, onApproval: (request) => approvals.ask(request) });
       let end: RunEnd = { status: "aborted" };
       worked = 0;
+      lastTyped = undefined;
       for await (const event of loop.run(goal, input.signal ? { signal: input.signal } : {})) {
         if (event.type === "approval-needed") {
           approvals.expect(event.requestId);
@@ -211,6 +221,7 @@ export function createAgent(options: AgentOptions): Agent {
           const text = (await host.pending()).find((r) => r.id === event.requestId)?.text;
           emit({ ...event, ...(text ? { exactText: text } : {}) });
         } else emit(event);
+        if (event.type === "tool-call" && event.name === "act" && (event.args as { op?: string } | undefined)?.op === "type") lastTyped = String((event.args as { controlId?: unknown }).controlId);
         if (event.type === "tool-result" && event.ok) worked += 1;
         if (event.type === "tool-result" && event.ok && privateTools.has(event.name)) await goPrivate(event.name);
         if (event.type === "done") end = { status: "done", summary: event.summary };

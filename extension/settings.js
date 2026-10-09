@@ -1,11 +1,12 @@
 // The Settings view: the privacy switch and the planner. Private mode
 // lists only planners on this computer or in Firefox. The own key goes to
 // foxvault in the background page; the sidebar never stores it.
-import { PLANNERS } from "../src/planners.ts";
+import { PLANNERS, providerHost } from "../src/planners.ts";
 
 const $ = (id) => document.getElementById(id);
 const DEFAULT_SCRIPT = JSON.stringify([{ tool: "snapshot", args: {} }, { tool: "finish", args: { summary: "I read the page." } }], null, 1);
 let current = {};
+let consentClicked = false;
 let port;
 
 function badge() {
@@ -38,7 +39,12 @@ function render() {
 async function save() {
   const privacy = document.querySelector('input[name="privacy"]:checked')?.value ?? "private";
   const planner = privacy !== current.privacy && privacy === "private" && PLANNERS.find((p) => p.id === $("planner").value)?.cloud ? "saluki" : $("planner").value;
-  current = { ...current, privacy, planner, model: $("model").value.trim(), baseURL: $("base-url").value.trim(), consent: $("consent").checked && privacy === "own-key", script: $("script").value };
+  const baseURL = $("base-url").value.trim();
+  // The consent holds for the host it was given for; a new host clears the box (B13).
+  const host = providerHost({ planner, baseURL });
+  const consent = $("consent").checked && privacy === "own-key" && (current.consentHost === host || consentClicked);
+  consentClicked = false;
+  current = { ...current, privacy, planner, model: $("model").value.trim(), baseURL, consent, consentHost: consent ? host : undefined, script: $("script").value };
   await browser.storage.local.set({ settings: current });
   render();
 }
@@ -59,6 +65,7 @@ export const settings = {
       // Firefox's own consent prompt for page text. An error counts as no.
       const granted = await browser.permissions.request({ data_collection: ["websiteContent"] }).catch(() => false);
       if (!granted) $("consent").checked = false;
+      consentClicked = granted;
       await save();
     });
     $("save-key").addEventListener("click", () => {

@@ -6,10 +6,10 @@
 // leaves Firefox (docs/failure-modes.md B1-B10).
 import { anthropic, createMind, llamaServer, ollama, openaiCompatible, saluki, type Mind, type Provider } from "foxmind";
 import type { MindLike } from "foxloop";
-import { PLANNERS, type PlannerId } from "./planners.js";
+import { PLANNERS, providerHost, type PlannerId } from "./planners.js";
 import { ScriptError, scriptMind } from "./scripted.js";
 
-export { PLANNERS, type PlannerId };
+export { PLANNERS, providerHost, type PlannerId };
 
 export type Privacy = "private" | "own-key";
 
@@ -21,6 +21,8 @@ export interface BrainSettings {
   baseURL?: string;
   /** The "send page text to this provider" box. */
   consent?: boolean;
+  /** The provider host the user ticked the box for. The consent holds for that host only (B13). */
+  consentHost?: string;
   script?: string;
 }
 
@@ -86,7 +88,9 @@ export async function createBrain(settings: BrainSettings, deps: BrainDeps): Pro
   }
   if (info.cloud) {
     if (privacy !== "own-key") throw new BrainError("cloud-in-private", `${info.label} is a cloud model. Private mode uses only models on this computer. Switch to "Own key" first.`);
-    if (!settings.consent || !(await deps.hasDataConsent())) throw new BrainError("no-consent", "Allow sending page text to this provider in the settings first.");
+    if (!settings.consent || settings.consentHost !== providerHost(settings) || !(await deps.hasDataConsent())) {
+      throw new BrainError("no-consent", "Allow sending page text to this provider in the settings first.");
+    }
     return { mind: createMind({ providers: [await provider(id, settings, deps)], only: ["cloud"] }), privacy: "cloud", planner: id };
   }
   // foxmind decides the tier: a "-cloud" Ollama model or a server that is
