@@ -2,12 +2,30 @@
 // talks to it over a "foxmate" port: it starts a goal on a tab, answers
 // approvals and stops a run. Every open sidebar gets every event of the
 // current run, so a sidebar that opens late shows the run too.
+import { storageAreaStore } from "foxgate";
 import { IdbStore, Log, idbKey } from "foxtrail";
-import { createAgent } from "../src/index.ts";
+import { attachHeaderInjection, createVault, indexedDbKeyStore } from "foxvault";
+import { KEY_HANDLE, createAgent } from "../src/index.ts";
 
 const trailReady = Promise.all([IdbStore.open("foxmate-trail"), idbKey("foxmate-trail-key")]).then(([store, key]) => new Log({ store, key }));
 const trail = { append: async (entry) => (await trailReady).append(entry) };
 const agent = createAgent({ browser, trail, maxSteps: 30 });
+// The own key lives in foxvault. foxvault puts it in the request header as
+// the request leaves Firefox, for the key's host only.
+const vault = createVault({ store: storageAreaStore(browser.storage.local), keyStore: indexedDbKeyStore("foxmate-vault") });
+attachHeaderInjection(vault, browser);
+
+/** Stores the own key for the planner's host, with its header rule. Returns the host. */
+async function setKey({ key, planner, baseURL }) {
+  const anthropic = planner === "anthropic";
+  const host = new URL(baseURL || (anthropic ? "https://api.anthropic.com" : "https://api.openai.com/v1")).hostname;
+  if ((await vault.status()) === "new") await vault.initialize();
+  await vault.unlock();
+  if ((await vault.list()).some((s) => s.handle === KEY_HANDLE)) await vault.remove(KEY_HANDLE);
+  await vault.set(KEY_HANDLE, key, { domains: [host] });
+  await vault.injectHeader({ handle: KEY_HANDLE, header: anthropic ? "x-api-key" : "Authorization", hosts: [host], format: anthropic ? "{secret}" : "Bearer {secret}" });
+  return host;
+}
 
 const ports = new Set();
 /** The newest run: { id, goal, tabId, events, end, controller }. */
@@ -29,6 +47,8 @@ agent.approvals.onChange((waiting) => send({ waiting }));
 async function startRun({ goal, tabId }) {
   if (agent.busy) throw new Error("A run is in progress. Stop it first.");
   const { settings = {} } = await browser.storage.local.get("settings");
+  // Device mode unlocks without a passphrase; the header rule needs it unlocked.
+  if (settings.privacy === "own-key" && (await vault.status()) === "locked") await vault.unlock();
   const run = { id: crypto.randomUUID(), goal, tabId, events: [], controller: new AbortController() };
   current = run;
   send({ run: { id: run.id, goal } });
@@ -58,6 +78,10 @@ browser.runtime.onConnect.addListener((port) => {
       if (message.op === "run") await startRun(message);
       else if (message.op === "answer") await agent.approvals.answer(message.requestId, message.answer, "sidebar");
       else if (message.op === "stop") current?.controller.abort();
+      else if (message.op === "set-key") {
+        const saved = await setKey(message).then((host) => ({ keySaved: host }), (error) => ({ keyError: error.message }));
+        port.postMessage(saved);
+      }
     } catch (error) {
       port.postMessage({ error: error instanceof Error ? error.message : String(error) });
     }
