@@ -46,6 +46,7 @@
   },
   "dependencies": {
     "foxgate": "^0.1.0",
+    "foxlend": "^0.1.0",
     "foxloop": "^0.1.0",
     "foxmemory": "^0.1.0",
     "foxmind": "^0.1.0",

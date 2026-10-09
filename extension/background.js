@@ -3,6 +3,7 @@
 // approvals and stops a run. Every open sidebar gets every event of the
 // current run, so a sidebar that opens late shows the run too.
 import { storageAreaStore } from "foxgate";
+import { createFoxlend, withDefaultRule } from "foxlend";
 import { createMemory, indexedDbStore } from "foxmemory";
 import { createMind } from "foxmind";
 import { IdbStore, Log, idbKey } from "foxtrail";
@@ -24,7 +25,43 @@ const memory = createMemory({
     },
   },
 });
-const agent = createAgent({ browser, trail, memory, maxSteps: 30, browserModel: async () => (await browserModel()).transformers({ task: "chat" }) });
+// foxgate and foxlend share one public suffix rule and one gate host.
+const publicSuffix = withDefaultRule(browser.publicSuffix);
+const agent = createAgent({ browser, trail, memory, publicSuffix, maxSteps: 30, browserModel: async () => (await browserModel()).transformers({ task: "chat" }) });
+// Lend a login: foxlend copies one site's cookies into its own container,
+// blocks every request from it to a host off the allow list, and takes it
+// all back on revoke. Created at the top level, so Firefox can wake the page.
+const lender = createFoxlend({ browser, host: agent.host, publicSuffix });
+const blocked = [];
+// A blocked URL can carry what the page tried to steal (a cookie in the query),
+// so the log and the sidebar keep only its origin and path.
+const bare = (url) => {
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return "(not a URL)";
+  }
+};
+lender.onBlocked.addListener((event) => {
+  const b = { ...event, url: bare(event.url) };
+  blocked.push(b);
+  blocked.splice(0, blocked.length - 50);
+  trail.append({ actor: "foxlend", kind: "lend.blocked", data: { loanId: b.loanId, url: b.url, type: b.type, layer: b.layer, reason: b.reason } }).catch(() => undefined);
+  send({ blocked: b });
+});
+lender.onRevoked.addListener(({ loan, reason }) => {
+  trail.append({ actor: "foxlend", kind: "lend.revoke", data: { loanId: loan.id, domain: loan.domain, reason } }).catch(() => undefined);
+  send({ loansChanged: true });
+});
+
+async function lend({ domain, url, scope, ttlMs, allow }) {
+  const loan = await lender.lend({ domain, url, scope, ttlMs, allow });
+  await trail.append({ actor: "user", kind: "lend.start", data: { loanId: loan.id, domain: loan.domain, scope, ttlMs, allow: loan.patterns, copied: loan.copied } });
+  send({ loansChanged: true });
+  return loan;
+}
+
 // The own key lives in foxvault. foxvault puts it in the request header as
 // the request leaves Firefox, for the key's host only.
 const vault = createVault({ store: storageAreaStore(browser.storage.local), keyStore: indexedDbKeyStore("foxmate-vault") });
@@ -59,11 +96,15 @@ const send = (message) => {
 agent.approvals.onChange((waiting) => send({ waiting }));
 
 /** Starts a goal on a tab. Returns the run id, or throws when a run is in progress. */
-async function startRun({ goal, tabId }) {
+async function startRun({ goal, tabId, loanId }) {
   if (agent.busy) throw new Error("A run is in progress. Stop it first.");
   const { settings = {} } = await browser.storage.local.get("settings");
   // Device mode unlocks without a passphrase; the header rule needs it unlocked.
   if (settings.privacy === "own-key" && (await vault.status()) === "locked") await vault.unlock();
+  // A run on a loan works in the loan's tab, with the loan's scope at most.
+  const loan = loanId ? (await lender.listLoans()).find((l) => l.id === loanId && l.state === "active") : undefined;
+  if (loanId && !loan) throw new Error("That loan is not active.");
+  if (loan) tabId = loan.tabId;
   const run = { id: crypto.randomUUID(), goal, tabId, events: [], controller: new AbortController() };
   current = run;
   send({ run: { id: run.id, goal } });
@@ -71,7 +112,7 @@ async function startRun({ goal, tabId }) {
     run.events.push(event);
     send({ runId: run.id, event });
   };
-  agent.run({ goal, tabId, settings, signal: run.controller.signal, onEvent })
+  agent.run({ goal, tabId, settings, signal: run.controller.signal, onEvent, ...(loan ? { loan: { cookieStoreId: loan.cookieStoreId, scope: loan.scope } } : {}) })
     .catch((error) => ({ status: "blocked", reason: "error", message: error instanceof Error ? error.message : String(error) }))
     .then((end) => {
       run.end = end;
@@ -108,6 +149,9 @@ browser.runtime.onMessage.addListener(async (message) => {
     const log = await trailReady;
     return { entries: await log.entries(), verify: await log.verify() };
   }
+  if (message?.op === "loans") return { loans: await lender.listLoans(), blocked };
+  if (message?.op === "lend") return lend(message).then((loan) => ({ loan }), (error) => ({ error: error.message, code: error.code }));
+  if (message?.op === "revoke") return lender.revoke(message.loanId).then((ok) => ({ ok }), (error) => ({ error: error.message }));
   if (message?.op === "memory-list") return { memories: await memory.list() };
   // The Memory page is the user's own hand, so its memories have the source "user".
   if (message?.op === "memory-add") return memory.remember(message.text, { kind: message.kind, source: "user" }).then(({ memory: m }) => ({ memory: m }), (error) => ({ error: error.message }));

@@ -87,9 +87,9 @@ export const chat = {
     });
     $("stop").addEventListener("click", () => port.postMessage({ op: "stop" }));
   },
-  start(tabId, goal) {
+  start(tabId, goal, loanId) {
     $("goal").value = goal;
-    port.postMessage({ op: "run", tabId, goal });
+    port.postMessage({ op: "run", tabId, goal, ...(loanId ? { loanId } : {}) });
   },
   message(message) {
     if (message.run) newRun(message.run.goal);

@@ -12,6 +12,7 @@
     </header>
     <nav id="nav">
       <button type="button" data-view="chat" aria-pressed="true">Chat</button>
+      <button type="button" data-view="lend">Lend</button>
       <button type="button" data-view="memory">Memory</button>
       <button type="button" data-view="activity">Activity</button>
       <button type="button" data-view="settings">Settings</button>
@@ -27,6 +28,23 @@
           <span id="status" role="status"></span>
         </div>
       </form>
+    </section>
+    <section data-view="lend" hidden>
+      <p class="hint">Lend one login for one task. foxmate copies that site's cookies into its own container tab. Pages there can reach only the hosts you allow. Revoke takes it all back.</p>
+      <form id="lend-form">
+        <label for="lend-url">Page to lend</label><input id="lend-url" autocomplete="off" />
+        <label for="lend-scope">What foxmate may do there</label>
+        <select id="lend-scope"><option value="read">Read pages</option><option value="fill">Read and fill in forms</option><option value="submit" selected>Read, fill in and send forms (asks you first)</option></select>
+        <label for="lend-ttl">Take it back after</label>
+        <select id="lend-ttl"><option value="900000">15 minutes</option><option value="3600000">1 hour</option><option value="14400000">4 hours</option></select>
+        <label for="lend-allow">Other hosts its pages may reach (optional)</label><input id="lend-allow" autocomplete="off" placeholder="cdn.example.com, *.example.net" />
+        <div class="row"><button id="lend-button" type="submit">Lend this login</button></div>
+      </form>
+      <p id="lend-status" class="muted" role="status"></p>
+      <h2>Lent logins</h2>
+      <ul id="loans" class="memories"></ul>
+      <h2>Blocked requests</h2>
+      <ul id="blocked" class="steps"></ul>
     </section>
     <section data-view="memory" hidden>
       <p class="hint">foxmate adds the memories that fit a goal to that goal. They stay in this browser, and the model that matches them runs in Firefox.</p>

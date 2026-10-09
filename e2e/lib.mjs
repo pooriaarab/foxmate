@@ -37,16 +37,18 @@ export const readTrail = (sidebar) => sidebar.evaluate(() => browser.runtime.sen
  * `answer(approval)` returns "approve" or "deny" for each approval.
  * Resolves with what the sidebar showed and what the trail recorded.
  */
-export async function runGoal({ fox, sidebar }, { url, goal, settings, answer = () => "approve", page, timeoutMs = 120_000, shot }) {
-  const tab = page ?? (await fox.open(url));
+export async function runGoal({ fox, sidebar }, { url, goal, settings, answer = () => "approve", page, timeoutMs = 120_000, shot, loanId }) {
+  // A run on a loan works in the loan's own tab, which the background page knows.
+  const tab = loanId ? page : (page ?? (await fox.open(url)));
   if (settings) await setSettings(sidebar, settings);
   const before = (await readTrail(sidebar)).entries.length;
   const runsBefore = await sidebar.evaluate(() => document.querySelectorAll("#conversation > li").length);
-  await sidebar.evaluate(async (u, g) => window.foxmate.start(await window.foxmate.tabFor(u), g), tab.url(), goal);
+  if (loanId) await sidebar.evaluate((g, id) => window.foxmate.start(0, g, id), goal, loanId);
+  else await sidebar.evaluate(async (u, g) => window.foxmate.start(await window.foxmate.tabFor(u), g), tab.url(), goal);
   // The sidebar is a tab here, not a sidebar. Keep the task tab in front, as a
   // person who watches the agent would: Firefox does not lay out a background
   // tab after a scroll, so foxpaw would see its controls as covered.
-  await tab.bringToFront();
+  await tab?.bringToFront();
   const approvals = [];
   for (;;) {
     const state = await poll(sidebar, (n) => {
@@ -62,7 +64,7 @@ export async function runGoal({ fox, sidebar }, { url, goal, settings, answer = 
       const trail = await readTrail(sidebar);
       const steps = await sidebar.evaluate((n) => [...document.querySelectorAll("#conversation > li")[n].querySelectorAll(".steps li")].map((li) => li.textContent), runsBefore);
       const entries = trail.entries.slice(before).map((e) => ({ kind: e.kind, data: e.data }));
-      return { status: state.end, done: state.className.includes("done"), approvals, steps, trail: entries, kinds: entries.map((e) => e.kind), trailOk: trail.verify.ok, page: tab, url: tab.url() };
+      return { status: state.end, done: state.className.includes("done"), approvals, steps, trail: entries, kinds: entries.map((e) => e.kind), trailOk: trail.verify.ok, page: tab, url: tab?.url() };
     }
     const choice = await answer(state.ask);
     approvals.push({ ...state.ask, answer: choice });
