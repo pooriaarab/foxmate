@@ -3,11 +3,13 @@
 // through foxgate, page text passes foxshield, approvals come from a human,
 // and foxtrail records each step (docs/failure-modes.md G1-G10).
 import { createFoxgate, type Gate, type Host, type PublicSuffix, type Scope } from "foxgate";
-import { browserTools, createLoop, toolSpecs, type CheckResult, type LoopEvent, type LoopTool } from "foxloop";
+import { browserTools, createLoop, toolSpecs, type CheckResult, type LoopEvent, type LoopTool, type ToolContext } from "foxloop";
 import type { FoxMemory } from "foxmemory";
 import * as foxpaw from "foxpaw";
+import type { ScriptingApi, Snapshot } from "foxpaw";
 import type { Provider } from "foxmind";
 import { createApprovals, type Approvals } from "./approvals.js";
+import { formDetail } from "./form.js";
 import { BrainError, createBrain, type BrainSettings } from "./brain.js";
 import { recallNotes, withNotes } from "./recall.js";
 import { shieldedPaw } from "./shield.js";
@@ -81,11 +83,15 @@ export function createAgent(options: AgentOptions): Agent {
   const { browser, trail } = options;
   let target = 0;
   let busy = false;
-  const tabTools = options.makeTools?.(() => target) ?? browserTools({
-    tabId: () => target,
-    browser: browser as never,
-    paw: shieldedPaw({ browser: browser as never, onScan: async (scan) => { await trail.append({ actor: "foxshield", kind: "shield.scan", data: scan }); } }),
-  });
+  // The newest snapshot the planner got, for the form detail of an approval.
+  let lastPage: Snapshot | undefined;
+  const shielded = shieldedPaw({ browser: browser as never, onScan: async (scan) => { await trail.append({ actor: "foxshield", kind: "shield.scan", data: scan }); } });
+  const paw = { ...shielded, snapshot: async (tabId: number, api?: ScriptingApi) => (lastPage = await shielded.snapshot(tabId, api)) };
+  const tabTools = (options.makeTools?.(() => target) ?? browserTools({ tabId: () => target, browser: browser as never, paw }))
+    .map((tool) => (tool.name !== "click" ? tool : {
+      ...tool,
+      describe: async (args: Record<string, unknown>, ctx: ToolContext) => [await tool.describe?.(args, ctx), formDetail(lastPage, String(args.controlId))].filter(Boolean).join(" "),
+    }));
   const extra = options.extraTools ?? [];
   const tools = [...tabTools, ...extra.map((e) => e.tool)];
   const { gate, host } = createFoxgate({ tools: toolSpecs(tools), ...(options.publicSuffix ? { publicSuffix: options.publicSuffix } : {}) });
