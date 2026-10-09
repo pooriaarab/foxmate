@@ -40,8 +40,11 @@ To try the extension in a fresh Firefox profile, with nothing to set up:
 npx foxmate try
 ```
 
-Click the foxmate button in the toolbar to open the sidebar. foxmate is not
-on AMO yet; `foxmate try` installs it as a temporary add-on.
+Click the foxmate button in the toolbar to open the sidebar. `foxmate try`
+installs it as a temporary add-on.
+
+Install from AMO: [addons.mozilla.org/firefox/addon/foxmate](https://addons.mozilla.org/firefox/addon/foxmate/)
+(pending AMO review; the link works after approval).
 
 ## Example
 
