@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>foxmate</title>
+    <link rel="stylesheet" href="sidebar.css" />
+  </head>
+  <body>
+    <header>
+      <h1>foxmate</h1>
+      <span id="privacy" class="badge">Private</span>
+    </header>
+    <nav id="nav">
+      <button type="button" data-view="chat" aria-pressed="true">Chat</button>
+    </nav>
+    <section data-view="chat">
+      <ol id="conversation" aria-live="polite"></ol>
+      <form id="goal-form">
+        <label for="goal">Goal for the current tab</label>
+        <textarea id="goal" rows="3" required placeholder="Sign me up for the Pro plan with my work email."></textarea>
+        <div class="row">
+          <button id="run" type="submit">Run</button>
+          <button id="stop" type="button" disabled>Stop</button>
+          <span id="status" role="status"></span>
+        </div>
+      </form>
+    </section>
+    <script type="module" src="sidebar.js"></script>
+  </body>
+</html>

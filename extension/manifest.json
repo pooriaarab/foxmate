@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "foxmate demo",
+  "name": "foxmate",
   "version": "0.1.0",
   "description": "An open-source personal agent that runs in your own Firefox.",
   "browser_specific_settings": {
@@ -8,22 +8,26 @@
       "id": "foxmate@pooriaarab",
       "strict_min_version": "153.0",
       "data_collection_permissions": {
-        "required": ["none"]
+        "required": ["none"],
+        "optional": ["websiteContent"]
       }
     }
   },
-  "permissions": ["storage"],
+  "permissions": ["storage", "unlimitedStorage", "scripting", "tabs"],
+  "host_permissions": ["<all_urls>"],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": ["background.js"],
+    "type": "module"
   },
   "action": {
-    "default_title": "foxmate demo",
-    "default_popup": "popup.html"
+    "default_title": "foxmate"
   },
-  "content_scripts": [
-    {
-      "matches": ["http://127.0.0.1/*"],
-      "js": ["content.js"]
-    }
-  ]
+  "sidebar_action": {
+    "default_title": "foxmate",
+    "default_panel": "sidebar.html",
+    "open_at_install": false
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
 }
