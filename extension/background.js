@@ -89,7 +89,10 @@ browser.runtime.onConnect.addListener((port) => {
 });
 
 browser.runtime.onMessage.addListener(async (message) => {
-  if (message?.op !== "trail") return undefined;
-  const log = await trailReady;
-  return { entries: await log.entries(), verify: await log.verify() };
+  if (message?.op === "trail") {
+    const log = await trailReady;
+    return { entries: await log.entries(), verify: await log.verify() };
+  }
+  if (message?.op === "trail-export") return { jsonl: await (await trailReady).exportJsonl() };
+  return undefined;
 });

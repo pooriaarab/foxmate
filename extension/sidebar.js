@@ -1,11 +1,12 @@
 // The sidebar: a nav over views, and one port to the background page.
 // Each view is a module. The E2E test drives the same code through
 // window.foxmate.
+import { activity } from "./activity.js";
 import { chat } from "./chat.js";
 import { settings } from "./settings.js";
 
 const $ = (id) => document.getElementById(id);
-const views = { chat, settings };
+const views = { chat, activity, settings };
 const port = browser.runtime.connect({ name: "foxmate" });
 
 function show(name) {
