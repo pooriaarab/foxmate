@@ -1,6 +1,6 @@
 {
   "name": "foxmate",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "An open-source personal agent that runs in your own Firefox.",
   "type": "module",
   "license": "MIT",
@@ -48,11 +48,11 @@
   "dependencies": {
     "create-foxkit": "^0.1.0",
     "foxbench": "^0.1.0",
-    "foxden": "npm:@pooriaarab/foxden@^0.1.0",
+    "foxden": "npm:foxden-sandbox@^0.1.0",
     "foxgate": "^0.1.0",
     "foxlend": "^0.1.0",
     "foxlens": "^0.1.0",
-    "foxlink": "npm:@pooriaarab/foxlink@^0.1.0",
+    "foxlink": "npm:foxlink-oauth@^0.1.0",
     "foxloop": "^0.1.0",
     "foxmemory": "^0.1.0",
     "foxmind": "^0.1.0",

@@ -19,7 +19,7 @@ export interface ShieldScan {
 
 export interface ShieldOptions {
   /** `browser.scripting`, to run the scan in the tab. */
-  browser: { scripting: { executeScript(details: unknown): Promise<unknown> } };
+  browser: { scripting: { executeScript(details: unknown): Promise<unknown> }; tabs?: { get(tabId: number): Promise<{ status?: string }> } };
   paw?: PawLike;
   /** sanitize() wraps blocks at or above this score. Default 0.5. */
   threshold?: number;
@@ -28,6 +28,7 @@ export interface ShieldOptions {
 
 const HIDDEN: ReadonlySet<FindingKind> = new Set(["display-none", "not-rendered", "visibility-hidden", "opacity-zero", "offscreen", "clipped", "tiny-font", "low-contrast", "aria-hidden", "covered"]);
 const MAX_TEXT = 6000;
+const LOAD_WAIT_MS = 10_000;
 const WITHHELD = "[foxshield could not scan this page, so foxmate withheld its text.]";
 
 /**
@@ -68,6 +69,11 @@ export function shieldedPaw(options: ShieldOptions): PawLike {
     settle: paw.settle,
     runTask: paw.runTask,
     async snapshot(tabId: number, browser?: ScriptingApi): Promise<Snapshot> {
+      // A click on a link starts a navigation; reading before it ends sees the old page or an empty one (S11).
+      for (let waited = 0; options.browser.tabs && waited < LOAD_WAIT_MS; waited += 100) {
+        if ((await options.browser.tabs.get(tabId).catch(() => ({ status: "complete" }))).status === "complete") break;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
       const page = await paw.snapshot(tabId, browser);
       let report: ScanReport;
       try {

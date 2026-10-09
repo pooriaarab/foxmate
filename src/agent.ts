@@ -118,11 +118,14 @@ export function createAgent(options: AgentOptions): Agent {
 
   // Good tool results in the current run (one run at a time).
   let worked = 0;
+  // The newest tool result was good (G22).
+  let lastOk = false;
   // When the newest result has no check, a tool must have worked in this run (G15), and
   // the page must show no error page to foxpaw (G10).
   const check = async ({ lastCheck }: { lastCheck?: CheckResult }): Promise<CheckResult> => {
     if (lastCheck) return lastCheck;
     if (!worked) return { ok: false, checks: [{ part: "a tool ran with a good result", ok: false, evidence: "no tool ran" }], problem: "nothing was done" };
+    if (!lastOk) return { ok: false, checks: [{ part: "the last step worked", ok: false, evidence: "the newest tool result is a failure" }], problem: "the last step did not work" };
     const problem = await pageProblem(target).catch((error: unknown) => `foxmate could not read the page: ${String(error)}`);
     return { ok: !problem, checks: [{ part: "the page shows no error (no task check)", ok: !problem, evidence: problem ?? "no error page" }], ...(problem ? { problem } : {}) };
   };
@@ -213,6 +216,7 @@ export function createAgent(options: AgentOptions): Agent {
       const loop = createLoop({ mind: brain.mind, gate, tools, trail, check, maxSteps: options.maxSteps ?? 20, budget: { ms: runMs }, onApproval: (request) => approvals.ask(request) });
       let end: RunEnd = { status: "aborted" };
       worked = 0;
+      lastOk = false;
       lastTyped = undefined;
       for await (const event of loop.run(goal, input.signal ? { signal: input.signal } : {})) {
         if (event.type === "approval-needed") {
@@ -222,6 +226,7 @@ export function createAgent(options: AgentOptions): Agent {
           emit({ ...event, ...(text ? { exactText: text } : {}) });
         } else emit(event);
         if (event.type === "tool-call" && event.name === "act" && (event.args as { op?: string } | undefined)?.op === "type") lastTyped = String((event.args as { controlId?: unknown }).controlId);
+        if (event.type === "tool-result") lastOk = event.ok;
         if (event.type === "tool-result" && event.ok) worked += 1;
         if (event.type === "tool-result" && event.ok && privateTools.has(event.name)) await goPrivate(event.name);
         if (event.type === "done") end = { status: "done", summary: event.summary };

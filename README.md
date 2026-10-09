@@ -239,7 +239,7 @@ payment apply.
 
 ## Tests
 
-`pnpm ci:local` runs lint, typecheck, 52 isolated tests, the build and
+`pnpm ci:local` runs lint, typecheck, 67 isolated tests, the build and
 `web-ext lint`. Each isolated test covers a failure mode in
 [docs/failure-modes.md](docs/failure-modes.md), written before the code.
 
@@ -336,8 +336,8 @@ Read these rows with care:
   steps a person wrote.
 - Saluki 27B is the default private planner, but we did not run it here. Its
   tool-calling results are the vendor's own tests.
-- When the newest result carries no task check, foxmate passes `finish` if a
-  tool worked in the run and the page shows no error. A model can still say
+- When the newest result carries no task check, foxmate passes `finish` if
+  the newest step worked and the page shows no error. A model can still say
   "done" after a page read, with the task not done; the small models did.
 - foxgate limits where an action goes, not what its arguments hold. Before
   the run holds private data, typing and opening pages on the tab's host need
@@ -372,8 +372,7 @@ Read these rows with care:
 - The Gmail and Calendar tools are read only, and we did not test them
   against Google. Screenshots need Ollama with
   `OLLAMA_ORIGINS="moz-extension://*"`; so does the Ollama planner.
-- foxmate is not signed on AMO yet. The fox packages it uses are not on npm
-  yet.
+- foxmate is not signed on AMO yet.
 - foxpay and foxbridge are not part of foxmate yet.
 
 ## Part of the fox primitives
@@ -420,7 +419,10 @@ flowchart LR
 ```
 
 foxmate uses every primitive except foxpay and foxbridge. Nothing depends
-on foxmate.
+on foxmate. Two primitives have other names on npm: foxden is
+[`foxden-sandbox`](https://www.npmjs.com/package/foxden-sandbox) and foxlink
+is [`foxlink-oauth`](https://www.npmjs.com/package/foxlink-oauth).
+`package.json` installs them under the names `foxden` and `foxlink`.
 
 ## Development
 
