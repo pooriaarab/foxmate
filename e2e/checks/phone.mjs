@@ -43,7 +43,7 @@ export default async function phoneCheck({ session, check, record, scripted, fin
 
     const book = (decision, name) => phone.evaluate((d) => { window.phone.decision = d; }, decision).then(() => runGoal(session, {
       url: `${site.url}/table.html`, goal: `Book a table for ${name}.`, answer: () => "wait",
-      settings: scripted([{ tool: "snapshot", args: {} }, { tool: "browser_task", args: { goal: `name: ${name}, party size: 2` } }, finish]),
+      settings: { ...scripted([{ tool: "snapshot", args: {} }, { tool: "browser_task", args: { goal: `name: ${name}, party size: 2` } }, finish]), modules: { phone: true } },
     }));
     const yes = await book("approve", "Ana Silva");
     const no = await book("deny", "Lee Wong");

@@ -9,3 +9,4 @@ export { createApprovals, type Answer, type Approvals, type ApprovalsOptions, ty
 export type { PlannerInfo } from "./planners.js";
 export { formDetail } from "./form.js";
 export { SPACE_DOMAIN, spaceTool, type DenLike } from "./space.js";
+export { GOOGLE_DOMAIN, googleTools, lookTool, type GoogleDeps, type LookDeps } from "./modules.js";

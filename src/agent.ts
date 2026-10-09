@@ -59,6 +59,8 @@ export interface AgentOptions {
   publicSuffix?: PublicSuffix;
   /** The tools for a tab. Default: foxloop's browser tools over foxshield. */
   makeTools?: (tabId: () => number) => LoopTool[];
+  /** More tools on the run's tab, for example a screenshot tool. The tab's grants cover them. */
+  moreTabTools?: (tabId: () => number) => LoopTool[];
   /** More tools, for example the Space. Each one names its own domain. */
   extraTools?: { tool: LoopTool; domain: string }[];
   /** Why the page is not a good end page, or undefined. Default: foxpaw's problemOf. */
@@ -87,7 +89,7 @@ export function createAgent(options: AgentOptions): Agent {
   let lastPage: Snapshot | undefined;
   const shielded = shieldedPaw({ browser: browser as never, onScan: async (scan) => { await trail.append({ actor: "foxshield", kind: "shield.scan", data: scan }); } });
   const paw = { ...shielded, snapshot: async (tabId: number, api?: ScriptingApi) => (lastPage = await shielded.snapshot(tabId, api)) };
-  const tabTools = (options.makeTools?.(() => target) ?? browserTools({ tabId: () => target, browser: browser as never, paw }))
+  const tabTools = [...(options.makeTools?.(() => target) ?? browserTools({ tabId: () => target, browser: browser as never, paw })), ...(options.moreTabTools?.(() => target) ?? [])]
     .map((tool) => (tool.name !== "click" ? tool : {
       ...tool,
       describe: async (args: Record<string, unknown>, ctx: ToolContext) => [await tool.describe?.(args, ctx), formDetail(lastPage, String(args.controlId))].filter(Boolean).join(" "),
