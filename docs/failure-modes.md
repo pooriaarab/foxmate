@@ -97,6 +97,7 @@ answer must reach the one request it names, once.
 | G12 | A goal from Chat runs on a lent tab without naming the loan, so it gets fill and submit grants inside the logged-in container | When the tab is in a loan's container, the run is a loan run with that loan's scope, named or not. | `tests/agent.test.ts` G12 |
 | G13 | foxlend's grant for a loan (its site and its allow list) sits on the agent's gate, so every run can reach those hosts | foxlend gets a gate host of its own. The agent's runs get only their own grants. | E2E lend |
 | G14 | The extra tools (the Space, Google) get grants above a loan's scope | On a loan run, an extra tool gets a grant only when its scope is within the loan's scope. | `tests/agent.test.ts` G14 |
+| G15 | A small model says "done" before it calls any tool, and the page check passes because the page shows no error (seen with Qwen3 on foxbench) | With no task check, `finish` passes only when a tool ran with a good result in this run, and the page shows no error. |  `tests/agent.test.ts` G15 |
 
 ## Space: Python on a dropped file (`src/space.ts`)
 

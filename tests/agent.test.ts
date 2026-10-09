@@ -168,4 +168,11 @@ describe("agent", () => {
     expect(grantsSeen[0]).toEqual(["read"]);
     expect(end).toMatchObject({ status: "blocked", reason: "gate-deny" });
   });
+
+  it("G15: finish with no tool result does not pass", async () => {
+    const { run, events } = await setup();
+    const end = await run({ script: [finish, finish] });
+    expect(end).toMatchObject({ status: "blocked", reason: "check-failed" });
+    expect(events.find((e) => e.type === "check")).toMatchObject({ ok: false, checks: [{ part: "a tool ran with a good result", ok: false }] });
+  });
 });
