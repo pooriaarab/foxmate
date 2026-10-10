@@ -39,3 +39,4 @@ td, th { text-align: left; border-bottom: 1px solid var(--line); padding: 4px 2p
 .memories .row { margin-top: 4px; }
 .memories button { padding: 2px 8px; }
 .steps .ask-note .kind { color: var(--ask); }
+#talk.on { background: var(--accent); color: #fff; }
