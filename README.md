@@ -72,6 +72,7 @@ try {
 | A security team | Test how a browser agent handles prompt injection | foxshield removes hidden text before the planner reads a page, approvals show what a form sends, and `foxmate bench` scores the traps of foxbench. |
 | A builder of agents | Start an agent of their own from working parts | `createAgent` wires foxmind, foxloop, foxgate, foxtrail, foxshield and foxmemory. Add tools with `extraTools`. |
 | A data person | Work on a CSV without an upload site | Drop the file in the Space. The planner's Python runs in a sandbox page with no network. |
+| A person who pays small bills online | Pay a bill or a paid API with test USDC, within a budget | foxpay reads the real amount from the `402` answer. foxgate refuses a payment over your cap, and you approve each payment with its exact amount, payee and site. |
 | A researcher | Compare planners on the same tasks | `foxmate bench --planner ollama --model <name>` scores a model in real Firefox on the 13 foxbench tasks. |
 
 ## How it works
@@ -94,9 +95,11 @@ flowchart TB
     tools --> den[foxden: Python, no network]
     tools -.-> lens[foxlens: screenshot, optional]
     tools -.-> link[foxlink: Gmail and Calendar, optional]
+    tools -.-> pay[foxpay: x402 payments, cap 0 = off]
     lend[foxlend: lent login in a container] --> gate
     vault[foxvault: own key and tokens] -.-> brain
     vault -.-> link
+    vault -.-> pay
   end
   brain -->|private| local[(llama-server, Ollama, or a model in Firefox)]
   brain -.->|own key, two consents| cloud[(Your cloud provider)]
@@ -118,6 +121,8 @@ One goal, step by step:
    allows page reads, typing and opening pages with no approval. It asks
    you before each click and each foxpaw task, because they can send a
    form. It denies other hosts.
+   A payment is a `pay` action of its own: foxpay reads the amount and the
+   payee from the bill's `402` answer, and foxgate checks your cap and asks.
 6. Once the run holds private data (your mail or calendar, a Space file, or
    memory notes in the goal), foxgate also asks you before each typing and
    each page that foxmate opens, for the rest of the run. Those are the ways
@@ -164,7 +169,7 @@ sequenceDiagram
 | Space | Files for the planner's Python. Network: off. |
 | Memory | Read, add, edit, pin and delete what foxmate remembers. |
 | Activity | The foxtrail log, whether it verifies, and an export. |
-| Settings | The privacy switch, the planner, your own key, and the optional modules. |
+| Settings | The privacy switch, the planner, your own key, the optional modules, and the payment cap, payees and wallet. |
 
 ## Privacy
 
@@ -195,6 +200,11 @@ This section says exactly what leaves your computer.
   this computer. Each mail body and event description passes foxshield
   first. foxmate prefers a mail's HTML part, which is what you see, and tells
   the planner which part it used.
+- **Payments (off by default).** With a cap above 0, the planner can pay a
+  bill on the tab's site with test USDC on Base Sepolia (x402). foxvault
+  keeps the wallet key; only foxpay's signer gets it. The paid answer and the
+  receipt go to your planner, so in private mode they stay on this computer.
+  After a payment, the run counts as holding private data.
 - **Phone approvals (off by default).** foxsync sends each approval to your
   phone over an encrypted peer-to-peer WebRTC link.
 - **The log.** foxtrail stays in this browser. It holds each tool call, its
@@ -225,7 +235,7 @@ the goal does not name, `all` approves everything, `none` denies everything.
 
 | Export | What it does |
 |---|---|
-| `createAgent({ browser, trail, memory?, publicSuffix?, extraTools?, moreTabTools?, maxSteps?, runMs? })` | The agent. `run({ goal, tabId, settings, loan?, signal?, onEvent? })` runs one goal and resolves with `{ status, summary?, reason?, message? }`. It also returns `gate`, `host` and `approvals`. |
+| `createAgent({ browser, trail, memory?, publicSuffix?, extraTools?, moreTabTools?, pay?, maxSteps?, runMs? })` | The agent. `run({ goal, tabId, settings, loan?, runKey?, signal?, onEvent? })` runs one goal and resolves with `{ status, summary?, reason?, message? }`. It also returns `gate`, `host` and `approvals`. |
 | `createBrain(settings, { hasDataConsent, goal?, browserModel? })` | The planner for the settings. Throws `BrainError` (`cloud-in-private`, `cloud-model-in-private`, `no-consent`, `unknown-planner`, `bad-script`) before any network call. |
 | `PLANNERS`, `KEY_HANDLE` | The planner choices, and the foxvault handle a cloud provider gets. |
 | `createApprovals({ host, trail? })` | One approval broker for the sidebar and the phone. The first answer decides. |
@@ -233,24 +243,23 @@ the goal does not name, `all` approves everything, `none` denies everything.
 | `recallNotes(memory, goal)`, `withNotes(goal, notes)` | The user's memories that fit a goal, as notes under it. |
 | `formDetail(snapshot, controlId)` | What a form holds, for the approval of its send button. |
 | `spaceTool(den)`, `lookTool(tabId, deps)`, `googleTools(deps)` | The Space, screenshot and Google tools. |
+| `payTool(foxpay, run)`, `toAtomic`, `fromAtomic`, `parsePayees` | The planner's `pay` tool. `createAgent({ pay: { x402, store, cap } })` adds it: `x402` is foxpay's method, and `cap()` gives the cap for one goal in atomic test USDC. |
 | `scriptMind(script, goal)` | The scripted planner for tests and the bench. |
 
-Extension points: foxpay (payments) and foxbridge (outside agents over MCP)
-come later. A payment tool would be a tool with scope `pay` and an `amount`,
-added with `extraTools`, so foxgate's spend caps and an approval for each
-payment apply.
+Extension point: foxbridge (outside agents over MCP) comes later.
 
 ## Tests
 
-`pnpm ci:local` runs lint, typecheck, 67 isolated tests, the build and
+`pnpm ci:local` runs lint, typecheck, 73 isolated tests, the build and
 `web-ext lint`. Each isolated test covers a failure mode in
 [docs/failure-modes.md](docs/failure-modes.md), written before the code.
 
 `pnpm e2e` runs foxmate in a real Firefox through the real sidebar and
 writes `artifacts/e2e-<date>.json`. The planner is the scripted one, so
 each run is the same. Our run on 2026-10-09 (Firefox 157.0.1, Apple M3 Pro,
-headless) passed all 45 checks, with `FOXMATE_VISION` set to an Ollama
-address that allows extension origins (44 without it). Some of them:
+headless, without `FOXMATE_VISION`) passed all 53 checks. With
+`FOXMATE_VISION` set to an Ollama address that allows extension origins, the
+vision check runs too. Some of them:
 
 | Check | Result |
 |---|---|
@@ -270,6 +279,7 @@ address that allows extension origins (44 without it). Some of them:
 | A read loan allows `attacker.test`; a normal run opens it | foxgate denies it: the loan's grant is not the run's |
 | Two goals at once | The first runs; the second ends as refused, and you start it again |
 | A run waits, the tab moves to another host, the extension reloads | The task runs again, sees the other host, and refuses |
+| Pay a bill of 0.01 test USDC with a cap of 0.05 | One approval with the exact amount, payee and site; the paid API sees one payment; the same payment again pays nothing; a bill of 1 USDC is refused (`spend-cap`) |
 | A canvas page, with `FOXMATE_VISION` | `qwen3-vl:2b` in Ollama describes the screenshot |
 
 ## Scores on foxbench
@@ -323,6 +333,7 @@ Read these rows with care:
 | `privacy.network` (through foxlend) | [privacy](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/privacy) | WebRTC and network prediction are off while a loan is active. |
 | `publicSuffix.getDomain` | [publicSuffix](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/publicSuffix) | One site rule for foxgate and foxlend. |
 | `alarms`, `runtime.onStartup` (through foxrunner) | [alarms](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/alarms) | Wake the page for schedules and for a task cut short. |
+| `fetch` with host permissions (through foxpay) | [fetch](https://developer.mozilla.org/en-US/docs/Web/API/Window/fetch) | Read the `402` answer of a bill and send the signed payment. |
 | `notifications` | [notifications](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/notifications) | Tell you that an approval waits while no sidebar is open. |
 | `identity.launchWebAuthFlow` (through foxlink) | [identity](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/identity) | Google sign-in for the optional Gmail and Calendar tools. |
 | `permissions.request`, `permissions.contains` with `data_collection` | [permissions.request](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/permissions/request) | Firefox's consent before page text goes to your key, or mail to Google tools. |
@@ -376,7 +387,11 @@ Read these rows with care:
   against Google. Screenshots need Ollama with
   `OLLAMA_ORIGINS="moz-extension://*"`; so does the Ollama planner.
 - foxmate is not signed on AMO yet.
-- foxpay and foxbridge are not part of foxmate yet.
+- Payments use x402 on Base Sepolia with test USDC only. There is no card
+  checkout. Each site needs its payee address in Settings.
+- The cap holds for one goal. The next goal starts at 0 spent.
+- A denied payment does not end the run. The planner gets the refusal.
+- foxbridge is not part of foxmate yet.
 
 ## Part of the fox primitives
 
@@ -398,7 +413,7 @@ flowchart LR
   foxsync[foxsync] --> foxmate
   foxlens[foxlens] --> foxmate
   foxlink[foxlink] --> foxmate
-  foxpay[foxpay, later] -.-> foxmate
+  foxpay[foxpay] --> foxmate
   foxbridge[foxbridge, later] -.-> foxmate
   click foxkit "https://github.com/pooriaarab/foxkit"
   click foxbench "https://github.com/pooriaarab/foxbench"
@@ -421,11 +436,12 @@ flowchart LR
   click foxmate "https://github.com/pooriaarab/foxmate"
 ```
 
-foxmate uses every primitive except foxpay and foxbridge. Nothing depends
+foxmate uses every primitive except foxbridge. Nothing depends
 on foxmate. Two primitives have other names on npm: foxden is
 [`foxden-sandbox`](https://www.npmjs.com/package/foxden-sandbox) and foxlink
 is [`foxlink-oauth`](https://www.npmjs.com/package/foxlink-oauth).
 `package.json` installs them under the names `foxden` and `foxlink`.
+foxpay is [`foxpay-agent`](https://www.npmjs.com/package/foxpay-agent) on npm.
 
 ## Development
 
