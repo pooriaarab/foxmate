@@ -3,7 +3,7 @@
 // through foxgate, page text passes foxshield, approvals come from a human,
 // and foxtrail records each step (docs/failure-modes.md G1-G10).
 import { createFoxgate, type Gate, type Host, type PublicSuffix, type Scope } from "foxgate";
-import { browserTools, createLoop, toolSpecs, type CheckResult, type LoopEvent, type LoopTool, type ToolContext } from "foxloop";
+import { browserTools, createLoop, toolSpecs, type CheckResult, type LoopEvent, type LoopTool, type MindLike, type ToolContext } from "foxloop";
 import { GATE_CURRENCY, PAY_TOOL, createFoxpay, payTools, type Foxpay } from "foxpay-agent";
 import type { FoxMemory } from "foxmemory";
 import * as foxpaw from "foxpaw";
@@ -46,6 +46,8 @@ export interface RunInput {
   allowPrivate?: boolean;
   /** The same for each attempt of one task (the foxrunner task id). A payment uses it against replays (PY5). */
   runKey?: string;
+  /** A planner from outside, for example one call from foxbridge. It skips the brain and memory (BR5). */
+  mind?: MindLike;
   signal?: AbortSignal;
   onEvent?: (event: AgentEvent) => void;
 }
@@ -166,12 +168,12 @@ export function createAgent(options: AgentOptions): Agent {
       if (loan?.state && loan.state !== "active") return await refuse("loan-not-active", "The loan for this tab is not active.");
       const onLoan = (h: string) => h === loan?.domain || (loan?.site !== undefined && (h === loan.site || h.endsWith(`.${loan.site}`)));
       if (loan && (loan.domain || loan.site) && !(domain && onLoan(domain))) return await refuse("loan-host", `The lent tab is on ${domain ?? "no web page"}, not on the lent site.`);
-      await trail.append({ actor: "user", kind: "run.start", data: { goal: input.goal, domain: domain ?? null, planner: input.settings.planner ?? "saluki", loan: Boolean(loan) } });
-      const recalled = options.memory ? await recallNotes(options.memory, input.goal) : { notes: [] };
-      emit({ type: "recall", ...recalled });
+      await trail.append({ actor: "user", kind: "run.start", data: { goal: input.goal, domain: domain ?? null, planner: input.mind ? "foxbridge" : (input.settings.planner ?? "saluki"), loan: Boolean(loan) } });
+      const recalled = options.memory && !input.mind ? await recallNotes(options.memory, input.goal) : { notes: [] };
+      if (!input.mind) emit({ type: "recall", ...recalled });
       const goal = withNotes(input.goal, recalled.notes);
-      let brain;
-      try {
+      let brain: { mind: MindLike; planner: string; privacy: string } | undefined = input.mind && { mind: input.mind, planner: "foxbridge", privacy: "outside" };
+      if (!brain) try {
         brain = await createBrain(input.settings, {
           hasDataConsent: async () => (await browser.permissions?.contains({ data_collection: ["websiteContent"] })) ?? false,
           goal,

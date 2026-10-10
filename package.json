@@ -39,8 +39,10 @@
   },
   "devDependencies": {
     "@huggingface/transformers": "^4.3.1",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@types/node": "^24.19.1",
     "esbuild": "^0.28.2",
+    "foxbridge": "^0.1.2",
     "oxlint": "^1.87.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3",
