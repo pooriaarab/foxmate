@@ -163,6 +163,24 @@ the cap, and a human approves each payment.
 | PY12 | The wallet key reaches the planner, the trail or `storage.local` in clear | foxvault keeps it encrypted. Only foxpay's signer gets it, through `vault.use`. The receipt holds the payer address and the nonce. | E2E pay |
 
 
+## Bridge: an outside agent on one shared tab (`src/bridge.ts`, `extension/bridge.js`)
+
+An MCP client such as Claude Code drives one tab that the user shares from
+the sidebar. foxmate speaks foxbridge's native messaging protocol. Each
+call is a run of its own through the agent, with a planner that asks for
+that one call.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| BR1 | A call names a tab that the user did not share | foxmate refuses it with `not-shared` before any run. | E2E bridge |
+| BR2 | A bridge call skips foxgate, foxshield or the approvals that foxmate's own planner gets | The call runs through `agent.run`: grants for the tab's host only, foxshield on each page read, and the approval in Chat. | `tests/bridge.test.ts` BR2; E2E bridge |
+| BR3 | A call reaches another host, for example `open_url` to another site | foxgate denies it (`no-grant`). The agent gets `denied`. | `tests/bridge.test.ts` BR3 |
+| BR4 | The agent gets raw page text, with the hidden text in it | The reply holds the text that a planner reads: foxshield's output, between foxloop's data marks. | `tests/bridge.test.ts` BR4; E2E bridge |
+| BR5 | Memory notes join a bridge call's goal, so they reach the outside agent or change the grants | A run with an outside planner recalls no memories. | `tests/bridge.test.ts` BR5 |
+| BR6 | A denied approval reaches the agent as a good result | The agent gets `approval-denied`, and nothing ran. | `tests/bridge.test.ts` BR6; E2E bridge |
+| BR7 | The shared tab moves to another host, and the agent drives the new site | foxmate stops sharing, and refuses the call with `not-shared`. | E2E bridge |
+| BR8 | Stop leaves the agent connected, or an approval waiting | Stop closes the native port, ends the waiting run (its approval ends as no) and stops sharing. The agent gets `host-gone`, then `bridge-off`. | E2E bridge |
+
 ## AMO release build and listed submission (`scripts/amo-listing.mjs`)
 
 `pnpm check:amo` reads `dist-ext/`, which is what `release.yml` signs. Each

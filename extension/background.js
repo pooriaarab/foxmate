@@ -14,6 +14,7 @@ import { IdbStore, Log, idbKey } from "foxtrail";
 import { attachHeaderInjection, createVault, indexedDbKeyStore } from "foxvault";
 import { sanitize, scanDocument } from "foxshield";
 import { x402 } from "foxpay-agent";
+import { createBridge } from "./bridge.js";
 import { KEY_HANDLE, SPACE_DOMAIN, createAgent, googleTools, lookTool, parsePayees, shieldedMailText, shieldedText, spaceTool, toAtomic } from "../src/index.ts";
 
 /** foxshield on an HTML string: a parsed document, scanned in static mode (no layout). */
@@ -212,7 +213,7 @@ async function runNow(input) {
   }
 }
 
-async function runClaimed({ goal, tabId, loanId, taskId, signal, allowPrivate }) {
+async function runClaimed({ goal, tabId, loanId, taskId, signal, allowPrivate, mind, tap }) {
   const { settings = {} } = await browser.storage.local.get("settings");
   // Device mode unlocks without a passphrase; the header rule needs it unlocked.
   if (settings.privacy === "own-key" && (await vault.status()) === "locked") await vault.unlock();
@@ -226,9 +227,10 @@ async function runClaimed({ goal, tabId, loanId, taskId, signal, allowPrivate })
   send({ run: { id: run.id, goal } });
   const onEvent = (event) => {
     run.events.push(event);
+    tap?.(event);
     send({ runId: run.id, event });
   };
-  const end = await agent.run({ goal, tabId, settings, allowPrivate: Boolean(allowPrivate), ...(taskId ? { runKey: taskId } : {}), signal: run.controller.signal, onEvent, ...(loan ? { loan: { cookieStoreId: loan.cookieStoreId, scope: loan.scope, domain: loan.domain, ...(loan.match === "site" ? { site: loan.site } : {}), state: loan.state } } : {}) })
+  const end = await agent.run({ goal, tabId, settings, allowPrivate: Boolean(allowPrivate), ...(taskId ? { runKey: taskId } : {}), ...(mind ? { mind } : {}), signal: run.controller.signal, onEvent, ...(loan ? { loan: { cookieStoreId: loan.cookieStoreId, scope: loan.scope, domain: loan.domain, ...(loan.match === "site" ? { site: loan.site } : {}), state: loan.state } } : {}) })
     .catch((error) => ({ status: "blocked", reason: "error", message: error instanceof Error ? error.message : String(error) }));
   run.end = end;
   send({ runId: run.id, end });
@@ -283,6 +285,9 @@ runner.define("goal", [{
     return { ...end, attempt: ctx.attempt };
   },
 }]);
+// The Claude Code bridge: each call from the outside agent runs now, as a run of its own. It is not a foxrunner task.
+const bridge = createBridge({ send, run: (tabId, tool, mind, tap, signal) => runNow({ goal: `Claude Code over foxbridge: ${tool}`, tabId, mind, tap, signal }) });
+
 agent.approvals.onChange((waiting) => {
   if (waiting.length && !ports.size) notify("foxmate waits for your approval. Open the sidebar.");
 });
@@ -293,7 +298,7 @@ browser.runtime.onConnect.addListener((port) => {
   if (port.name !== "foxmate") return;
   ports.add(port);
   if (current) port.postMessage({ run: { id: current.id, goal: current.goal }, events: current.events, end: current.end });
-  port.postMessage({ waiting: agent.approvals.waiting() });
+  port.postMessage({ waiting: agent.approvals.waiting(), ...bridge.view() });
   port.onDisconnect.addListener(() => ports.delete(port));
   port.onMessage.addListener(async (message) => {
     try {
@@ -305,6 +310,8 @@ browser.runtime.onConnect.addListener((port) => {
       }
       else if (message.op === "answer") await agent.approvals.answer(message.requestId, message.answer, message.via === "phone" ? "phone" : "sidebar");
       else if (message.op === "stop") current?.controller.abort();
+      else if (message.op === "bridge-share") await bridge.share(message.tabId);
+      else if (message.op === "bridge-stop") bridge.stop();
       else if (message.op === "set-key") {
         const saved = await setKey(message).then((host) => ({ keySaved: host }), (error) => ({ keyError: error.message }));
         port.postMessage(saved);

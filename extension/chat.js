@@ -44,7 +44,7 @@ function approval(event) {
 }
 
 function show(event) {
-  if (event.type === "start") line("Planner", ` ${event.planner} (${event.privacy === "cloud" ? "own key, cloud" : "private, on this computer"})`);
+  if (event.type === "start") line("Planner", ` ${event.planner} (${{ cloud: "own key, cloud", outside: "an outside agent over MCP" }[event.privacy] ?? "private, on this computer"})`);
   else if (event.type === "recall" && (event.notes.length || event.error)) line("Memory", event.error ? ` not used: ${event.error}` : ` ${event.notes.join(" · ")}`);
   else if (event.type === "plan") line("Plan", ` ${event.calls.map((c) => `${c.name}(${c.args})`).join(", ") || event.text || "(no call)"}`);
   else if (event.type === "decision") line("Gate", ` ${event.via} ${event.decision}${event.reason ? `: ${event.reason}` : ""}`, event.decision === "deny" ? "bad" : "");
