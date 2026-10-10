@@ -141,6 +141,16 @@
         <div class="row"><button id="google-connect" type="button">Connect Google</button></div>
         <p id="google-status" class="muted" role="status"></p>
       </div>
+      <h2>Notices (foxnotify)</h2>
+      <div id="notice-panel">
+        <p class="hint">When a goal needs you, ends, or a schedule runs late, and no sidebar is in view, foxmate shows a notice on this computer. A click opens the tab or the approval. It never approves.</p>
+        <label class="inline"><input id="notice-quiet" type="checkbox" /> Quiet hours: only urgent notices show</label>
+        <div class="row"><input id="notice-quiet-start" type="time" value="22:00" aria-label="Quiet hours start" /><input id="notice-quiet-end" type="time" value="07:00" aria-label="Quiet hours end" /></div>
+        <label for="notice-webhook-url">Webhook, for example your own ntfy topic (optional)</label><input id="notice-webhook-url" type="url" autocomplete="off" placeholder="https://ntfy.example.org/my-foxmate" />
+        <label for="notice-preview">What the webhook gets</label><pre id="notice-preview">Type an address to see the request.</pre>
+        <label class="inline"><input id="notice-webhook" type="checkbox" /> Send notices to this webhook</label>
+        <label class="inline"><input id="notice-title" type="checkbox" /> Put the goal in the webhook notice (Firefox asks first)</label>
+      </div>
       <h2>Payments (foxpay)</h2>
       <div id="pay-panel">
         <p class="hint">foxmate can pay a bill on the tab's site with test USDC on Base Sepolia (x402). Each payment waits for your Approve, with the exact amount, payee and site. A cap of 0 turns payments off.</p>
