@@ -22,12 +22,12 @@ const NEEDED = { permissions: ["nativeMessaging"], data_collection: ["websiteCon
  * page, so it writes the grant to Firefox's own permission store from the
  * browser window, as the prompt does. dist-ext/ has no grant hook.
  */
-async function grant(fox) {
+export async function grant(fox, needed = NEEDED) {
   const tree = await fox.browser.connection.send("browsingContext.getTree", { "moz:scope": "chrome" });
   await fox.browser.connection.send("script.evaluate", {
     expression: `(async () => {
       const { ExtensionPermissions } = ChromeUtils.importESModule("resource://gre/modules/ExtensionPermissions.sys.mjs");
-      await ExtensionPermissions.add("${fox.extensionId}", { permissions: ${JSON.stringify(NEEDED.permissions)}, origins: [], data_collection: ${JSON.stringify(NEEDED.data_collection)} }, WebExtensionPolicy.getByID("${fox.extensionId}").extension);
+      await ExtensionPermissions.add("${fox.extensionId}", { permissions: ${JSON.stringify(needed.permissions)}, origins: [], data_collection: ${JSON.stringify(needed.data_collection)} }, WebExtensionPolicy.getByID("${fox.extensionId}").extension);
     })()`,
     target: { context: tree.result.contexts[0].context }, awaitPromise: true, "moz:scope": "chrome",
   });

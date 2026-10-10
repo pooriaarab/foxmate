@@ -27,3 +27,4 @@ minimumReleaseAgeExclude:
   - foxpay-agent@0.1.2
   - foxbridge@0.1.2
   - foxpass@0.1.0
+  - foxnotify@0.1.0

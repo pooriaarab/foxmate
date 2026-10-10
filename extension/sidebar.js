@@ -8,13 +8,14 @@ import { lend } from "./lend.js";
 import { memory } from "./memory.js";
 import { pay } from "./pay.js";
 import { modules } from "./modules.js";
+import { notices } from "./notices.js";
 import { phone } from "./phone.js";
 import { settings } from "./settings.js";
 import { space } from "./space.js";
 import { today } from "./today.js";
 
 const $ = (id) => document.getElementById(id);
-const views = { chat, today, lend, space, memory, activity, settings, phone, modules, pay, bridge };
+const views = { chat, today, lend, space, memory, activity, settings, phone, modules, notices, pay, bridge };
 // The port to the background page. Firefox unloads an idle background page
 // even while a sidebar has a port open (K1), so the sidebar sends a message
 // every 20 s. When the page restarts anyway, the sidebar connects again (K2).
@@ -26,8 +27,14 @@ const port = {
   onDisconnect: { addListener: (fn) => disconnected.add(fn) },
 };
 const disconnected = new Set();
+// The background page sends a notice only while no sidebar is in view (NT1).
+// A runtime port, not window.postMessage: it takes no target origin.
+// oxlint-disable-next-line unicorn/require-post-message-target-origin
+const seen = () => current?.postMessage({ op: "seen", visible: document.visibilityState === "visible" });
+document.addEventListener("visibilitychange", seen);
 function connect() {
   current = browser.runtime.connect({ name: "foxmate" });
+  seen();
   current.onMessage.addListener((message) => {
     for (const view of Object.values(views)) view.message?.(message);
   });
