@@ -184,6 +184,24 @@ that one call.
 | BR10 | The bridge adds a required permission, so every existing install sees a prompt on update | `nativeMessaging` is an optional permission, asked for at the share click. `websiteContent` is optional data collection. | E2E bridge (reads `dist-ext/manifest.json`) |
 | BR11 | A hook that grants the consent for tests ships in `dist-ext/` | The E2E test grants it with a real click in a test profile whose pref skips the prompt. `dist-ext/` has no grant hook. | E2E bridge |
 
+## Sign-in handoff: the user signs in, not the agent (`src/pass.ts`)
+
+A run can reach a sign-in page, a one-time code, a passkey request, a
+CAPTCHA or an OAuth consent screen. Only the user can do that step.
+foxpass names the step, and the run waits for the user.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| HP1 | A run reaches a sign-in wall and fails, or the planner tries to type into the password field | Before each page read, foxpass scans the tab. On a wall, the run waits. The planner reads the page only after the user signs in. | E2E pass |
+| HP2 | The user does not know that the agent waits for them | Chat shows "Sign in on this tab, then the agent goes on.", with foxpass's words for the step. foxpass brings the tab to the front and outlines the field. | E2E pass |
+| HP3 | The run waits after the user signed in | foxpass's signed-in signal ends the wait, and the read goes on with the new page. A password page that leads to a code page stays one wait. | E2E pass |
+| HP4 | The user does not sign in, or presses Stop, and the run hangs | Stop ends the wait and the run. A timeout or a closed tab fails the read, and the planner is told to stop. | E2E pass (Stop) |
+| HP5 | A typed password or code reaches the planner, as a field value or as page text that repeats it | Each snapshot passes foxpass's `redactSnapshot` after foxshield. A secret field and each copy of its value show `[redacted]`. Fields get foxpass's `autocomplete` hint from the newest scan of the tab. | `tests/pass.test.ts` HP5; E2E pass (leak check) |
+| HP6 | A typed secret reaches the log, the sidebar or memory | foxshield's quotes in the log pass the same redaction. The handoff entries in the log hold the step kind, the host and the end status only. A run writes no memory. | E2E pass (leak check) |
+| HP7 | The scan fails (a page that foxmate cannot script), and every page read stops | foxmate logs `handoff.scan-failed`, and the read goes on with no wait. foxshield still reads the page. | `tests/pass.test.ts` HP7 |
+| HP8 | foxpass needs `webNavigation`, so every install sees a permission prompt on update | foxmate gives foxpass a stand-in that reads the tab address from `tabs.get`. foxpass then reads the top frame of the tab. The manifest gets no new permission. | E2E pass (reads `dist-ext/manifest.json`) |
+| HP9 | A sign-up form, where the goal gives a new password, pauses the run | A password field with `autocomplete="new-password"` is not a wall for foxmate. The planner fills it, and the send still asks you. | E2E signup (E1) |
+
 ## AMO release build and listed submission (`scripts/amo-listing.mjs`)
 
 `pnpm check:amo` reads `dist-ext/`, which is what `release.yml` signs. Each
