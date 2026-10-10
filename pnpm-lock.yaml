@@ -65,6 +65,9 @@ importers:
       foxvault:
         specifier: ^0.1.0
         version: 0.1.0
+      foxvoice:
+        specifier: ^0.1.0
+        version: 0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1))
     devDependencies:
       '@huggingface/transformers':
         specifier: ^4.3.1
@@ -1656,6 +1659,16 @@ packages:
       '@huggingface/transformers':
         optional: true
 
+  foxmind@0.1.2:
+    resolution: {integrity: sha512-grq9qrFaFXIuZwfqyamzyHS0O5ybeVi+BnpRICWHy4kDLqIInBPjM4oHUx1OSO4r5TTntcQ83Io4OrY7Oc/grg==}
+    engines: {node: '>=24'}
+    hasBin: true
+    peerDependencies:
+      '@huggingface/transformers': ^4.3.1
+    peerDependenciesMeta:
+      '@huggingface/transformers':
+        optional: true
+
   foxnotify@0.1.0:
     resolution: {integrity: sha512-+cifv/fZLx2zZa2+gG6aWTxyCrBpNfUJlf3Oo7uTeUHlko7d2tIy23LFlmizKxgZsDbodlpxdfu7g7KdD8wtpg==}
     engines: {node: '>=24'}
@@ -1699,6 +1712,15 @@ packages:
   foxvault@0.1.0:
     resolution: {integrity: sha512-Hmf21lCYgEgOtSVo3tr3NyCDOqqcXxm88ksEJD55SCc9/pKa3uTu1eVZuYmEXAkMyq3A3MG9KPnQbHetWx9ebQ==}
     engines: {node: '>=24'}
+
+  foxvoice@0.1.0:
+    resolution: {integrity: sha512-dyxjWfjJ6YmK1lOhaUvk8pzKiRY3ZDdm0Gu1UsaCWkhCaUMrL5dJMyhM0hzXDXKKqBhRbZoy5/J91qCA3Eo8ag==}
+    engines: {node: '>=24'}
+    peerDependencies:
+      '@huggingface/transformers': ^4.3.1
+    peerDependenciesMeta:
+      '@huggingface/transformers':
+        optional: true
 
   fresh@2.0.0:
     resolution: {integrity: sha512-Rx/WycZ60HOaqLKAi6cHRKKI7zxWbJ31MhntmtwMoaTeF7XFH9hhBp8vITaMidfljRQ6eYWCKkaTK+ykVJHP2A==}
@@ -4217,6 +4239,10 @@ snapshots:
     optionalDependencies:
       '@huggingface/transformers': 4.3.1(@types/node@24.19.1)
 
+  foxmind@0.1.2(@huggingface/transformers@4.3.1(@types/node@24.19.1)):
+    optionalDependencies:
+      '@huggingface/transformers': 4.3.1(@types/node@24.19.1)
+
   foxnotify@0.1.0(foxsync@0.1.0):
     optionalDependencies:
       foxsync: 0.1.0
@@ -4254,6 +4280,12 @@ snapshots:
   foxvault@0.1.0:
     dependencies:
       foxgate: 0.1.0
+
+  foxvoice@0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1)):
+    dependencies:
+      foxmind: 0.1.2(@huggingface/transformers@4.3.1(@types/node@24.19.1))
+    optionalDependencies:
+      '@huggingface/transformers': 4.3.1(@types/node@24.19.1)
 
   fresh@2.0.0: {}
 

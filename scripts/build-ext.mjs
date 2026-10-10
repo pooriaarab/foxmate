@@ -14,7 +14,7 @@ if (manifest.version !== pkg.version) {
   process.exit(1);
 }
 
-const ENTRIES = ["background.js", "sidebar.js", "browser-model.js", "passkey.js"];
+const ENTRIES = ["background.js", "sidebar.js", "browser-model.js", "passkey.js", "mic.js"];
 // foxshield's scanHtml needs linkedom, which only Node uses. The extension
 // scans live pages with scanDocument, so linkedom becomes a stub that throws.
 const noLinkedom = {
