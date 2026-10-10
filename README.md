@@ -209,7 +209,9 @@ This section says exactly what leaves your computer.
   After a payment, the run counts as holding private data.
 - **Claude Code bridge (off by default).** When you share a tab, Claude Code
   gets that tab's page text after foxshield, and sends it to its own model.
-  Private mode does not cover it.
+  Private mode does not cover it. So the share click asks for Firefox's
+  `websiteContent` data consent and the optional `nativeMessaging`
+  permission. If Firefox says no, the bridge stays off.
 - **Phone approvals (off by default).** foxsync sends each approval to your
   phone over an encrypted peer-to-peer WebRTC link.
 - **The log.** foxtrail stays in this browser. It holds each tool call, its
@@ -278,7 +280,7 @@ the goal does not name, `all` approves everything, `none` denies everything.
 `pnpm e2e` runs foxmate in a real Firefox through the real sidebar and
 writes `artifacts/e2e-<date>.json`. The planner is the scripted one, so
 each run is the same. Our run on 2026-10-09 (Firefox 157.0.1, Apple M3 Pro,
-headless, without `FOXMATE_VISION`) passed all 60 checks. With
+headless, without `FOXMATE_VISION`) passed all 65 checks. With
 `FOXMATE_VISION` set to an Ollama address that allows extension origins, the
 vision check runs too. Some of them:
 
@@ -356,7 +358,7 @@ Read these rows with care:
 | `publicSuffix.getDomain` | [publicSuffix](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/publicSuffix) | One site rule for foxgate and foxlend. |
 | `alarms`, `runtime.onStartup` (through foxrunner) | [alarms](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/alarms) | Wake the page for schedules and for a task cut short. |
 | `fetch` with host permissions (through foxpay) | [fetch](https://developer.mozilla.org/en-US/docs/Web/API/Window/fetch) | Read the `402` answer of a bill and send the signed payment. |
-| `runtime.connectNative`, `nativeMessaging` | [connectNative](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/runtime/connectNative) | Start the foxbridge host while a tab is shared, and answer its calls. |
+| `runtime.connectNative`, optional `nativeMessaging` | [connectNative](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/runtime/connectNative) | Start the foxbridge host while a tab is shared, and answer its calls. |
 | `notifications` | [notifications](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/notifications) | Tell you that an approval waits while no sidebar is open. |
 | `identity.launchWebAuthFlow` (through foxlink) | [identity](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/identity) | Google sign-in for the optional Gmail and Calendar tools. |
 | `permissions.request`, `permissions.contains` with `data_collection` | [permissions.request](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/permissions/request) | Firefox's consent before page text goes to your key, or mail to Google tools. |
