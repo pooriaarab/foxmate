@@ -1,6 +1,6 @@
 {
   "name": "foxmate",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "An open-source personal agent that runs in your own Firefox.",
   "type": "module",
   "license": "MIT",
