@@ -67,7 +67,8 @@
     "foxshield": "^0.1.0",
     "foxsync": "^0.1.0",
     "foxtrail": "^0.1.0",
-    "foxvault": "^0.1.0"
+    "foxvault": "^0.1.0",
+    "foxvoice": "^0.1.0"
   },
   "bin": {
     "foxmate": "cli/foxmate.mjs"
