@@ -11,6 +11,7 @@ import keepalive from "./checks/keepalive.mjs";
 import lend from "./checks/lend.mjs";
 import memory from "./checks/memory.mjs";
 import modules from "./checks/modules.mjs";
+import pay from "./checks/pay.mjs";
 import phone, { PHONE_PREFS } from "./checks/phone.mjs";
 import privacy from "./checks/privacy.mjs";
 import signup from "./checks/signup.mjs";
@@ -20,7 +21,7 @@ import traps from "./checks/traps.mjs";
 import { BANK_HOSTS } from "./bank.mjs";
 import { runGoal, startFox } from "./lib.mjs";
 
-const CHECKS = { signup, privacy, traps, memory, lend, space, phone, modules, activity, tasks, keepalive };
+const CHECKS = { signup, privacy, traps, memory, lend, space, phone, modules, activity, pay, tasks, keepalive };
 
 const record = { startedAt: new Date().toISOString(), checks: [], runs: {} };
 const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });

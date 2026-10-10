@@ -13,7 +13,8 @@ import { createRunner, storageAreaStore as runnerStore } from "foxrunner";
 import { IdbStore, Log, idbKey } from "foxtrail";
 import { attachHeaderInjection, createVault, indexedDbKeyStore } from "foxvault";
 import { sanitize, scanDocument } from "foxshield";
-import { KEY_HANDLE, SPACE_DOMAIN, createAgent, googleTools, lookTool, shieldedMailText, shieldedText, spaceTool } from "../src/index.ts";
+import { x402 } from "foxpay-agent";
+import { KEY_HANDLE, SPACE_DOMAIN, createAgent, googleTools, lookTool, parsePayees, shieldedMailText, shieldedText, spaceTool, toAtomic } from "../src/index.ts";
 
 /** foxshield on an HTML string: a parsed document, scanned in static mode (no layout). */
 const sanitizeHtml = (html) => sanitize(scanDocument(new DOMParser().parseFromString(html, "text/html"), { mode: "static" }));
@@ -68,10 +69,42 @@ const googleOn = async () => Boolean((await modules()).google)
   && (await browser.permissions.contains({ data_collection: ["personalCommunications"] }).catch(() => false))
   && (await google().then((l) => l.status(), () => ({ connected: false }))).connected;
 
+// The own key lives in foxvault. foxvault puts it in the request header as
+// the request leaves Firefox, for the key's host only.
+const vault = createVault({ store: storageAreaStore(browser.storage.local), keyStore: indexedDbKeyStore("foxmate-vault") });
+attachHeaderInjection(vault, browser);
+
+// Payments (foxpay): x402 with a Base Sepolia test wallet in foxvault. The
+// payee of each host and the cap come from Settings; the cap 0 turns it off.
+const WALLET = "vault:wallet";
+const payTo = {};
+const payOptions = {
+  x402: x402({ vault, wallet: WALLET, payTo }),
+  store: storageAreaStore(browser.storage.local),
+  async cap() {
+    const pay = (await browser.storage.local.get("settings")).settings?.pay ?? {};
+    for (const host of Object.keys(payTo)) delete payTo[host];
+    Object.assign(payTo, parsePayees(pay.payees));
+    return toAtomic(pay.cap) ?? 0;
+  },
+};
+
+/** Stores the wallet key for the payee hosts in Settings. */
+async function setWallet({ key }) {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key.trim())) throw new Error("A wallet key is 0x and 64 hex digits.");
+  const hosts = Object.keys(parsePayees((await browser.storage.local.get("settings")).settings?.pay?.payees));
+  if (!hosts.length) throw new Error("Add a payee first.");
+  if ((await vault.status()) === "new") await vault.initialize();
+  await vault.unlock();
+  if ((await vault.list()).some((s) => s.handle === WALLET)) await vault.remove(WALLET);
+  await vault.set(WALLET, key.trim(), { domains: hosts });
+  return hosts;
+}
+
 // foxgate and foxlend share one public suffix rule and one gate host.
 const publicSuffix = withDefaultRule(browser.publicSuffix);
 const agent = createAgent({
-  browser, trail, memory, publicSuffix, maxSteps: 30,
+  browser, trail, memory, publicSuffix, maxSteps: 30, pay: payOptions,
   extraTools: [
     // The Space's files and the user's mail are private data: after either, foxmate asks
     // before each typing and each page it opens (G16). Mail needs the goal to opt in on a web tab (G18).
@@ -135,11 +168,6 @@ async function lend({ domain, url, scope, ttlMs, allow }) {
   return loan;
 }
 
-// The own key lives in foxvault. foxvault puts it in the request header as
-// the request leaves Firefox, for the key's host only.
-const vault = createVault({ store: storageAreaStore(browser.storage.local), keyStore: indexedDbKeyStore("foxmate-vault") });
-attachHeaderInjection(vault, browser);
-
 /** Stores the own key for the planner's host, with its header rule. Returns the host. */
 async function setKey({ key, planner, baseURL }) {
   const anthropic = planner === "anthropic";
@@ -200,7 +228,7 @@ async function runClaimed({ goal, tabId, loanId, taskId, signal, allowPrivate })
     run.events.push(event);
     send({ runId: run.id, event });
   };
-  const end = await agent.run({ goal, tabId, settings, allowPrivate: Boolean(allowPrivate), signal: run.controller.signal, onEvent, ...(loan ? { loan: { cookieStoreId: loan.cookieStoreId, scope: loan.scope, domain: loan.domain, ...(loan.match === "site" ? { site: loan.site } : {}), state: loan.state } } : {}) })
+  const end = await agent.run({ goal, tabId, settings, allowPrivate: Boolean(allowPrivate), ...(taskId ? { runKey: taskId } : {}), signal: run.controller.signal, onEvent, ...(loan ? { loan: { cookieStoreId: loan.cookieStoreId, scope: loan.scope, domain: loan.domain, ...(loan.match === "site" ? { site: loan.site } : {}), state: loan.state } } : {}) })
     .catch((error) => ({ status: "blocked", reason: "error", message: error instanceof Error ? error.message : String(error) }));
   run.end = end;
   send({ runId: run.id, end });
@@ -280,6 +308,9 @@ browser.runtime.onConnect.addListener((port) => {
       else if (message.op === "set-key") {
         const saved = await setKey(message).then((host) => ({ keySaved: host }), (error) => ({ keyError: error.message }));
         port.postMessage(saved);
+      }
+      else if (message.op === "set-wallet") {
+        port.postMessage(await setWallet(message).then((hosts) => ({ walletSaved: hosts.join(", ") }), (error) => ({ walletError: error.message })));
       }
     } catch (error) {
       port.postMessage({ error: error instanceof Error ? error.message : String(error) });

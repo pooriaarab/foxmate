@@ -58,7 +58,7 @@ export const settings = {
   init(p) {
     port = p;
     $("nav").closest("body").querySelector('section[data-view="settings"]').addEventListener("change", (event) => {
-      if (event.target.id !== "api-key" && !event.target.closest("#phone-panel, #lens-panel, #google-panel") && !event.target.id.startsWith("module-")) save();
+      if (event.target.id !== "api-key" && !event.target.closest("#phone-panel, #lens-panel, #google-panel, #pay-panel") && !event.target.id.startsWith("module-")) save();
     });
     $("consent").addEventListener("click", async () => {
       if (!$("consent").checked) return;
