@@ -2,6 +2,7 @@
 // Each view is a module. The E2E test drives the same code through
 // window.foxmate.
 import { activity } from "./activity.js";
+import { bridge } from "./bridge-view.js";
 import { chat } from "./chat.js";
 import { lend } from "./lend.js";
 import { memory } from "./memory.js";
@@ -13,7 +14,7 @@ import { space } from "./space.js";
 import { today } from "./today.js";
 
 const $ = (id) => document.getElementById(id);
-const views = { chat, today, lend, space, memory, activity, settings, phone, modules, pay };
+const views = { chat, today, lend, space, memory, activity, settings, phone, modules, pay, bridge };
 // The port to the background page. Firefox unloads an idle background page
 // even while a sidebar has a port open (K1), so the sidebar sends a message
 // every 20 s. When the page restarts anyway, the sidebar connects again (K2).
@@ -67,4 +68,4 @@ async function tabFor(prefix) {
 
 show("chat");
 // keepAlive(false) is for the E2E test of K2: it lets Firefox unload the background page.
-window.foxmate = { port, show, tabFor, keepAlive: (on) => { keepAlive = on; }, start: (tabId, goal, loanId) => chat.start(tabId, goal, loanId) };
+window.foxmate = { port, show, tabFor, keepAlive: (on) => { keepAlive = on; }, start: (tabId, goal, loanId) => chat.start(tabId, goal, loanId), share: (tabId) => bridge.share(tabId) };

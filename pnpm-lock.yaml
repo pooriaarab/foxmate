@@ -13,7 +13,7 @@ importers:
         version: 0.1.0(yauzl@3.4.0)
       foxbench:
         specifier: ^0.1.0
-        version: 0.1.0(zod@3.25.76)
+        version: 0.1.0(zod@4.6.5)
       foxden:
         specifier: npm:foxden-sandbox@^0.1.0
         version: foxden-sandbox@0.1.0
@@ -63,12 +63,18 @@ importers:
       '@huggingface/transformers':
         specifier: ^4.3.1
         version: 4.3.1(@types/node@24.19.1)
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.32.1
+        version: 1.32.1(zod@4.6.5)
       '@types/node':
         specifier: ^24.19.1
         version: 24.19.1
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
+      foxbridge:
+        specifier: ^0.1.2
+        version: 0.1.2
       oxlint:
         specifier: ^1.87.0
         version: 1.87.0
@@ -1600,6 +1606,11 @@ packages:
     engines: {node: '>=24'}
     hasBin: true
 
+  foxbridge@0.1.2:
+    resolution: {integrity: sha512-RuY/15jjx0Y2r3kPz+yPdW+vPuIFSoaE/AfOw4D6AYQi7EKAG84OCnqM/UR7uposA83jP9UKyAaKY+sN2FEefg==}
+    engines: {node: '>=24'}
+    hasBin: true
+
   foxden-sandbox@0.1.0:
     resolution: {integrity: sha512-YhrFMPelIlNdxjOp3FMR6xQm0rV+dBz6whnr/eYGwGL2oYWH9Xm1SDStHsOTUkebW1giLe8XiHM2VIc2xx1eqg==}
     engines: {node: '>=24'}
@@ -2872,6 +2883,9 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
+  zod@4.6.5:
+    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+
 snapshots:
 
   '@babel/code-frame@7.29.7':
@@ -3184,7 +3198,7 @@ snapshots:
 
   '@mdn/browser-compat-data@8.1.0': {}
 
-  '@modelcontextprotocol/sdk@1.32.1(zod@3.25.76)':
+  '@modelcontextprotocol/sdk@1.32.1(zod@4.6.5)':
     dependencies:
       '@hono/node-server': 2.1.4(hono@4.13.13)
       ajv: 8.20.0
@@ -3201,8 +3215,8 @@ snapshots:
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod: 3.25.76
-      zod-to-json-schema: 3.25.2(zod@3.25.76)
+      zod: 4.6.5
+      zod-to-json-schema: 3.25.2(zod@4.6.5)
     transitivePeerDependencies:
       - supports-color
 
@@ -4133,13 +4147,21 @@ snapshots:
 
   forwarded@0.2.0: {}
 
-  foxbench@0.1.0(zod@3.25.76):
+  foxbench@0.1.0(zod@4.6.5):
     dependencies:
-      '@modelcontextprotocol/sdk': 1.32.1(zod@3.25.76)
+      '@modelcontextprotocol/sdk': 1.32.1(zod@4.6.5)
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - supports-color
       - zod
+
+  foxbridge@0.1.2:
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.32.1(zod@4.6.5)
+      zod: 4.6.5
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - supports-color
 
   foxden-sandbox@0.1.0:
     dependencies:
@@ -5391,8 +5413,10 @@ snapshots:
       async: 3.2.6
       jszip: 3.10.2
 
-  zod-to-json-schema@3.25.2(zod@3.25.76):
+  zod-to-json-schema@3.25.2(zod@4.6.5):
     dependencies:
-      zod: 3.25.76
+      zod: 4.6.5
 
   zod@3.25.76: {}
+
+  zod@4.6.5: {}

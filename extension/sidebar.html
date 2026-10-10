@@ -31,6 +31,11 @@
           <span id="status" role="status"></span>
         </div>
       </form>
+      <div id="bridge-panel">
+        <label class="inline"><input id="bridge-share" type="checkbox" /> Share this tab with Claude Code</label>
+        <div class="row"><button id="bridge-stop" type="button" disabled>Stop now</button><span id="bridge-status" class="muted" role="status">Not shared.</span></div>
+        <p class="hint">Claude Code reads this tab, and you approve each change here. It sends what it reads to its own model. Set it up one time: <code>foxbridge install --extension-id foxmate@pooriaarab</code>.</p>
+      </div>
     </section>
     <section data-view="today" hidden>
       <p id="waiting" class="end" hidden></p>
@@ -145,7 +150,6 @@
         <div class="row"><input id="pay-wallet" type="password" autocomplete="off" /><button id="save-wallet" type="button">Save wallet</button></div>
         <p id="pay-status" class="hint">foxvault keeps the key encrypted. The planner never gets it.</p>
       </div>
-      <p class="hint">Later: outside agents over MCP (foxbridge).</p>
     </section>
     <script type="module" src="sidebar.js"></script>
   </body>

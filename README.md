@@ -73,6 +73,7 @@ try {
 | A builder of agents | Start an agent of their own from working parts | `createAgent` wires foxmind, foxloop, foxgate, foxtrail, foxshield and foxmemory. Add tools with `extraTools`. |
 | A data person | Work on a CSV without an upload site | Drop the file in the Space. The planner's Python runs in a sandbox page with no network. |
 | A person who pays small bills online | Pay a bill or a paid API with test USDC, within a budget | foxpay reads the real amount from the `402` answer. foxgate refuses a payment over your cap, and you approve each payment with its exact amount, payee and site. |
+| A developer who uses Claude Code | Let Claude Code check a page in the browser where they are logged in | Share one tab from Chat. Each call from Claude Code is a foxmate run: foxshield strips hidden text, and each click waits for your Approve. |
 | A researcher | Compare planners on the same tasks | `foxmate bench --planner ollama --model <name>` scores a model in real Firefox on the 13 foxbench tasks. |
 
 ## How it works
@@ -82,6 +83,7 @@ flowchart TB
   user([You]) --> sidebar[Sidebar: Chat, Today, Lend, Space, Memory, Activity, Settings]
   sidebar <-->|port| bg[Background page]
   phone([Your phone]) <-.->|foxsync, optional| sidebar
+  claude([Claude Code]) -.->|foxbridge: MCP, native messaging, one shared tab| bg
   subgraph bg[Background page]
     runner[foxrunner: each goal is a durable task] --> agent[Agent: src/agent.ts]
     agent --> recall[foxmemory: recall notes]
@@ -163,7 +165,7 @@ sequenceDiagram
 
 | View | What it does |
 |---|---|
-| Chat | A goal box for the current tab, and each run as a conversation: the planner, each plan, gate decision, approval (Approve and Deny with the exact action), result and the final check. |
+| Chat | A goal box for the current tab, and each run as a conversation: the planner, each plan, gate decision, approval (Approve and Deny with the exact action), result and the final check. "Share this tab with Claude Code", and Stop now. |
 | Today | The goal tasks (running, waiting for you, finished), and schedules such as "every day at 08:00, open my calendar page and list today's meetings". |
 | Lend | Lend the current site with a scope, a time limit and an allow list. Run a goal in the lent tab, revoke it, and see the blocked requests. |
 | Space | Files for the planner's Python. Network: off. |
@@ -205,6 +207,9 @@ This section says exactly what leaves your computer.
   keeps the wallet key; only foxpay's signer gets it. The paid answer and the
   receipt go to your planner, so in private mode they stay on this computer.
   After a payment, the run counts as holding private data.
+- **Claude Code bridge (off by default).** When you share a tab, Claude Code
+  gets that tab's page text after foxshield, and sends it to its own model.
+  Private mode does not cover it.
 - **Phone approvals (off by default).** foxsync sends each approval to your
   phone over an encrypted peer-to-peer WebRTC link.
 - **The log.** foxtrail stays in this browser. It holds each tool call, its
@@ -215,7 +220,24 @@ This section says exactly what leaves your computer.
 
 ## API
 
-foxmate is an extension, a CLI and a library. It has no MCP server yet.
+foxmate is an extension, a CLI and a library. It has no MCP server of its
+own: an MCP client reaches one shared tab through foxbridge's MCP server.
+
+### Claude Code (foxbridge)
+
+Set it up one time:
+
+```bash
+npm i -g foxbridge
+foxbridge install --extension-id foxmate@pooriaarab
+claude mcp add foxbridge -- foxbridge mcp
+```
+
+Then tick "Share this tab with Claude Code" in Chat. foxmate answers
+foxbridge's tools on that tab: `list_tabs`, `snapshot`, `act`, `click`,
+`run_task` and `open_url` (in the shared tab, on its host only). Each call
+is a foxmate run with its own grants, and its approval shows in Chat. A call
+for another tab gets `not-shared`. Stop now closes the bridge.
 
 ### CLI
 
@@ -235,7 +257,7 @@ the goal does not name, `all` approves everything, `none` denies everything.
 
 | Export | What it does |
 |---|---|
-| `createAgent({ browser, trail, memory?, publicSuffix?, extraTools?, moreTabTools?, pay?, maxSteps?, runMs? })` | The agent. `run({ goal, tabId, settings, loan?, runKey?, signal?, onEvent? })` runs one goal and resolves with `{ status, summary?, reason?, message? }`. It also returns `gate`, `host` and `approvals`. |
+| `createAgent({ browser, trail, memory?, publicSuffix?, extraTools?, moreTabTools?, pay?, maxSteps?, runMs? })` | The agent. `run({ goal, tabId, settings, loan?, runKey?, mind?, signal?, onEvent? })` runs one goal and resolves with `{ status, summary?, reason?, message? }`. It also returns `gate`, `host` and `approvals`. |
 | `createBrain(settings, { hasDataConsent, goal?, browserModel? })` | The planner for the settings. Throws `BrainError` (`cloud-in-private`, `cloud-model-in-private`, `no-consent`, `unknown-planner`, `bad-script`) before any network call. |
 | `PLANNERS`, `KEY_HANDLE` | The planner choices, and the foxvault handle a cloud provider gets. |
 | `createApprovals({ host, trail? })` | One approval broker for the sidebar and the phone. The first answer decides. |
@@ -244,20 +266,19 @@ the goal does not name, `all` approves everything, `none` denies everything.
 | `formDetail(snapshot, controlId)` | What a form holds, for the approval of its send button. |
 | `spaceTool(den)`, `lookTool(tabId, deps)`, `googleTools(deps)` | The Space, screenshot and Google tools. |
 | `payTool(foxpay, run)`, `toAtomic`, `fromAtomic`, `parsePayees` | The planner's `pay` tool. `createAgent({ pay: { x402, store, cap } })` adds it: `x402` is foxpay's method, and `cap()` gives the cap for one goal in atomic test USDC. |
+| `bridgeCall(run, call)`, `BridgeRefusal` | One call from an outside agent, run through the agent with a planner that asks for that call. Resolves with foxbridge's reply, or throws a foxbridge code. |
 | `scriptMind(script, goal)` | The scripted planner for tests and the bench. |
-
-Extension point: foxbridge (outside agents over MCP) comes later.
 
 ## Tests
 
-`pnpm ci:local` runs lint, typecheck, 73 isolated tests, the build and
+`pnpm ci:local` runs lint, typecheck, 78 isolated tests, the build and
 `web-ext lint`. Each isolated test covers a failure mode in
 [docs/failure-modes.md](docs/failure-modes.md), written before the code.
 
 `pnpm e2e` runs foxmate in a real Firefox through the real sidebar and
 writes `artifacts/e2e-<date>.json`. The planner is the scripted one, so
 each run is the same. Our run on 2026-10-09 (Firefox 157.0.1, Apple M3 Pro,
-headless, without `FOXMATE_VISION`) passed all 53 checks. With
+headless, without `FOXMATE_VISION`) passed all 60 checks. With
 `FOXMATE_VISION` set to an Ollama address that allows extension origins, the
 vision check runs too. Some of them:
 
@@ -280,6 +301,7 @@ vision check runs too. Some of them:
 | Two goals at once | The first runs; the second ends as refused, and you start it again |
 | A run waits, the tab moves to another host, the extension reloads | The task runs again, sees the other host, and refuses |
 | Pay a bill of 0.01 test USDC with a cap of 0.05 | One approval with the exact amount, payee and site; the paid API sees one payment; the same payment again pays nothing; a bill of 1 USDC is refused (`spend-cap`) |
+| Claude Code's MCP client on a shared tab, through foxbridge's own host | The page read has no hidden text; a click asks in Chat; a denied click and a call for another tab are refused; Stop ends the session |
 | A canvas page, with `FOXMATE_VISION` | `qwen3-vl:2b` in Ollama describes the screenshot |
 
 ## Scores on foxbench
@@ -334,6 +356,7 @@ Read these rows with care:
 | `publicSuffix.getDomain` | [publicSuffix](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/publicSuffix) | One site rule for foxgate and foxlend. |
 | `alarms`, `runtime.onStartup` (through foxrunner) | [alarms](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/alarms) | Wake the page for schedules and for a task cut short. |
 | `fetch` with host permissions (through foxpay) | [fetch](https://developer.mozilla.org/en-US/docs/Web/API/Window/fetch) | Read the `402` answer of a bill and send the signed payment. |
+| `runtime.connectNative`, `nativeMessaging` | [connectNative](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/runtime/connectNative) | Start the foxbridge host while a tab is shared, and answer its calls. |
 | `notifications` | [notifications](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/notifications) | Tell you that an approval waits while no sidebar is open. |
 | `identity.launchWebAuthFlow` (through foxlink) | [identity](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/identity) | Google sign-in for the optional Gmail and Calendar tools. |
 | `permissions.request`, `permissions.contains` with `data_collection` | [permissions.request](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/permissions/request) | Firefox's consent before page text goes to your key, or mail to Google tools. |
@@ -391,7 +414,12 @@ Read these rows with care:
   checkout. Each site needs its payee address in Settings.
 - The cap holds for one goal. The next goal starts at 0 spent.
 - A denied payment does not end the run. The planner gets the refusal.
-- foxbridge is not part of foxmate yet.
+- The bridge shares one tab at a time. It stops when the tab moves to
+  another host, and after a Firefox restart.
+- The host manifest names one extension. While it names foxmate, the
+  foxbridge extension cannot use the host, and `foxbridge status` reports
+  the id as a problem.
+- While a goal runs, a call from Claude Code is refused (`busy`).
 
 ## Part of the fox primitives
 
@@ -414,7 +442,7 @@ flowchart LR
   foxlens[foxlens] --> foxmate
   foxlink[foxlink] --> foxmate
   foxpay[foxpay] --> foxmate
-  foxbridge[foxbridge, later] -.-> foxmate
+  foxbridge[foxbridge] --> foxmate
   click foxkit "https://github.com/pooriaarab/foxkit"
   click foxbench "https://github.com/pooriaarab/foxbench"
   click foxmind "https://github.com/pooriaarab/foxmind"
@@ -436,12 +464,14 @@ flowchart LR
   click foxmate "https://github.com/pooriaarab/foxmate"
 ```
 
-foxmate uses every primitive except foxbridge. Nothing depends
+foxmate uses every primitive. Nothing depends
 on foxmate. Two primitives have other names on npm: foxden is
 [`foxden-sandbox`](https://www.npmjs.com/package/foxden-sandbox) and foxlink
 is [`foxlink-oauth`](https://www.npmjs.com/package/foxlink-oauth).
 `package.json` installs them under the names `foxden` and `foxlink`.
 foxpay is [`foxpay-agent`](https://www.npmjs.com/package/foxpay-agent) on npm.
+foxbridge is a dev dependency: foxmate speaks its protocol, and the E2E test
+runs its host and MCP server.
 
 ## Development
 
