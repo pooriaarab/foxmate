@@ -180,6 +180,9 @@ that one call.
 | BR6 | A denied approval reaches the agent as a good result | The agent gets `approval-denied`, and nothing ran. | `tests/bridge.test.ts` BR6; E2E bridge |
 | BR7 | The shared tab moves to another host, and the agent drives the new site | foxmate stops sharing, and refuses the call with `not-shared`. | E2E bridge |
 | BR8 | Stop leaves the agent connected, or an approval waiting | Stop closes the native port, ends the waiting run (its approval ends as no) and stops sharing. The agent gets `host-gone`, then `bridge-off`. | E2E bridge |
+| BR9 | A tab is shared, so its page text goes to an outside program, without Firefox's consent for page content | The share click asks Firefox for `websiteContent` data consent and the `nativeMessaging` permission. A refusal, or an error, keeps the bridge off. The background page checks both again before it starts the host. | E2E bridge |
+| BR10 | The bridge adds a required permission, so every existing install sees a prompt on update | `nativeMessaging` is an optional permission, asked for at the share click. `websiteContent` is optional data collection. | E2E bridge (reads `dist-ext/manifest.json`) |
+| BR11 | A hook that grants the consent for tests ships in `dist-ext/` | The E2E test grants it with a real click in a test profile whose pref skips the prompt. `dist-ext/` has no grant hook. | E2E bridge |
 
 ## AMO release build and listed submission (`scripts/amo-listing.mjs`)
 

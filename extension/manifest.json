@@ -14,7 +14,8 @@
       }
     }
   },
-  "permissions": ["storage", "unlimitedStorage", "scripting", "tabs", "webRequest", "webRequestBlocking", "alarms", "cookies", "contextualIdentities", "browsingData", "proxy", "privacy", "publicSuffix", "notifications", "identity", "nativeMessaging"],
+  "permissions": ["storage", "unlimitedStorage", "scripting", "tabs", "webRequest", "webRequestBlocking", "alarms", "cookies", "contextualIdentities", "browsingData", "proxy", "privacy", "publicSuffix", "notifications", "identity"],
+  "optional_permissions": ["nativeMessaging"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "scripts": ["background.js"],

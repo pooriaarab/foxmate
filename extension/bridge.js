@@ -70,6 +70,11 @@ export function createBridge({ run, send }) {
 
   /** Shares one tab, and starts the foxbridge host. */
   async function share(tabId) {
+    // BR9: the background page checks the consent too; the sidebar is not the only way in.
+    if (!(await browser.permissions.contains({ permissions: ["nativeMessaging"], data_collection: ["websiteContent"] }).catch(() => false))) {
+      state.error = "Firefox did not allow it, so the bridge stays off.";
+      return changed();
+    }
     const tab = await browser.tabs.get(tabId);
     const host = hostOf(tab.url);
     if (!host) {
