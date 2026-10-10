@@ -15,6 +15,7 @@ import { attachHeaderInjection, createVault, indexedDbKeyStore } from "foxvault"
 import { sanitize, scanDocument } from "foxshield";
 import { x402 } from "foxpay-agent";
 import { registerWebAuthnObserver } from "foxpass";
+import { createNotifier, webhookChannel } from "foxnotify";
 import { createBridge } from "./bridge.js";
 import { KEY_HANDLE, SPACE_DOMAIN, createAgent, createPass, googleTools, lookTool, parsePayees, shieldedMailText, shieldedText, spaceTool, toAtomic } from "../src/index.ts";
 
@@ -106,7 +107,40 @@ async function setWallet({ key }) {
 // The sign-in handoff (foxpass): a page read on a sign-in, code, passkey,
 // CAPTCHA or consent wall waits until the user does the step in the tab.
 registerWebAuthnObserver(browser, { js: "passkey.js" }).catch((error) => trail.append({ actor: "foxpass", kind: "handoff.observer-failed", data: { message: error.message } }));
-const pass = createPass({ browser, trail });
+const pass = createPass({ browser, trail, onNeedsUser: ({ tabId }) => notice("needs-sign-in", { tabId }) });
+
+// Notices (foxnotify), while no sidebar is in view: a run needs you, ended,
+// or a schedule ran late. A click opens the tab or the approval in a tab; it
+// never answers (NT1-NT3). The webhook is off by default and sends no title
+// unless the user ticks the box and Firefox's websiteActivity consent says
+// yes, checked at each send (NT5, foxnotify DC1).
+const APPROVAL_PAGE = browser.runtime.getURL("sidebar.html#approval");
+const noticeSettings = async () => (await browser.storage.local.get("settings")).settings?.notices ?? {};
+const webhook = {
+  name: "webhook",
+  async send(message) {
+    const n = await noticeSettings();
+    if (!n.webhook || !n.webhookURL) return;
+    const includeTitle = Boolean(n.webhookTitle) && (await browser.permissions.contains({ data_collection: ["websiteActivity"] }).catch(() => false));
+    await webhookChannel({ url: n.webhookURL, includeTitle }).send(message);
+  },
+};
+const notifier = createNotifier({ browser, storage: browser.storage.local, channels: [webhook], iconUrl: "icons/icon-96.png", fallbackUrl: APPROVAL_PAGE });
+const setRules = async () => {
+  const n = await noticeSettings();
+  await notifier.setRules({ quietHours: n.quiet && n.quietStart && n.quietEnd ? { start: n.quietStart, end: n.quietEnd } : null });
+};
+setRules().catch(() => undefined);
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.settings) setRules().catch(() => undefined);
+});
+/** The open sidebars, and whether each one is in view. */
+const inView = new Map();
+function notice(kind, target, run = current) {
+  if ([...inView.values()].some(Boolean) || !run) return;
+  notifier.notify({ kind, taskId: run.taskId ?? run.id, title: run.goal, ...(target ? { target } : {}) })
+    .catch((error) => trail.append({ actor: "foxnotify", kind: "notice.failed", data: { kind, message: error.message } }).catch(() => undefined));
+}
 
 // foxgate and foxlend share one public suffix rule and one gate host.
 const publicSuffix = withDefaultRule(browser.publicSuffix);
@@ -240,7 +274,8 @@ async function runClaimed({ goal, tabId, loanId, taskId, signal, allowPrivate, m
     .catch((error) => ({ status: "blocked", reason: "error", message: error instanceof Error ? error.message : String(error) }));
   run.end = end;
   send({ runId: run.id, end });
-  if (agent.approvals.waiting().length === 0 && end.status !== "done" && !ports.size) notify(`foxmate stopped: ${end.message ?? end.status}`);
+  if (end.status === "done") notice("task-done", { tabId: run.tabId }, run);
+  else if (end.status !== "aborted") notice("task-stuck", { tabId: run.tabId }, run);
   return end;
 }
 
@@ -259,7 +294,6 @@ const hostOf = (url) => {
   }
 };
 
-const notify = (message) => browser.notifications.create({ type: "basic", title: "foxmate", message }).catch(() => undefined);
 
 // Every goal is a foxrunner task, so a run that the event page unload cuts
 // short runs again at the next wake (at least once, from the goal). A
@@ -270,6 +304,9 @@ runner.define("goal", [{
   retry: { maxAttempts: 4, backoffMs: 30_000 },
   async run(ctx) {
     const input = ctx.input;
+    // A schedule's task id ends in its slot time. A first attempt over 60 s late missed its time (NT3).
+    const slot = Number(/@(\d+)$/.exec(ctx.taskId)?.[1]);
+    if (slot && ctx.attempt === 1 && Date.now() - slot > 60_000) notice("schedule-missed", undefined, { taskId: ctx.taskId, goal: input.goal });
     let tabId = input.tabId;
     if (input.url) {
       tabId = (await browser.tabs.create({ url: input.url, active: false })).id;
@@ -285,6 +322,7 @@ runner.define("goal", [{
     const runTab = input.loanId ? (await lender.listLoans()).find((l) => l.id === input.loanId)?.tabId : tabId;
     const now = hostOf((await browser.tabs.get(runTab ?? -1).catch(() => ({}))).url);
     if (started && now !== started) {
+      notice("task-stuck", undefined, { taskId: ctx.taskId, goal: input.goal });
       return { ...(await refusedRun("tab-moved", `The tab is on ${now ?? "no web page"}, not on ${started} where this goal started. foxmate did not run it.`)), attempt: ctx.attempt };
     }
     const end = await runNow({ goal: input.goal, tabId, loanId: input.loanId, allowPrivate: input.allowPrivate, taskId: ctx.taskId, signal: ctx.signal });
@@ -295,7 +333,8 @@ runner.define("goal", [{
 const bridge = createBridge({ send, run: (tabId, tool, mind, tap, signal) => runNow({ goal: `Claude Code over foxbridge: ${tool}`, tabId, mind, tap, signal }) });
 
 agent.approvals.onChange((waiting) => {
-  if (waiting.length && !ports.size) notify("foxmate waits for your approval. Open the sidebar.");
+  if (waiting.length) notice("needs-approval", { url: APPROVAL_PAGE });
+  else if (current) notifier.clear(`needs-approval:${current.taskId ?? current.id}`).catch(() => undefined);
 });
 
 browser.action.onClicked.addListener(() => browser.sidebarAction.toggle());
@@ -305,7 +344,10 @@ browser.runtime.onConnect.addListener((port) => {
   ports.add(port);
   if (current) port.postMessage({ run: { id: current.id, goal: current.goal }, events: current.events, end: current.end });
   port.postMessage({ waiting: agent.approvals.waiting(), ...bridge.view() });
-  port.onDisconnect.addListener(() => ports.delete(port));
+  port.onDisconnect.addListener(() => {
+    ports.delete(port);
+    inView.delete(port);
+  });
   port.onMessage.addListener(async (message) => {
     try {
       if (message.op === "run") {
@@ -316,6 +358,7 @@ browser.runtime.onConnect.addListener((port) => {
       }
       else if (message.op === "answer") await agent.approvals.answer(message.requestId, message.answer, message.via === "phone" ? "phone" : "sidebar");
       else if (message.op === "stop") current?.controller.abort();
+      else if (message.op === "seen") inView.set(port, Boolean(message.visible));
       else if (message.op === "bridge-share") await bridge.share(message.tabId);
       else if (message.op === "bridge-stop") bridge.stop();
       else if (message.op === "set-key") {
