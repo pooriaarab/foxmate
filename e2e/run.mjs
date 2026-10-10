@@ -21,11 +21,12 @@ import signup from "./checks/signup.mjs";
 import space from "./checks/space.mjs";
 import tasks from "./checks/tasks.mjs";
 import traps from "./checks/traps.mjs";
+import voice from "./checks/voice.mjs";
 import { BANK_HOSTS } from "./bank.mjs";
 import { runGoal, startFox } from "./lib.mjs";
 
 // notify goes first: foxnotify allows 4 notices a minute, and the later checks send some too.
-const CHECKS = { notify, signup, pass, privacy, traps, memory, lend, space, phone, modules, activity, pay, bridge, tasks, keepalive };
+const CHECKS = { notify, signup, pass, privacy, traps, memory, lend, space, phone, modules, activity, pay, bridge, voice, tasks, keepalive };
 
 const record = { startedAt: new Date().toISOString(), checks: [], runs: {} };
 const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });
@@ -36,7 +37,7 @@ const bench = await startServer({ sites, controlKey: randomUUID() });
 let session;
 try {
   const headless = !process.argv.includes("--headed");
-  session = { ...(await startFox({ headless, prefs: { "network.dns.localDomains": BANK_HOSTS, "alerts.useSystemBackend": false, ...PHONE_PREFS } })), headless };
+  session = { ...(await startFox({ headless, prefs: { "network.dns.localDomains": BANK_HOSTS, "alerts.useSystemBackend": false, "media.navigator.streams.fake": true, "media.navigator.permission.disabled": true, ...PHONE_PREFS } })), headless };
   record.firefox = await session.fox.browser.version();
 
   for (const [name, run] of Object.entries(CHECKS)) {
