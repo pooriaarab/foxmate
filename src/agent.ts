@@ -12,6 +12,7 @@ import type { Provider } from "foxmind";
 import { createApprovals, type Approvals } from "./approvals.js";
 import { formDetail } from "./form.js";
 import { BrainError, createBrain, type BrainSettings } from "./brain.js";
+import type { Pass, PassEvent } from "./pass.js";
 import { payTool, type PayOptions, type PayRun } from "./pay.js";
 import { recallNotes, withNotes } from "./recall.js";
 import { shieldedPaw } from "./shield.js";
@@ -57,7 +58,8 @@ export type AgentEvent =
   | { type: "start"; planner: string; privacy: string; goal: string }
   | { type: "recall"; notes: string[]; error?: string }
   | { type: "refused"; reason: string; message: string }
-  | { type: "private"; source: string };
+  | { type: "private"; source: string }
+  | PassEvent;
 
 export interface RunEnd {
   status: "done" | "blocked" | "aborted" | "refused";
@@ -88,6 +90,8 @@ export interface AgentOptions {
   browserModel?: () => Promise<Provider>;
   /** Payments through foxpay, on the tab's host, with a cap and an approval for each one (PY1-PY12). */
   pay?: PayOptions;
+  /** The sign-in handoff: a wall makes each page read wait for the user (HP1-HP9). */
+  pass?: Pass;
   maxSteps?: number;
   /** The time budget of a run, and the life of its grants. Default 10 minutes. */
   runMs?: number;
@@ -102,6 +106,7 @@ export interface Agent {
 }
 
 const SCOPES: Scope[] = ["read", "fill", "submit"];
+const noEvent = () => undefined;
 
 export function createAgent(options: AgentOptions): Agent {
   const { browser, trail } = options;
@@ -110,8 +115,17 @@ export function createAgent(options: AgentOptions): Agent {
   // The newest snapshot the planner got, and the control it typed into last, for the form detail of an approval.
   let lastPage: Snapshot | undefined;
   let lastTyped: string | undefined;
-  const shielded = shieldedPaw({ browser: browser as never, onScan: async (scan) => { await trail.append({ actor: "foxshield", kind: "shield.scan", data: scan }); } });
-  const paw = { ...shielded, snapshot: async (tabId: number, api?: ScriptingApi) => (lastPage = await shielded.snapshot(tabId, api)) };
+  // The current run's events and Stop, for a sign-in wait inside a page read.
+  let runEmit: (event: AgentEvent) => void = noEvent;
+  let runSignal: AbortSignal | undefined;
+  const shielded = shieldedPaw({ browser: browser as never, onScan: async (scan) => { await trail.append({ actor: "foxshield", kind: "shield.scan", data: scan }); }, ...(options.pass ? { fieldHints: options.pass.hints } : {}) });
+  const paw = {
+    ...shielded,
+    snapshot: async (tabId: number, api?: ScriptingApi) => {
+      await options.pass?.beforeRead(tabId, { emit: runEmit, ...(runSignal ? { signal: runSignal } : {}) });
+      return (lastPage = await shielded.snapshot(tabId, api));
+    },
+  };
   const tabTools = [...(options.makeTools?.(() => target) ?? browserTools({ tabId: () => target, browser: browser as never, paw })), ...(options.moreTabTools?.(() => target) ?? [])]
     .map((tool) => (tool.name !== "click" ? tool : {
       ...tool,
@@ -150,6 +164,8 @@ export function createAgent(options: AgentOptions): Agent {
     };
     if (busy) return { status: "refused", reason: "busy", message: "A run is in progress." };
     busy = true;
+    runEmit = emit;
+    runSignal = input.signal;
     const grants: string[] = [];
     try {
       const tab = await browser.tabs.get(input.tabId);
@@ -265,6 +281,8 @@ export function createAgent(options: AgentOptions): Agent {
       return end;
     } finally {
       payRun = { off: "No run.", key: "", ask: async () => null };
+      runEmit = noEvent;
+      runSignal = undefined;
       approvals.cancelAll();
       for (const id of grants) await host.revokeGrant(id).catch(() => undefined);
       busy = false;

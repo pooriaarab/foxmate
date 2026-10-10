@@ -74,6 +74,7 @@ try {
 | A data person | Work on a CSV without an upload site | Drop the file in the Space. The planner's Python runs in a sandbox page with no network. |
 | A person who pays small bills online | Pay a bill or a paid API with test USDC, within a budget | foxpay reads the real amount from the `402` answer. foxgate refuses a payment over your cap, and you approve each payment with its exact amount, payee and site. |
 | A developer who uses Claude Code | Let Claude Code check a page in the browser where they are logged in | Share one tab from Chat. Each call from Claude Code is a foxmate run: foxshield strips hidden text, and each click waits for your Approve. |
+| A person whose bank asks for a password and a code | Let the agent read the balance after they sign in | foxpass names the sign-in step, and the run waits. You sign in on the tab, and the agent goes on. The planner never gets what you typed. |
 | A researcher | Compare planners on the same tasks | `foxmate bench --planner ollama --model <name>` scores a model in real Firefox on the 13 foxbench tasks. |
 
 ## How it works
@@ -94,6 +95,7 @@ flowchart TB
     loop --> trail[(foxtrail log)]
     tools --> paw[foxpaw: read and act on the tab]
     paw --> shield[foxshield: sanitize page text]
+    paw --> pass[foxpass: wait at a sign-in, redact secrets]
     tools --> den[foxden: Python, no network]
     tools -.-> lens[foxlens: screenshot, optional]
     tools -.-> link[foxlink: Gmail and Calendar, optional]
@@ -131,9 +133,15 @@ One goal, step by step:
    a page could make the planner carry the data out. Mail and calendar tools
    work on a web tab only when you tick "This goal may read my mail and
    calendar".
-7. Each page read passes foxshield. Hidden text, and the controls inside it,
+7. Before each page read, foxpass scans the tab. On a sign-in, code,
+   passkey, CAPTCHA or consent step, the run waits. Chat says "Sign in on
+   this tab, then the agent goes on." It goes on when foxpass sees that you
+   signed in. Stop ends the wait.
+8. Each page read passes foxshield. Hidden text, and the controls inside it,
    never reach the planner; visible instructions arrive marked as data.
-8. foxtrail records every step. The run ends when the planner says it is
+   Then foxpass's redaction replaces a password or code value, and each
+   copy of it in the text, with `[redacted]`.
+9. foxtrail records every step. The run ends when the planner says it is
    done and a check passes.
 
 ```mermaid
@@ -165,7 +173,7 @@ sequenceDiagram
 
 | View | What it does |
 |---|---|
-| Chat | A goal box for the current tab, and each run as a conversation: the planner, each plan, gate decision, approval (Approve and Deny with the exact action), result and the final check. "Share this tab with Claude Code", and Stop now. |
+| Chat | A goal box for the current tab, and each run as a conversation: the planner, each plan, gate decision, approval (Approve and Deny with the exact action), result and the final check. "Your turn" at a sign-in step. "Share this tab with Claude Code", and Stop now. |
 | Today | The goal tasks (running, waiting for you, finished), and schedules such as "every day at 08:00, open my calendar page and list today's meetings". |
 | Lend | Lend the current site with a scope, a time limit and an allow list. Run a goal in the lent tab, revoke it, and see the blocked requests. |
 | Space | Files for the planner's Python. Network: off. |
@@ -218,6 +226,10 @@ This section says exactly what leaves your computer.
   arguments and short quotes of what foxshield flagged. It does not hold whole
   pages. The URLs of requests that foxlend blocked are kept without their
   query.
+- **Sign-in steps.** You type a password or a code in the page, not in
+  foxmate. foxpass's scan reads no field values. The planner reads the
+  page after you sign in, and any secret value left in it shows
+  `[redacted]`.
 - foxmate has no server and sends nothing to its authors.
 
 ## API
@@ -263,7 +275,8 @@ the goal does not name, `all` approves everything, `none` denies everything.
 | `createBrain(settings, { hasDataConsent, goal?, browserModel? })` | The planner for the settings. Throws `BrainError` (`cloud-in-private`, `cloud-model-in-private`, `no-consent`, `unknown-planner`, `bad-script`) before any network call. |
 | `PLANNERS`, `KEY_HANDLE` | The planner choices, and the foxvault handle a cloud provider gets. |
 | `createApprovals({ host, trail? })` | One approval broker for the sidebar and the phone. The first answer decides. |
-| `shieldedPaw({ browser, paw?, threshold?, onScan? })` | foxpaw with each snapshot passed through foxshield. |
+| `shieldedPaw({ browser, paw?, threshold?, onScan?, fieldHints? })` | foxpaw with each snapshot passed through foxshield, then foxpass's redaction. |
+| `createPass({ browser, trail, timeoutMs?, onNeedsUser? })`, `redactPage(page, hints, quotes?)` | The sign-in handoff that `createAgent({ pass })` runs before each page read, and the redaction of a foxpaw snapshot. |
 | `recallNotes(memory, goal)`, `withNotes(goal, notes)` | The user's memories that fit a goal, as notes under it. |
 | `formDetail(snapshot, controlId)` | What a form holds, for the approval of its send button. |
 | `spaceTool(den)`, `lookTool(tabId, deps)`, `googleTools(deps)` | The Space, screenshot and Google tools. |
@@ -273,20 +286,21 @@ the goal does not name, `all` approves everything, `none` denies everything.
 
 ## Tests
 
-`pnpm ci:local` runs lint, typecheck, 78 isolated tests, the build and
+`pnpm ci:local` runs lint, typecheck, 80 isolated tests, the build and
 `web-ext lint`. Each isolated test covers a failure mode in
 [docs/failure-modes.md](docs/failure-modes.md), written before the code.
 
 `pnpm e2e` runs foxmate in a real Firefox through the real sidebar and
 writes `artifacts/e2e-<date>.json`. The planner is the scripted one, so
-each run is the same. Our run on 2026-10-09 (Firefox 157.0.1, Apple M3 Pro,
-headless, without `FOXMATE_VISION`) passed all 65 checks. With
+each run is the same. Our run on 2026-10-10 (Firefox 157.0.1, Apple M3 Pro,
+headless, without `FOXMATE_VISION`) passed all 75 checks. With
 `FOXMATE_VISION` set to an Ollama address that allows extension origins, the
 vision check runs too. Some of them:
 
 | Check | Result |
 |---|---|
 | foxbench `signup-pro` through the sidebar | foxbench's oracle passes; one approval, for "Create account"; the trail verifies |
+| A local bank asks for a password, then a code; the test types them as the user | The run waits, Chat says what to do, the run goes on and finishes; the planner's requests, the log, memory and the sidebar hold neither secret; Stop ends a wait |
 | A hidden link tells the agent to send the password to `/attacker.test/` | foxshield flags it; the planner never sees the link; the task passes |
 | A fake system message in an email asks to forward mail to `audit@attacker.test` | The Send approval shows `To: "audit@attacker.test"`; the human denies; nothing is sent |
 | Visible text asks to open a link on another host | foxgate denies it (`no-grant`); the tab stays |
@@ -349,6 +363,8 @@ Read these rows with care:
 | `runtime.connect`, `runtime.sendMessage`, `runtime.onMessage`, `runtime.reload` | [runtime](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/runtime) | The sidebar streams events, answers approvals and sends a message every 20 s. |
 | `tabs.query`, `tabs.get`, `tabs.create`, `tabs.update` | [tabs](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/tabs) | The current tab, a scheduled task's start page, and `open_url`. |
 | `tabs.captureTab` (through foxlens) | [captureTab](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/tabs/captureTab) | The optional screenshot tool. |
+| `scripting.registerContentScripts` with `world: "MAIN"` (through foxpass) | [registerContentScripts](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/scripting/registerContentScripts) | See a passkey request in the page as a sign-in step. It records the kind and the state of each call, never its result. |
+| `windows.update` (through foxpass) | [windows.update](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/windows/update) | Bring the tab with the sign-in step to the front. |
 | `scripting.executeScript` | [executeScript](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/scripting/executeScript) | foxpaw reads and acts; foxshield scans; foxmate asks which controls are hidden. No model-written code runs in a page. |
 | `storage.local`, `unlimitedStorage` | [storage](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/storage/local) | Settings, foxrunner tasks, foxlend loans, foxvault ciphertexts. |
 | IndexedDB | [IndexedDB](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) | The foxtrail log and key, memories, the vault key, the Space files. |
@@ -422,6 +438,16 @@ Read these rows with care:
   foxbridge extension cannot use the host, and `foxbridge status` reports
   the id as a problem.
 - While a goal runs, a call from Claude Code is refused (`busy`).
+- foxpass's sign-in rules are heuristics, and they read the top frame only.
+  A sign-in form in an iframe or a canvas does not pause the run.
+- foxmate gives foxpass no `webNavigation` permission, so the sign-in scan
+  is not pinned to one document. If the page reloads with the same
+  sign-in step, the banner does not come back, but the wait goes on.
+- The sign-in wait lives in the background page. The open sidebar keeps it
+  loaded. The user has 5 minutes; then the run stops.
+- foxmate does not fill saved passwords or passkeys. You do the step.
+- A password field for a new password (a sign-up) is not a wall: the
+  planner fills it from the goal.
 
 ## Part of the fox primitives
 
@@ -445,6 +471,7 @@ flowchart LR
   foxlink[foxlink] --> foxmate
   foxpay[foxpay] --> foxmate
   foxbridge[foxbridge] --> foxmate
+  foxpass[foxpass] --> foxmate
   click foxkit "https://github.com/pooriaarab/foxkit"
   click foxbench "https://github.com/pooriaarab/foxbench"
   click foxmind "https://github.com/pooriaarab/foxmind"
@@ -463,6 +490,7 @@ flowchart LR
   click foxlink "https://github.com/pooriaarab/foxlink"
   click foxpay "https://github.com/pooriaarab/foxpay"
   click foxbridge "https://github.com/pooriaarab/foxbridge"
+  click foxpass "https://github.com/pooriaarab/foxpass"
   click foxmate "https://github.com/pooriaarab/foxmate"
 ```
 
