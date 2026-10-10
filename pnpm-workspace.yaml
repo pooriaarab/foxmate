@@ -24,3 +24,4 @@ minimumReleaseAgeExclude:
   - foxlens@0.1.0
   - foxden-sandbox@0.1.0
   - foxlink-oauth@0.1.0
+  - foxpay-agent@0.1.2

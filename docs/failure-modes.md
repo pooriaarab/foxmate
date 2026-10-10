@@ -141,6 +141,27 @@ runs it in a sandbox page with no network and no extension APIs.
 | MS4 | A mail has no text part | The text is empty, and the part is `none`. | `tests/mail.test.ts` MS4 |
 | MS5 | A calendar event's description holds an instruction | It passes foxshield like a mail body. | `tests/mail.test.ts` MS5 |
 
+## Pay: one approval for each payment (`src/pay.ts`)
+
+The planner can ask to pay a bill on the tab's host with foxpay's x402
+method. foxpay reads the real amount from the `402` answer, foxgate checks
+the cap, and a human approves each payment.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| PY1 | The user set no cap (the default), or a cap of 0 | The pay tool refuses and says so. foxpay does not fetch the address. | `tests/pay.test.ts` PY1; E2E pay |
+| PY2 | The amount is over the cap | foxgate refuses with `spend-cap` before any approval. Nothing is paid. | `tests/pay.test.ts` PY2; E2E pay |
+| PY3 | The approval hides the amount, the currency, the payee or the host | The approval text is foxgate's canonical JSON of foxpay's pay action. The detail names the amount, the currency, the payee and the host. | `tests/pay.test.ts` PY3; E2E pay |
+| PY4 | The planner names an amount that the bill does not ask for, or the bill changes its price after the approval | foxpay refuses (`amount-mismatch`, or `amount-changed` before it uses the token). Nothing is paid or spent. A new amount is a new action with its own approval. | `tests/pay.test.ts` PY4 |
+| PY5 | The same payment runs again: the planner asks twice, or foxrunner runs the task again | The idempotency key comes from the task, the address and the amount. foxpay gives back the first receipt, pays nothing, and asks nothing. | `tests/pay.test.ts` PY5; E2E pay |
+| PY6 | One approval pays two times | foxpay uses the foxgate token one time. The paid API sees one payment. | `tests/pay.test.ts` PY5; E2E pay |
+| PY7 | A loan run pays with the lent login | A loan run gets no pay grant: pay is above every loan scope. | `tests/pay.test.ts` PY7 |
+| PY8 | The payment goes to a host that is not the tab's host | The grants cover the tab's host only (`no-grant`). | `tests/pay.test.ts` PY8 |
+| PY9 | A payment is not in the trail | foxpay's events (`pay.request`, `pay.ask`, `pay.result` with the receipt) go to foxtrail. When the trail write fails before the payment, foxpay stops (`hook-failed`). | E2E pay |
+| PY10 | The paid answer reaches the planner as trusted text, and a page then makes the planner carry it out | The answer goes to the planner as data, and the run holds private data from then on (G16). | `tests/pay.test.ts` PY10 |
+| PY11 | The human denies, or the run stops while the approval waits | Nothing is paid. foxmate rejects the request in foxgate. | `tests/pay.test.ts` PY11 |
+| PY12 | The wallet key reaches the planner, the trail or `storage.local` in clear | foxvault keeps it encrypted. Only foxpay's signer gets it, through `vault.use`. The receipt holds the payer address and the nonce. | E2E pay |
+
 
 ## AMO release build and listed submission (`scripts/amo-listing.mjs`)
 
