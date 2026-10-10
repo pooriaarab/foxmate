@@ -5,6 +5,7 @@ import { activity } from "./activity.js";
 import { chat } from "./chat.js";
 import { lend } from "./lend.js";
 import { memory } from "./memory.js";
+import { pay } from "./pay.js";
 import { modules } from "./modules.js";
 import { phone } from "./phone.js";
 import { settings } from "./settings.js";
@@ -12,7 +13,7 @@ import { space } from "./space.js";
 import { today } from "./today.js";
 
 const $ = (id) => document.getElementById(id);
-const views = { chat, today, lend, space, memory, activity, settings, phone, modules };
+const views = { chat, today, lend, space, memory, activity, settings, phone, modules, pay };
 // The port to the background page. Firefox unloads an idle background page
 // even while a sidebar has a port open (K1), so the sidebar sends a message
 // every 20 s. When the page restarts anyway, the sidebar connects again (K2).
