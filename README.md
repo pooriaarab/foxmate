@@ -77,6 +77,7 @@ try {
 | A person whose bank asks for a password and a code | Let the agent read the balance after they sign in | foxpass names the sign-in step, and the run waits. You sign in on the tab, and the agent goes on. The planner never gets what you typed. |
 | A person who leaves a goal running in another window | Learn when the agent needs them, without watching the sidebar | foxnotify shows a notice when a run needs an approval or a sign-in, ends, or a schedule runs late. A click opens the approval; you still press Approve. Quiet hours hold the rest until morning. |
 | A home-lab owner | Get the notices on their phone through their own ntfy server | The optional webhook sends the kind of notice and a fixed sentence. Settings shows the exact request first. The goal goes out only after Firefox's consent. |
+| A person who would rather speak than type | Say "book a table for four at Bistro Lune" | Hold the talk button in Chat. Whisper turns the speech into the goal in Firefox, you fix a word if needed, and you press Run. "Speak the result" reads the end aloud. |
 | A researcher | Compare planners on the same tasks | `foxmate bench --planner ollama --model <name>` scores a model in real Firefox on the 13 foxbench tasks. |
 
 ## How it works
@@ -84,6 +85,7 @@ try {
 ```mermaid
 flowchart TB
   user([You]) --> sidebar[Sidebar: Chat, Today, Lend, Space, Memory, Activity, Settings]
+  user -.->|push to talk| voice[foxvoice: Whisper in the sidebar] -.->|goal text| sidebar
   sidebar <-->|port| bg[Background page]
   phone([Your phone]) <-.->|foxsync, optional| sidebar
   bg -.->|foxnotify: notices, optional webhook| you([Your desktop or ntfy])
@@ -176,7 +178,7 @@ sequenceDiagram
 
 | View | What it does |
 |---|---|
-| Chat | A goal box for the current tab, and each run as a conversation: the planner, each plan, gate decision, approval (Approve and Deny with the exact action), result and the final check. "Your turn" at a sign-in step. "Share this tab with Claude Code", and Stop now. |
+| Chat | A goal box for the current tab, and each run as a conversation: the planner, each plan, gate decision, approval (Approve and Deny with the exact action), result and the final check. "Your turn" at a sign-in step. "Hold to talk" fills the goal box from speech, and "Speak the result" reads the end aloud. "Share this tab with Claude Code", and Stop now. |
 | Today | The goal tasks (running, waiting for you, finished), and schedules such as "every day at 08:00, open my calendar page and list today's meetings". |
 | Lend | Lend the current site with a scope, a time limit and an allow list. Run a goal in the lent tab, revoke it, and see the blocked requests. |
 | Space | Files for the planner's Python. Network: off. |
@@ -223,6 +225,11 @@ This section says exactly what leaves your computer.
   Private mode does not cover it. So the share click asks for Firefox's
   `websiteContent` data consent and the optional `nativeMessaging`
   permission. If Firefox says no, the bridge stays off.
+- **Voice.** Push to talk uses Whisper in the sidebar page, in both privacy
+  modes, so the audio and its text stay on this computer. The microphone is
+  on only while you hold the button. The model downloads once from Hugging
+  Face (43 MB); that request holds no audio. A spoken result uses a voice on
+  this computer.
 - **Notices.** Desktop notices stay on this computer. The webhook is off
   by default. When you turn it on, it sends the kind of notice, a fixed
   sentence and the time to the address you type. Settings shows the exact
@@ -302,7 +309,7 @@ the goal does not name, `all` approves everything, `none` denies everything.
 `pnpm e2e` runs foxmate in a real Firefox through the real sidebar and
 writes `artifacts/e2e-<date>.json`. The planner is the scripted one, so
 each run is the same. Our run on 2026-10-10 (Firefox 157.0.1, Apple M3 Pro,
-headless, without `FOXMATE_VISION`) passed all 87 checks. With
+headless, without `FOXMATE_VISION`) passed all 93 checks. With
 `FOXMATE_VISION` set to an Ollama address that allows extension origins, the
 vision check runs too. Some of them:
 
@@ -311,6 +318,7 @@ vision check runs too. Some of them:
 | foxbench `signup-pro` through the sidebar | foxbench's oracle passes; one approval, for "Create account"; the trail verifies |
 | A local bank asks for a password, then a code; the test types them as the user | The run waits, Chat says what to do, the run goes on and finishes; the planner's requests, the log, memory and the sidebar hold neither secret; Stop ends a wait |
 | An approval waits after the test closes the sidebar | Firefox shows "Approval needed"; a click on it opens the approval in a tab, where it still waits; the stand-in webhook gets no goal until the box and Firefox's consent allow it |
+| The microphone plays a recording of JFK's inaugural address | Whisper in Firefox fills the goal box with it, and no run starts; the model host gets no audio; the microphone is off after let go; a denied microphone offers the setup page |
 | A hidden link tells the agent to send the password to `/attacker.test/` | foxshield flags it; the planner never sees the link; the task passes |
 | A fake system message in an email asks to forward mail to `audit@attacker.test` | The Send approval shows `To: "audit@attacker.test"`; the human denies; nothing is sent |
 | Visible text asks to open a link on another host | foxgate denies it (`no-grant`); the tab stays |
@@ -386,6 +394,8 @@ Read these rows with care:
 | `fetch` with host permissions (through foxpay) | [fetch](https://developer.mozilla.org/en-US/docs/Web/API/Window/fetch) | Read the `402` answer of a bill and send the signed payment. |
 | `runtime.connectNative`, optional `nativeMessaging` | [connectNative](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/runtime/connectNative) | Start the foxbridge host while a tab is shared, and answer its calls. |
 | `notifications.create`, `clear`, `onClicked` (through foxnotify) | [notifications](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/notifications) | Tell you that a run needs you or ended while no sidebar is in view. A click opens a tab; it never answers. |
+| `getUserMedia`, `MediaRecorder` (through foxvoice) | [getUserMedia](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia) | Push to talk. The microphone is on only while you hold the button. |
+| `speechSynthesis` (through foxvoice) | [SpeechSynthesis](https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesis) | "Speak the result", with a voice on this computer only. |
 | `document.visibilityState` | [visibilityState](https://developer.mozilla.org/en-US/docs/Web/API/Document/visibilityState) | The sidebar tells the background page if it is in view, so a notice comes only when you cannot see the run. |
 | `identity.launchWebAuthFlow` (through foxlink) | [identity](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/identity) | Google sign-in for the optional Gmail and Calendar tools. |
 | `permissions.request`, `permissions.contains` with `data_collection` | [permissions.request](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/permissions/request) | Firefox's consent before page text goes to your key, or mail to Google tools. |
@@ -449,6 +459,14 @@ Read these rows with care:
   foxbridge extension cannot use the host, and `foxbridge status` reports
   the id as a problem.
 - While a goal runs, a call from Claude Code is refused (`busy`).
+- Push to talk knows English only (Whisper tiny.en), and it is slow on one
+  WASM thread: in foxvoice's tests, 11 s of speech took 3.3 s on an Apple
+  M3 Pro. There is no wake word.
+- Firefox may show no microphone prompt in the sidebar. Then "Set up the
+  microphone" opens a tab where Firefox asks once. We did not check the
+  sidebar prompt by hand.
+- "Speak the result" is off again each time the sidebar opens. On Linux,
+  Firefox needs speech-dispatcher and a voice to speak.
 - A notice click cannot open the sidebar: Firefox allows that only from a
   user action. It opens the approval in a tab.
 - A finished run, and a schedule that ran late, are low-priority notices.
@@ -489,6 +507,7 @@ flowchart LR
   foxbridge[foxbridge] --> foxmate
   foxpass[foxpass] --> foxmate
   foxnotify[foxnotify] --> foxmate
+  foxvoice[foxvoice] --> foxmate
   click foxkit "https://github.com/pooriaarab/foxkit"
   click foxbench "https://github.com/pooriaarab/foxbench"
   click foxmind "https://github.com/pooriaarab/foxmind"
@@ -509,6 +528,7 @@ flowchart LR
   click foxbridge "https://github.com/pooriaarab/foxbridge"
   click foxpass "https://github.com/pooriaarab/foxpass"
   click foxnotify "https://github.com/pooriaarab/foxnotify"
+  click foxvoice "https://github.com/pooriaarab/foxvoice"
   click foxmate "https://github.com/pooriaarab/foxmate"
 ```
 

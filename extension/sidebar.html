@@ -28,8 +28,13 @@
         <div class="row">
           <button id="run" type="submit">Run</button>
           <button id="stop" type="button" disabled>Stop</button>
+          <button id="talk" type="button" aria-describedby="talk-hint">Hold to talk</button>
           <span id="status" role="status"></span>
         </div>
+        <p id="voice-status" class="muted" role="status"></p>
+        <div class="row"><button id="mic-setup" type="button" hidden>Set up the microphone</button></div>
+        <label class="inline"><input id="speak-result" type="checkbox" /> Speak the result</label>
+        <p id="talk-hint" class="hint">Hold the button, or Space on it, while you speak. Whisper runs in Firefox, so the audio stays on this computer. The first press downloads a 43 MB model.</p>
       </form>
       <div id="bridge-panel">
         <label class="inline"><input id="bridge-share" type="checkbox" /> Share this tab with Claude Code</label>

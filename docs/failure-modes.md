@@ -219,6 +219,20 @@ in Chat.
 | NT7 | A notice field in Settings overwrites the other settings | The notice fields save `settings.notices` only, and the Settings view does not save on their change. | E2E notify |
 | NT8 | A runner with no notification service (a Linux CI runner) fails the run | As in foxnotify (CI1): with `CI` set, a failed check of what Firefox shows logs `SKIP (CI)`. The click, webhook and rules checks still count. | E2E notify |
 
+## Voice: push to talk in Chat (`extension/voice.js`, `extension/mic.js`)
+
+foxvoice turns speech into the goal text while the user holds the talk
+button. Whisper runs in the sidebar page.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| VO1 | A misheard goal runs at once | The transcript fills the goal box only. The user can edit it, and Run stays the user's click. | E2E voice |
+| VO2 | Audio or its text leaves the computer | foxmate gives foxvoice one provider: Whisper in the sidebar page, with `only: ["browser"]`, in private and own-key mode. The model host gets only requests for model files. | E2E voice |
+| VO3 | The microphone stays on after the user lets go | foxvoice stops each track when the user lets go. | E2E voice |
+| VO4 | The sidebar cannot get the microphone, because Firefox shows no prompt there | The error shows "Set up the microphone". It opens `mic.html` in a tab, which asks Firefox once. The permission belongs to the extension, so the sidebar gets it too. | E2E voice (Firefox's fake device) |
+| VO5 | The result is spoken when the user did not ask for it | "Speak the result" is off by default. When it is on, foxvoice speaks the end line that Chat shows, with a voice on this computer. | E2E voice |
+| VO6 | The test microphone or its sound file ships in `dist-ext/` | The E2E test replaces `getUserMedia` from outside the add-on. `dist-ext/` has no `.wav` file and no hook. | E2E voice (reads `dist-ext/`) |
+
 ## AMO release build and listed submission (`scripts/amo-listing.mjs`)
 
 `pnpm check:amo` reads `dist-ext/`, which is what `release.yml` signs. Each
