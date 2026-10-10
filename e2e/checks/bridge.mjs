@@ -1,7 +1,7 @@
 // BR1-BR8 (bridge): a real MCP client on foxbridge's own MCP server and
 // host, as Claude Code runs them. The test plays the user in the sidebar:
 // it shares one tab, answers the approvals in Chat, and uses Stop.
-import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -15,6 +15,23 @@ import { saveShot } from "../lib.mjs";
 // when run.mjs imports this file, before Firefox starts.
 const work = mkdtempSync(join(tmpdir(), "fmt-bridge-"));
 process.env.FOXBRIDGE_SOCKET = join(work, "host.sock");
+const NEEDED = { permissions: ["nativeMessaging"], data_collection: ["websiteContent"] };
+
+/**
+ * BR11: the test says yes for the user. BiDi cannot click in a moz-extension:
+ * page, so it writes the grant to Firefox's own permission store from the
+ * browser window, as the prompt does. dist-ext/ has no grant hook.
+ */
+async function grant(fox) {
+  const tree = await fox.browser.connection.send("browsingContext.getTree", { "moz:scope": "chrome" });
+  await fox.browser.connection.send("script.evaluate", {
+    expression: `(async () => {
+      const { ExtensionPermissions } = ChromeUtils.importESModule("resource://gre/modules/ExtensionPermissions.sys.mjs");
+      await ExtensionPermissions.add("${fox.extensionId}", { permissions: ${JSON.stringify(NEEDED.permissions)}, origins: [], data_collection: ${JSON.stringify(NEEDED.data_collection)} }, WebExtensionPolicy.getByID("${fox.extensionId}").extension);
+    })()`,
+    target: { context: tree.result.contexts[0].context }, awaitPromise: true, "moz:scope": "chrome",
+  });
+}
 const CLI = join(dirname(createRequire(import.meta.url).resolve("foxbridge")), "cli.js");
 
 /** The answer to the next approval in Chat. */
@@ -42,6 +59,23 @@ export default async function bridgeCheck({ session, check, record }) {
     await fox.open(`${site.url}/table.html`);
     const [shared, other] = await sidebar.evaluate(async (u) => [await window.foxmate.tabFor(`${u}/bridge.html`), await window.foxmate.tabFor(`${u}/table.html`)], site.url);
     const status = (text) => poll(sidebar, (t) => (document.getElementById("bridge-status").textContent.includes(t) ? document.getElementById("bridge-status").textContent : null), text, 20_000);
+    const manifest = JSON.parse(readFileSync("dist-ext/manifest.json", "utf8"));
+    check("BR10 nativeMessaging and websiteContent are optional, so an update asks nothing", { required: false, optional: true, data: true },
+      { required: manifest.permissions.includes("nativeMessaging"), optional: manifest.optional_permissions?.includes("nativeMessaging"), data: manifest.browser_specific_settings.gecko.data_collection_permissions.optional.includes("websiteContent") });
+    // BR9: with no consent, sharing keeps the bridge off.
+    await sidebar.evaluate((id) => window.foxmate.share(id), shared);
+    check("BR9 without Firefox's consent, the bridge stays off", "Firefox did not allow it, so the bridge stays off.", await status("did not allow"));
+    // A message that skips the sidebar's check meets the background page's check.
+    await sidebar.evaluate((id) => {
+      document.getElementById("bridge-status").textContent = "";
+      // A runtime port takes no target origin.
+      // oxlint-disable-next-line unicorn/require-post-message-target-origin
+      window.foxmate.port.postMessage({ op: "bridge-share", tabId: id });
+    }, shared);
+    check("BR9 the background page refuses a share without the consent too", "Firefox did not allow it, so the bridge stays off.", await status("did not allow"));
+    await grant(fox);
+    check("BR11 dist-ext/ has no hook that grants the consent", false, readFileSync("dist-ext/sidebar.js", "utf8").includes("ExtensionPermissions") || readFileSync("dist-ext/background.js", "utf8").includes("ExtensionPermissions"));
+    check("BR9 after Firefox's yes, the extension holds the consent and the permission", true, await sidebar.evaluate((n) => browser.permissions.contains(n), NEEDED));
     await sidebar.evaluate((id) => window.foxmate.share(id), shared);
     await status("Waiting for Claude Code");
     await client.connect(new StdioClientTransport({ command: process.execPath, args: [CLI, "mcp"], env: { ...process.env }, stderr: "ignore" }));
