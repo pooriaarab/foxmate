@@ -202,6 +202,23 @@ foxpass names the step, and the run waits for the user.
 | HP8 | foxpass needs `webNavigation`, so every install sees a permission prompt on update | foxmate gives foxpass a stand-in that reads the tab address from `tabs.get`. foxpass then reads the top frame of the tab. The manifest gets no new permission. | E2E pass (reads `dist-ext/manifest.json`) |
 | HP9 | A sign-up form, where the goal gives a new password, pauses the run | A password field with `autocomplete="new-password"` is not a wall for foxmate. The planner fills it, and the send still asks you. | E2E signup (E1) |
 
+## Notices: when a run needs the user (`extension/background.js`, `extension/notices.js`)
+
+foxnotify tells the user that a run waits for them, ended, or that a
+schedule ran late, while no sidebar is in view. The approval itself stays
+in Chat.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| NT1 | An approval waits while the sidebar is closed, and the user never learns of it | foxnotify shows "Approval needed" with the goal. A sidebar in view gets no notice. | E2E notify |
+| NT2 | A click on a notice approves the action | A click opens `sidebar.html#approval` in a tab, or focuses the run's tab. The approval waits there for Approve or Deny. foxmate gives foxnotify no way to answer. | E2E notify |
+| NT3 | A sign-in wait, a finished or stuck run, or a schedule run that starts late passes with no notice | foxpass's `onNeedsUser`, the end of a run, and a schedule run more than 60 s after its time each send a notice. A finished run is low priority, so it waits for the digest. | E2E notify (task-done in the digest) |
+| NT4 | Quiet hours in Settings do not reach foxnotify | Settings saves them with `setRules`. Below `urgent`, a notice waits until quiet hours end. | E2E notify (reads `fnt:rules`) |
+| NT5 | The webhook sends titles made from goals or pages without a data declaration (foxnotify DC1) | The webhook is off by default and sends no title by default. "Put the goal in the webhook notice" asks Firefox for `websiteActivity` consent, and the background page checks it again at each send. The manifest declares `websiteActivity` as optional. | E2E notify (the stand-in webhook) |
+| NT6 | The preview shows another request than the webhook sends | The preview is foxnotify's `previewWebhook` with the same options. | E2E notify |
+| NT7 | A notice field in Settings overwrites the other settings | The notice fields save `settings.notices` only, and the Settings view does not save on their change. | E2E notify |
+| NT8 | A runner with no notification service (a Linux CI runner) fails the run | As in foxnotify (CI1): with `CI` set, a failed check of what Firefox shows logs `SKIP (CI)`. The click, webhook and rules checks still count. | E2E notify |
+
 ## AMO release build and listed submission (`scripts/amo-listing.mjs`)
 
 `pnpm check:amo` reads `dist-ext/`, which is what `release.yml` signs. Each
