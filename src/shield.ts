@@ -1,11 +1,14 @@
 // The shield: a foxpaw wrapper for foxloop's browser tools. Each snapshot
 // runs foxshield's scanDocument in the tab, and the planner gets sanitize()
 // output in place of the raw page text. When the scan fails, the page text
-// is withheld (docs/failure-modes.md S1-S7).
+// is withheld (docs/failure-modes.md S1-S7). Last, foxpass's redaction takes
+// typed secrets out of the page and the quotes (HP5, HP6).
 import type { PawLike } from "foxloop";
 import * as foxpaw from "foxpaw";
 import type { Control, ScriptingApi, Snapshot } from "foxpaw";
+import type { FieldInfo } from "foxpass";
 import { sanitize, scanDocument, type FindingKind, type ScanReport } from "foxshield";
+import { redactPage } from "./pass.js";
 
 /** What foxshield did to one page, for the trail. */
 export interface ShieldScan {
@@ -24,6 +27,8 @@ export interface ShieldOptions {
   /** sanitize() wraps blocks at or above this score. Default 0.5. */
   threshold?: number;
   onScan?: (scan: ShieldScan) => void | Promise<void>;
+  /** foxpass's newest scan of the tab, so the redaction knows which fields hold secrets. */
+  fieldHints?: (tabId: number) => FieldInfo[];
 }
 
 const HIDDEN: ReadonlySet<FindingKind> = new Set(["display-none", "not-rendered", "visibility-hidden", "opacity-zero", "offscreen", "clipped", "tiny-font", "low-contrast", "aria-hidden", "covered"]);
@@ -69,6 +74,11 @@ export function shieldedPaw(options: ShieldOptions): PawLike {
     settle: paw.settle,
     runTask: paw.runTask,
     async snapshot(tabId: number, browser?: ScriptingApi): Promise<Snapshot> {
+      const done = async (page: Snapshot, seen: ShieldScan): Promise<Snapshot> => {
+        const safe = redactPage(page, options.fieldHints?.(tabId) ?? [], seen.top.map((t) => t.text));
+        await options.onScan?.({ ...seen, top: seen.top.map((t, i) => ({ ...t, text: cut(safe.quotes[i] ?? "", 120) })) });
+        return { ...safe.page, text: cut(safe.page.text, MAX_TEXT) };
+      };
       // A click on a link starts a navigation; reading before it ends sees the old page or an empty one (S11).
       for (let waited = 0; options.browser.tabs && waited < LOAD_WAIT_MS; waited += 100) {
         if ((await options.browser.tabs.get(tabId).catch(() => ({ status: "complete" }))).status === "complete") break;
@@ -80,8 +90,7 @@ export function shieldedPaw(options: ShieldOptions): PawLike {
         report = await scan(options, tabId);
       } catch (error) {
         const why = error instanceof Error ? error.message : String(error);
-        await options.onScan?.({ url: page.url, findings: 0, top: [], droppedControls: [], withheld: why });
-        return { ...page, text: WITHHELD };
+        return done({ ...page, text: WITHHELD }, { url: page.url, findings: 0, top: [], droppedControls: [], withheld: why });
       }
       const threshold = options.threshold ?? 0.5;
       // Ask the page which controls sit inside an element that foxshield found hidden. A word
@@ -96,20 +105,18 @@ export function shieldedPaw(options: ShieldOptions): PawLike {
           hiddenSet = new Set(nodes as number[]);
         } catch (error) {
           const why = error instanceof Error ? error.message : String(error);
-          await options.onScan?.({ url: page.url, findings: report.findings.length, top: [], droppedControls: [], withheld: why });
-          return { ...page, text: WITHHELD };
+          return done({ ...page, text: WITHHELD }, { url: page.url, findings: report.findings.length, top: [], droppedControls: [], withheld: why });
         }
       }
       const inHidden = (c: Control) => c.frameId === 0 && hiddenSet.has(c.node);
       const controls = page.controls.filter((c) => !inHidden(c));
       const dropped = page.controls.filter(inHidden).map((c) => c.label);
-      await options.onScan?.({
+      return done({ ...page, controls, text: sanitize(report, { threshold }) }, {
         url: page.url,
         findings: report.findings.length,
-        top: report.findings.slice(0, 5).map((f) => ({ kind: f.kind, reason: f.reason, score: f.score, text: cut(f.text, 120) })),
+        top: report.findings.slice(0, 5).map((f) => ({ kind: f.kind, reason: f.reason, score: f.score, text: f.text })),
         droppedControls: dropped,
       });
-      return { ...page, controls, text: cut(sanitize(report, { threshold }), MAX_TEXT) };
     },
   };
 }

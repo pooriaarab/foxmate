@@ -14,8 +14,9 @@ import { IdbStore, Log, idbKey } from "foxtrail";
 import { attachHeaderInjection, createVault, indexedDbKeyStore } from "foxvault";
 import { sanitize, scanDocument } from "foxshield";
 import { x402 } from "foxpay-agent";
+import { registerWebAuthnObserver } from "foxpass";
 import { createBridge } from "./bridge.js";
-import { KEY_HANDLE, SPACE_DOMAIN, createAgent, googleTools, lookTool, parsePayees, shieldedMailText, shieldedText, spaceTool, toAtomic } from "../src/index.ts";
+import { KEY_HANDLE, SPACE_DOMAIN, createAgent, createPass, googleTools, lookTool, parsePayees, shieldedMailText, shieldedText, spaceTool, toAtomic } from "../src/index.ts";
 
 /** foxshield on an HTML string: a parsed document, scanned in static mode (no layout). */
 const sanitizeHtml = (html) => sanitize(scanDocument(new DOMParser().parseFromString(html, "text/html"), { mode: "static" }));
@@ -102,10 +103,15 @@ async function setWallet({ key }) {
   return hosts;
 }
 
+// The sign-in handoff (foxpass): a page read on a sign-in, code, passkey,
+// CAPTCHA or consent wall waits until the user does the step in the tab.
+registerWebAuthnObserver(browser, { js: "passkey.js" }).catch((error) => trail.append({ actor: "foxpass", kind: "handoff.observer-failed", data: { message: error.message } }));
+const pass = createPass({ browser, trail });
+
 // foxgate and foxlend share one public suffix rule and one gate host.
 const publicSuffix = withDefaultRule(browser.publicSuffix);
 const agent = createAgent({
-  browser, trail, memory, publicSuffix, maxSteps: 30, pay: payOptions,
+  browser, trail, memory, publicSuffix, maxSteps: 30, pay: payOptions, pass,
   extraTools: [
     // The Space's files and the user's mail are private data: after either, foxmate asks
     // before each typing and each page it opens (G16). Mail needs the goal to opt in on a web tab (G18).
