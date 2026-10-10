@@ -38,6 +38,9 @@ importers:
       foxmind:
         specifier: ^0.1.0
         version: 0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1))
+      foxnotify:
+        specifier: ^0.1.0
+        version: 0.1.0(foxsync@0.1.0)
       foxpass:
         specifier: ^0.1.0
         version: 0.1.0
@@ -1651,6 +1654,15 @@ packages:
       '@huggingface/transformers': ^4.3.1
     peerDependenciesMeta:
       '@huggingface/transformers':
+        optional: true
+
+  foxnotify@0.1.0:
+    resolution: {integrity: sha512-+cifv/fZLx2zZa2+gG6aWTxyCrBpNfUJlf3Oo7uTeUHlko7d2tIy23LFlmizKxgZsDbodlpxdfu7g7KdD8wtpg==}
+    engines: {node: '>=24'}
+    peerDependencies:
+      foxsync: ^0.1.2
+    peerDependenciesMeta:
+      foxsync:
         optional: true
 
   foxpass@0.1.0:
@@ -4204,6 +4216,10 @@ snapshots:
   foxmind@0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1)):
     optionalDependencies:
       '@huggingface/transformers': 4.3.1(@types/node@24.19.1)
+
+  foxnotify@0.1.0(foxsync@0.1.0):
+    optionalDependencies:
+      foxsync: 0.1.0
 
   foxpass@0.1.0: {}
 
