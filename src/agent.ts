@@ -4,6 +4,7 @@
 // and foxtrail records each step (docs/failure-modes.md G1-G10).
 import { createFoxgate, type Gate, type Host, type PublicSuffix, type Scope } from "foxgate";
 import { browserTools, createLoop, toolSpecs, type CheckResult, type LoopEvent, type LoopTool, type ToolContext } from "foxloop";
+import { GATE_CURRENCY, PAY_TOOL, createFoxpay, payTools, type Foxpay } from "foxpay-agent";
 import type { FoxMemory } from "foxmemory";
 import * as foxpaw from "foxpaw";
 import type { ScriptingApi, Snapshot } from "foxpaw";
@@ -11,6 +12,7 @@ import type { Provider } from "foxmind";
 import { createApprovals, type Approvals } from "./approvals.js";
 import { formDetail } from "./form.js";
 import { BrainError, createBrain, type BrainSettings } from "./brain.js";
+import { payTool, type PayOptions, type PayRun } from "./pay.js";
 import { recallNotes, withNotes } from "./recall.js";
 import { shieldedPaw } from "./shield.js";
 
@@ -42,6 +44,8 @@ export interface RunInput {
   loan?: Loan;
   /** The user lets this goal read private data (mail, calendar) on a web tab (G18). */
   allowPrivate?: boolean;
+  /** The same for each attempt of one task (the foxrunner task id). A payment uses it against replays (PY5). */
+  runKey?: string;
   signal?: AbortSignal;
   onEvent?: (event: AgentEvent) => void;
 }
@@ -80,6 +84,8 @@ export interface AgentOptions {
   /** Why the page is not a good end page, or undefined. Default: foxpaw's problemOf. */
   pageProblem?: (tabId: number) => Promise<string | undefined>;
   browserModel?: () => Promise<Provider>;
+  /** Payments through foxpay, on the tab's host, with a cap and an approval for each one (PY1-PY12). */
+  pay?: PayOptions;
   maxSteps?: number;
   /** The time budget of a run, and the life of its grants. Default 10 minutes. */
   runMs?: number;
@@ -110,8 +116,11 @@ export function createAgent(options: AgentOptions): Agent {
       describe: async (args: Record<string, unknown>, ctx: ToolContext) => [await tool.describe?.(args, ctx), formDetail(lastPage, String(args.controlId), lastTyped)].filter(Boolean).join(" "),
     }));
   const extra = options.extraTools ?? [];
-  const tools = [...tabTools, ...extra.map((e) => e.tool)];
-  const { gate, host } = createFoxgate({ tools: toolSpecs(tools), ...(options.publicSuffix ? { publicSuffix: options.publicSuffix } : {}) });
+  let foxpay: Foxpay | undefined;
+  let payRun: PayRun = { off: "No run.", key: "", ask: async () => null };
+  const tools = [...tabTools, ...extra.map((e) => e.tool), ...(options.pay ? [payTool(() => foxpay!, () => payRun)] : [])];
+  const { gate, host } = createFoxgate({ tools: { ...toolSpecs(tools), ...(options.pay ? payTools() : {}) }, ...(options.publicSuffix ? { publicSuffix: options.publicSuffix } : {}) });
+  if (options.pay) foxpay = createFoxpay({ gate, store: options.pay.store, methods: { x402: options.pay.x402 }, onEvent: async (event) => { await trail.append(event); } });
   const approvals = createApprovals({ host, trail });
   const runMs = options.runMs ?? 10 * 60_000;
   const pageProblem = options.pageProblem ?? (async (tabId: number) => foxpaw.problemOf(await foxpaw.snapshot(tabId, browser as never)));
@@ -211,6 +220,25 @@ export function createAgent(options: AgentOptions): Agent {
       if (recalled.notes.length) await goPrivate("memory notes");
       else await grantTab();
       const privateTools = new Set(extra.filter((e) => e.private).map((e) => e.tool.name));
+      if (options.pay) {
+        // The paid answer is private data (PY10). A loan run never pays (PY7). The cap is for this run only.
+        privateTools.add("pay");
+        const cap = domain && !loan ? await options.pay.cap() : 0;
+        const off = loan ? "foxmate does not pay on a lent login." : cap > 0 ? undefined : "Payments are off. The user can set a spending cap in Settings.";
+        payRun = {
+          ...(off ? { off } : {}),
+          key: input.runKey ?? crypto.randomUUID(),
+          ask: async (requestId, detail, ctx) => {
+            approvals.expect(requestId);
+            const request = (await host.pending()).find((r) => r.id === requestId);
+            if (!request) return null;
+            emit({ type: "approval-needed", step: ctx.step, id: `pay-${requestId}`, requestId, action: request.action, expiresAt: request.expiresAt, detail, exactText: request.text });
+            return approvals.ask({ step: ctx.step, requestId, action: request.action, expiresAt: request.expiresAt, detail });
+          },
+        };
+        if (domain) grants.push((await host.addGrant({ scope: "read", domains: [domain], tools: ["pay"], expiresAt })).id);
+        if (domain && !off) grants.push((await host.addGrant({ scope: "pay", domains: [domain], tools: [PAY_TOOL], spendCap: { value: cap, currency: GATE_CURRENCY.USDC ?? "XTS" }, approval: "always", expiresAt })).id);
+      }
       const granted = extra.filter((e) => scopes.includes(e.tool.scope) && (!e.optIn || input.allowPrivate || !domain));
       for (const { tool, domain: own } of granted) grants.push((await host.addGrant({ scope: tool.scope, domains: [own], tools: [tool.name], expiresAt })).id);
       const loop = createLoop({ mind: brain.mind, gate, tools, trail, check, maxSteps: options.maxSteps ?? 20, budget: { ms: runMs }, onApproval: (request) => approvals.ask(request) });
@@ -234,6 +262,7 @@ export function createAgent(options: AgentOptions): Agent {
       }
       return end;
     } finally {
+      payRun = { off: "No run.", key: "", ask: async () => null };
       approvals.cancelAll();
       for (const id of grants) await host.revokeGrant(id).catch(() => undefined);
       busy = false;
