@@ -52,6 +52,8 @@ function show(event) {
   else if (event.type === "tool-result") line(event.ok ? "Result" : "Failed", ` ${event.name}: ${event.summary}${event.detail ? ` (${event.detail})` : ""}`, event.ok ? "ok" : "bad");
   else if (event.type === "check") line(event.ok ? "Check passed" : "Check failed", ` ${event.checks.map((c) => `${c.ok ? "ok" : "not ok"} ${c.part}`).join("; ")}`, event.ok ? "ok" : "bad");
   else if (event.type === "refused") line("Refused", ` ${event.message}`, "bad");
+  else if (event.type === "handoff") line("Your turn", ` Sign in on this tab, then the agent goes on. ${event.message}`, "ask-note");
+  else if (event.type === "handoff-end") line(event.status === "signed-in" ? "Signed in" : "Sign-in ended", event.status === "signed-in" ? " The agent goes on." : ` ${event.status}. The agent stops.`, event.status === "signed-in" ? "ok" : "bad");
   else if (event.type === "private") line("Private data", ` from ${event.source}. From now on foxmate asks you before it types or opens a page.`, "ask-note");
 }
 
