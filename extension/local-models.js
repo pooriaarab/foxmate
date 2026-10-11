@@ -5,6 +5,8 @@ export const SERVERS = {
   llama: { name: "llama-server", baseURL: "http://127.0.0.1:8080/v1" },
   ollama: { name: "Ollama", baseURL: "http://127.0.0.1:11434/v1" },
 };
+/** The optional fast helper for the done check (src/brain.ts HELPER_URL). */
+export const HELPER_URL = "http://127.0.0.1:8082/v1";
 
 /**
  * Asks a server for its models. Resolves with { state }:
