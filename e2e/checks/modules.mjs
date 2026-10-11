@@ -13,9 +13,10 @@ export default async function modulesCheck({ session, check, record, scripted, f
     });
     const results = off.trail.filter((e) => e.kind === "loop.tool-result").map((e) => [e.data.name, e.data.ok, e.data.summary]);
     check("O1 the look tool refuses while screenshots are off", ["look", false, "Screenshots are off. The user can turn them on in Settings."], results[0]);
-    // O2 (G18): with no opt-in, the gate does not grant the mail tools on a web tab at all.
-    const decisions = off.trail.filter((e) => e.kind === "loop.decision").map((e) => [e.data.action?.tool, e.data.decision, e.data.reason]);
-    check("O2 without the goal's opt-in, the Google tools get no grant on a web tab", ["read_calendar", "deny", "no-grant"], decisions.find((d) => d[0] === "read_calendar"));
+    // O2 (G18, G25): with no opt-in, the mail tools get no grant on a web tab, so the planner is not offered them.
+    const calendar = off.trail.find((e) => e.kind === "loop.tool-result" && e.data.name === "read_calendar")?.data;
+    check("O2 without the goal's opt-in, the planner is not offered the Google tools on a web tab", { ok: false, reason: "unknown-tool", gate: false },
+      { ok: calendar?.ok, reason: calendar?.reason, gate: off.trail.some((e) => e.kind === "loop.decision" && e.data.action?.tool === "read_calendar") });
     await session.sidebar.evaluate(() => { document.getElementById("allow-private").checked = true; });
     const opted = await runGoal(session, { url: `${site.url}/canvas.html`, goal: "List my meetings.", settings: scripted([{ tool: "read_calendar", args: {} }, finish, finish]) });
     await session.sidebar.evaluate(() => { document.getElementById("allow-private").checked = false; });

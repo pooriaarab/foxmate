@@ -29,13 +29,22 @@ function approval(event) {
   pre.textContent = event.exactText ?? JSON.stringify(event.action, null, 1);
   const row = document.createElement("div");
   row.className = "row";
-  for (const [label, answer] of [["Approve", "approve"], ["Deny", "deny"]]) {
+  // "Always allow" shows only when foxmate offers a rule: never for pay, a fill, a private run or a lent login (RU1-RU3, RU8).
+  const offer = event.ruleOffer;
+  const choices = [["Approve", "approve"], ["Deny", "deny"], ...(offer ? [[`Always allow ${offer.tool} on ${offer.site}`, "always-allow"]] : [])];
+  for (const [label, answer] of choices) {
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = label;
     button.dataset.answer = answer;
     button.addEventListener("click", () => {
       port.postMessage({ op: "answer", requestId: event.requestId, answer });
+      if (answer === "always-allow") {
+        // The rule may fail; the buttons come back then (ruleFailed).
+        for (const b of row.querySelectorAll("button")) b.disabled = true;
+        li.dataset.answered = `Approved, and always allowed ${offer.tool} on ${offer.site}.`;
+        return;
+      }
       row.replaceWith(document.createTextNode(answer === "approve" ? "Approved." : "Denied."));
     });
     row.append(button);
@@ -74,6 +83,7 @@ function show(event) {
   else if (event.type === "login-approval") approval(event);
   else if (event.type === "login-fill") line(event.status === "filled" ? "Filled" : "Not filled", event.status === "filled" ? ` the saved login on ${event.host}. Press the page's sign-in button.` : ` ${event.status}${event.reason ? ` (${event.reason})` : ""}.`, event.status === "filled" ? "ok" : "bad");
   else if (event.type === "handoff-end") line(event.status === "signed-in" ? "Signed in" : "Sign-in ended", event.status === "signed-in" ? " The agent goes on." : ` ${event.status}. The agent stops.`, event.status === "signed-in" ? "ok" : "bad");
+  else if (event.type === "rule") line("Rule", ` ${event.tool ?? ""} on ${event.domain ?? ""}: ${event.note}`, event.decision === "deny" ? "bad" : "");
   else if (event.type === "private") line("Private data", ` from ${event.source}. From now on foxmate asks you before it types or opens a page.`, "ask-note");
 }
 
@@ -134,12 +144,17 @@ export const chat = {
     if (message.event) show(message.event);
     if (message.end) end(message.end);
     if (message.error) $("status").textContent = message.error;
+    if (message.ruleFailed) {
+      const li = document.querySelector(`li.ask[data-request-id="${CSS.escape(message.ruleFailed)}"]`);
+      if (li) delete li.dataset.answered;
+      for (const b of li?.querySelectorAll(".row button") ?? []) b.disabled = false;
+    }
     if (message.waiting) {
       // An approval that another channel answered, or that expired, loses its buttons.
       const open = new Set(message.waiting.map((w) => w.requestId));
       for (const li of document.querySelectorAll("li.ask[data-request-id]")) {
         const row = li.querySelector(".row");
-        if (row && !open.has(li.dataset.requestId)) row.replaceWith(document.createTextNode("Answered."));
+        if (row && !open.has(li.dataset.requestId)) row.replaceWith(document.createTextNode(li.dataset.answered ?? "Answered."));
       }
     }
   },
