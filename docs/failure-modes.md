@@ -39,8 +39,9 @@ never reach a cloud model.
 After a run ends done, foxmate keeps its successful calls for the tab's origin
 and the exact goal with its memory notes. The next run of the same goal on the
 same origin replays them with no model call, up to the end: the planner writes
-the finish. Each call still goes through the gate, and every approval is asked
-again.
+the finish. A goal of the same shape, the same task with other values, replays
+them too, with its own values (WF12-WF17). Each call still goes through the
+gate, and every approval is asked again.
 
 | # | Failure mode | Wanted behaviour | Test |
 |---|---|---|---|
@@ -55,6 +56,12 @@ again.
 | WF10 | The replay sends a kept finish, so the run reports a summary of an earlier page (an old balance) and no model reads the page now | A kept finish is never replayed. The replay ends before it, and the planner reads the newest page and writes the summary. | `tests/agent.test.ts` WF3; e2e LV1 |
 | WF11 | The page changes under the replay: a sign-in wall, a saved-login fill, another site on the same host | A sign-in wait in the run ends the replay. The key holds the origin (scheme, host and port), not the host only. | e2e LV1 |
 | WF8 | Repeat runs are mixed with cold runs in the scores | `settings.replay: false` turns the cache off. `foxmate bench --repeat` runs the suite a second time in the same Firefox and writes the second pass on its own, as repeat-run scores. `--replay` takes only on or off. | `tests/bench.test.ts` WF8; foxbench `--repeat` |
+| WF12 | The same task with other values ("from Lisbon (LIS)" in place of "from Toronto (YYZ)") misses the cache, so a known plan is planned again at full cost | A run that ends done is also kept under the shape of its goal: the goal with each value taken out. A value is an email, a date, a number word, or a run of words that start with a capital letter or a digit, but not the first word of a sentence. A goal with the same shape on the same origin replays the kept calls, with each value of the old goal swapped for the value in the same place of the new goal. An exact goal wins over a shape. | `tests/workflow.test.ts` WF12; `tests/agent.test.ts` WF12 |
+| WF13 | A shape replay types a value of the old goal into the new run: the old date, name or email | Each kept argument and control label is rewritten from the old values to the new ones, also in the forms that a planner uses (a date as 2026-12-01, 12/01/2026 or Tuesday, December 1, 2026; "two" as "2"). When a rewritten text still holds a word or a number of an old value that changed, the replay ends before that step. | `tests/workflow.test.ts` WF13 |
+| WF14 | A choice that depends on the values (the cheapest flight, a result row with a price, an option number) replays the old choice | A shape replay ends before a click or an act whose label or value has a number that no value of the new goal gives. | `tests/workflow.test.ts` WF14 |
+| WF15 | Two goals have the same values in other words ("Book the cheapest" and "Book the latest"), and one replays the other | Every word that is not a value must be the same, in the same order. A first word of a sentence is never a value ("Do not subscribe"). | `tests/workflow.test.ts` WF15 |
+| WF16 | A value of the new goal that no kept step uses: the old run left the page default ("one" mug), so a shape replay of "two mugs" orders one | A shape replay starts only when each value that changed is in a kept step: in an argument or a control label, in one of its forms. Else the planner plans the run. | `tests/workflow.test.ts` WF16 |
+| WF17 | A rewritten label is a guess: the page names the new value in other words ("Toronto Pearson (YYZ)", not "Toronto (YYZ)"; "Trail Mug", not "Trail Mugs"), so the replay ends early | When no control has the rewritten label, the one control of the same role and submit flag whose label holds each new value (a plural "s" aside) is used. None, or more than one, ends the replay. | `tests/workflow.test.ts` WF17 |
 
 ## Shield: page text before the planner (`src/shield.ts`)
 

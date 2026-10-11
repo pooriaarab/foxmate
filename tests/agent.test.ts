@@ -674,7 +674,8 @@ describe("agent", () => {
     helper.planned = [];
     const first = await setup({ workflows });
     expect((await first.run({ script: [shopPage(1), { tool: "click", args: { button: "Pay" } }, finish] })).status).toBe("done");
-    expect(kept.size).toBe(1);
+    // Kept under the exact goal and under its shape (WF12).
+    expect(kept.size).toBe(2);
     const plannedFirst = helper.planned.length;
     const second = await setup({ workflows });
     const end = await second.run({ script: [finish] });
@@ -683,6 +684,21 @@ describe("agent", () => {
     expect(second.ran.map((r) => r.tool)).toEqual(["open_url", "click"]);
     expect(second.events.filter((e) => e.type === "approval-needed").length).toBe(1);
     expect(second.events.filter((e) => e.type === "plan").map((e) => (e as { provider?: string }).provider === "replay")).toEqual([true, true, false]);
+  });
+
+  it("WF12: a goal of the same shape replays with its own values, and the planner writes the summary", async () => {
+    const kept = new Map<string, Workflow>();
+    const workflows: WorkflowStore = { get: async (k) => kept.get(k), set: async (k, w) => { kept.set(k, w); } };
+    const first = await setup({ workflows });
+    expect((await first.run({ goal: "Buy one Trail Mug in the color Slate.", script: [shopPage(1), { tool: "click", args: { button: "Slate" } }, finish] })).status).toBe("done");
+    helper.planned = [];
+    const second = await setup({ workflows });
+    const end = await second.run({ goal: "Buy one Trail Mug in the color Sand.", script: [finish] });
+    expect(end.status).toBe("done");
+    expect(second.ran.map((r) => [r.tool, r.args])).toEqual([["open_url", { url: "http://shop.test/page1" }], ["click", { button: "Sand" }]]);
+    // Only the summary was planned.
+    expect(helper.planned.length).toBe(1);
+    expect(second.events.filter((e) => e.type === "approval-needed").length).toBe(1);
   });
 
   it("WF2, WF7: a run that did not end done keeps nothing", async () => {

@@ -3,7 +3,7 @@
 import type { Message } from "foxloop";
 import type { Control, Snapshot } from "foxpaw";
 import { describe, expect, it } from "vitest";
-import { replayCall, toStep, workflowKey } from "../src/workflow.js";
+import { generalStep, goalShape, replayCall, shapeFits, shapeKey, toStep, workflowKey, type WorkflowStep } from "../src/workflow.js";
 
 const control = (id: string, role: string, label: string, more: Partial<Control> = {}): Control => ({
   id, frameId: 0, node: Number(id.split(":")[1]), role, tag: "button", type: "", label, name: "", placeholder: "", section: "", value: "",
@@ -47,5 +47,74 @@ describe("workflow", () => {
 
   it("WF6: typing into a password field gives no step to keep", () => {
     expect(toStep("act", { controlId: "0:1", op: "type", value: "hunter2" }, page(control("0:1", "textbox", "Password", { secret: true })))).toBeNull();
+  });
+});
+
+const step = (args: Record<string, unknown>, label = "From"): WorkflowStep => ({ name: "act", args, control: { role: "combobox", label, submit: false } });
+
+describe("workflow shapes (WF12-WF17)", () => {
+  const oneway = "Book a one-way flight from Toronto (YYZ) to Barcelona (BCN) on October 23, 2026 for 1 adult. Use the name Sam Park and the email sam.park@example.com.";
+  const trap = "Book a one-way flight from Lisbon (LIS) to Madrid (MAD) on October 30, 2026 for 1 adult. Use the name Sam Park and the email sam.park@example.com.";
+  const mugs = "Buy two Trail Mugs in the color Slate. Ship to Sam Park, 12 King St W, Toronto, M5H 1A1, email sam.park@example.com. Pay with the card 4242 4242 4242 4242, expiry 12/29, CVC 123.";
+  const sand = "Buy one Trail Mug in the color Sand. Ship to Sam Park, 12 King St W, Toronto, M5H 1A1, email sam.park@example.com. Pay with the card 4242 4242 4242 4242, expiry 12/29, CVC 123.";
+
+  it("WF12: goals that differ only in their values have one shape, and the values line up", () => {
+    expect(goalShape(oneway).shape).toBe(goalShape(trap).shape);
+    expect(goalShape(mugs).shape).toBe(goalShape(sand).shape);
+    expect(goalShape(oneway).values).toEqual(["Toronto", "YYZ", "Barcelona", "BCN", "October 23, 2026", "1", "Sam Park", "sam.park@example.com"]);
+    expect(goalShape(trap).values.slice(0, 5)).toEqual(["Lisbon", "LIS", "Madrid", "MAD", "October 30, 2026"]);
+    expect(shapeKey("flights.test", oneway)).toBe(shapeKey("flights.test", trap));
+    expect(shapeKey("flights.test", oneway)).not.toBe(workflowKey("flights.test", oneway));
+  });
+
+  it("WF13: kept values and labels are rewritten to the new goal's values, in the planner's forms", () => {
+    expect(generalStep(step({ op: "select", value: "YYZ" }), oneway, trap)).toEqual(step({ op: "select", value: "LIS" }));
+    expect(generalStep(step({ op: "date", value: "2026-10-23" }, "Depart"), oneway, trap)).toEqual(step({ op: "date", value: "2026-10-30" }, "Depart"));
+    expect(generalStep(step({ op: "type", value: "10/23/2026" }, "Depart"), oneway, trap)).toEqual(step({ op: "type", value: "10/30/2026" }, "Depart"));
+    const day = { name: "click", args: {}, control: { role: "button", label: "Friday, October 23, 2026", submit: false } };
+    expect(generalStep(day, oneway, trap)).toEqual({ ...day, control: { ...day.control, label: "Friday, October 30, 2026", must: ["Friday, October 30, 2026"] } });
+    expect(generalStep(step({ op: "select", value: "2" }, "Quantity"), mugs, sand)).toEqual(step({ op: "select", value: "1" }, "Quantity"));
+    expect(generalStep({ name: "act", args: { op: "check" }, control: { role: "radio", label: "Slate", submit: false } }, mugs, sand)).toEqual({ name: "act", args: { op: "check" }, control: { role: "radio", label: "Sand", submit: false, must: ["Sand"] } });
+    // Unchanged values stay as they are.
+    expect(generalStep(step({ op: "type", value: "Sam Park" }, "Full name"), oneway, trap)).toEqual(step({ op: "type", value: "Sam Park" }, "Full name"));
+    // A form of an old value that no rule rewrites ends the replay.
+    expect(generalStep(step({ op: "type", value: "Oct 23" }, "Depart"), oneway, trap)).toMatch(/old goal/);
+    expect(generalStep(step({ op: "type", value: "Toronto Pearson" }), oneway, trap)).toEqual(step({ op: "type", value: "Lisbon Pearson" }));
+  });
+
+  it("WF14: a choice with a number that no new value gives ends the replay", () => {
+    const pick = { name: "click", args: {}, control: { role: "button", label: "Select Maple Air 12:43 for $414", submit: true } };
+    expect(generalStep(pick, oneway, trap)).toMatch(/choice/);
+    expect(generalStep({ name: "act", args: { op: "select", value: "0" }, control: { role: "combobox", label: "From", submit: false } }, oneway, trap)).toMatch(/choice/);
+    const search = { name: "click", args: {}, control: { role: "button", label: "Search flights", submit: true } };
+    expect(generalStep(search, oneway, trap)).toEqual(search);
+    expect(generalStep({ name: "act", args: { op: "type", value: "4242 4242 4242 4242" }, control: { role: "textbox", label: "Card number", submit: false } }, mugs, sand)).not.toBeTypeOf("string");
+  });
+
+  it("WF16: a changed value that no kept step uses means no shape replay", () => {
+    const one = "Buy one Trail Mug in the color Sand. Ship to Sam Park.";
+    const two = "Buy two Trail Mugs in the color Slate. Ship to Sam Park.";
+    const kept: WorkflowStep[] = [{ name: "click", args: {}, control: { role: "link", label: "Trail Mug", submit: false } },
+      { name: "act", args: { op: "check" }, control: { role: "radio", label: "Sand", submit: false } }];
+    expect(shapeFits(kept, one, two)).toMatch(/two/);
+    expect(shapeFits([...kept, { name: "act", args: { op: "select", value: "1" }, control: { role: "combobox", label: "Quantity", submit: false } }], one, two)).toBeUndefined();
+  });
+
+  it("WF17: a rewritten label that no control has falls back to the one control that holds the new values", () => {
+    const pick = generalStep({ name: "act", args: { op: "select" }, control: { role: "option", label: "Lisbon (LIS)", submit: false } }, trap, oneway) as WorkflowStep;
+    expect(pick.control?.label).toBe("Toronto (YYZ)");
+    const now = page(control("0:13", "option", "Toronto Pearson (YYZ)"), control("0:14", "option", "Lisbon (LIS)"));
+    expect(replayCall(pick, now, ok, false)).toEqual({ name: "act", arguments: JSON.stringify({ controlId: "0:13", op: "select" }) });
+    const mug = generalStep({ name: "click", args: {}, control: { role: "link", label: "Trail Mug", submit: false } }, sand, mugs) as WorkflowStep;
+    expect(replayCall(mug, page(control("0:4", "link", "Trail Mug"), control("0:5", "link", "Trail Mugs Gift Set")), ok, false)).toMatch(/2 controls|no control/);
+    expect(replayCall(mug, page(control("0:4", "link", "Trail Mug"), control("0:5", "link", "Delta Kite")), ok, false)).toEqual({ name: "click", arguments: JSON.stringify({ controlId: "0:4" }) });
+    // Two controls hold the new value: no guess.
+    expect(replayCall(pick, page(control("0:13", "option", "Toronto Pearson (YYZ)"), control("0:15", "option", "Toronto Island (YYZ)")), ok, false)).toMatch(/controls/);
+  });
+
+  it("WF15: other words, or a capital at the start of a sentence, make another shape", () => {
+    expect(goalShape(oneway.replace("Book a one-way", "Book the latest one-way")).shape).not.toBe(goalShape(trap).shape);
+    expect(goalShape("Do not subscribe. Create an account for Ana Silva.").shape).not.toBe(goalShape("Subscribe. Create an account for Ana Silva.").shape);
+    expect(goalShape("Reply to Dana Lee's email about the Q4 budget.").values).toEqual(["Dana Lee", "Q4"]);
   });
 });
