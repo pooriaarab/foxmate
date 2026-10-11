@@ -74,7 +74,7 @@ export default async function bridgeCheck({ session, check, record }) {
     }, shared);
     check("BR9 the background page refuses a share without the consent too", "Firefox did not allow it, so the bridge stays off.", await status("did not allow"));
     await grant(fox);
-    check("BR11 dist-ext/ has no hook that grants the consent", false, readFileSync("dist-ext/sidebar.js", "utf8").includes("ExtensionPermissions") || readFileSync("dist-ext/background.js", "utf8").includes("ExtensionPermissions"));
+    check("BR11 dist-ext/ has no hook that grants the consent", false, readFileSync("dist-ext/app.js", "utf8").includes("ExtensionPermissions") || readFileSync("dist-ext/background.js", "utf8").includes("ExtensionPermissions"));
     check("BR9 after Firefox's yes, the extension holds the consent and the permission", true, await sidebar.evaluate((n) => browser.permissions.contains(n), NEEDED));
     await sidebar.evaluate((id) => window.foxmate.share(id), shared);
     await status("Waiting for Claude Code");
