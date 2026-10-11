@@ -16,7 +16,7 @@ const signInLine = (sidebar, runs) => poll(sidebar, (n) => [...(document.querySe
 export default async function passCheck({ session, check, record, runGoal }) {
   const { fox, sidebar } = session;
   const [planner, site] = await Promise.all([startPlanner(), startLogin()]);
-  const settings = { privacy: "private", planner: "llama-server", baseURL: planner.url, model: "fake" };
+  const settings = { planner: "llama-server", baseURL: planner.url, model: "fake" };
   try {
     planner.play([{ tool: "snapshot" }, { tool: "finish", args: { summary: "The balance is $1,204.50." } }]);
     const page = await fox.open(`${site.url}/account`);

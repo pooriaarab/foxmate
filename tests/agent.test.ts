@@ -52,7 +52,7 @@ async function setup(options: { recall?: () => Promise<never> } = {}) {
   await memory.remember("Party size: 4 people at every table.", { kind: "preference" });
   let problem: string | undefined;
   const agent = createAgent({
-    browser: { tabs: { get: async (id: number) => ({ id, ...TABS[id] }) }, permissions: { contains: async () => false } },
+    browser: { tabs: { get: async (id: number) => ({ id, ...TABS[id] }) } },
     trail,
     memory: options.recall ? { recall: options.recall } : memory,
     makeTools,
@@ -126,8 +126,8 @@ describe("agent", () => {
 
   it("G6: a brain refusal ends the run before any tool, and the trail has it", async () => {
     const { agent, ran, trail } = await setup();
-    const end = await agent.run({ goal: "Buy the mug", tabId: 1, settings: { planner: "openai", consent: true } });
-    expect(end).toMatchObject({ status: "refused", reason: "cloud-in-private" });
+    const end = await agent.run({ goal: "Buy the mug", tabId: 1, settings: { planner: "ollama", model: "gpt-oss:120b-cloud" } });
+    expect(end).toMatchObject({ status: "refused", reason: "not-local" });
     expect(ran).toEqual([]);
     const kinds = (await trail.entries()).map((e) => e.kind);
     expect(kinds).toContain("run.refused");
