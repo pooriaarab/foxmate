@@ -1,6 +1,6 @@
 {
   "name": "foxmate",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "A private, open-source alternative to Meta Muse, ChatGPT Dots, Grok Bot and Instinct that runs only in your own Firefox, with a local model.",
   "type": "module",
   "license": "MIT",
