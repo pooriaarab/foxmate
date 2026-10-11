@@ -1,11 +1,12 @@
 // Chat: the one conversation. Each run is a goal bubble and a list of
 // compact steps: the planner, each plan, gate decision and result, inline
 // approvals, sign-in waits, and the end. Each step says what happens in
-// plain words; the raw tool call sits behind "Details". The dock shows the
+// plain words; the raw tool call sits behind "Details". The fox follows the
 // run state. The E2E driver reads this DOM: #conversation > li, .goal,
 // .steps li (the label first), li.ask with pre, .detail and
 // .row button[data-answer], and .end.
 import { logins, rules } from "./engine.js";
+import { runState, setRunState } from "./fox.js";
 import { details, plain } from "./plain.js";
 import { hostOf, targetTab } from "./target.js";
 
@@ -19,13 +20,8 @@ const shown = new Set();
 
 const STATUS = { thinking: () => "Thinking…", working: () => (runHost ? `Working on ${runHost}…` : "Working…"), "needs-approval": () => "Waiting for your OK" };
 
-// The run state: idle, thinking, working, needs-approval or done.
-let current = "idle";
-const runState = () => current;
-
 function state(next, text) {
-  current = next;
-  $("presence").dataset.state = next;
+  setRunState(next);
   if (text ?? STATUS[next]) $("status").textContent = text ?? STATUS[next]();
 }
 

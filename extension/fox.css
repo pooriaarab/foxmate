@@ -1,0 +1,18 @@
+/* The fox's parts. fox.js moves each group with its SVG transform attribute,
+   in viewBox units, from one requestAnimationFrame loop. This file only
+   sizes the drawing and swaps the eyes; it runs no animations of its own.
+   app.css still sets the fox size, the colors and the step-back opacity. */
+.fox-art { display: block; width: 100%; height: 100%; overflow: visible; stroke: none; }
+.fx-eyes-happy { display: none; }
+.fox[data-state="done"] .fx-eyes-open { display: none; }
+.fox[data-state="done"] .fx-eyes-happy { display: inline; }
+
+/* A long run: the fox goes quiet and fades, but does not shrink. */
+.fox.stepped-back { scale: none; }
+
+/* Needs approval: the ring fades out in place instead of growing. */
+.presence[data-state="needs-approval"] .fox::after { animation-name: fx-ring; }
+@keyframes fx-ring { from { opacity: 0.6; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .presence[data-state="needs-approval"] .fox::after { animation: none; opacity: 0.5; }
+}
