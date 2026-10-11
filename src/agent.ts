@@ -3,7 +3,7 @@
 // through foxgate, page text passes foxshield, approvals come from a human,
 // and foxtrail records each step (docs/failure-modes.md G1-G10).
 import { createFoxgate, type Gate, type Host, type PublicSuffix, type Scope, type Store } from "foxgate";
-import { ASK_USER, FINISH, askUserTool, browserTools, createLoop, toolSpecs, type CheckResult, type LoopEvent, type LoopTool, type Message, type MindLike, type ToolContext, type ToolOutput } from "foxloop";
+import { ASK_USER, FINISH, askUserTool, browserTools, createLoop, toolSpecs, type ChatReply, type CheckResult, type LoopEvent, type LoopTool, type Message, type MindLike, type ToolContext, type ToolOutput } from "foxloop";
 import { GATE_CURRENCY, PAY_TOOL, createFoxpay, payTools, type Foxpay } from "foxpay-agent";
 import type { FoxMemory } from "foxmemory";
 import * as foxpaw from "foxpaw";
@@ -15,6 +15,7 @@ import { BrainError, createBrain, type Brain, type BrainSettings } from "./brain
 import { maskCards, type Pass, type PassEvent } from "./pass.js";
 import { payTool, type PayOptions, type PayRun } from "./pay.js";
 import { recallNotes, withNotes } from "./recall.js";
+import { replayCall, toStep, workflowKey, type WorkflowStep, type WorkflowStore } from "./workflow.js";
 import { shieldedPaw } from "./shield.js";
 
 export interface Trail {
@@ -114,6 +115,8 @@ export interface AgentOptions {
   runMs?: number;
   /** How long `open_site` waits for the new tab to load. Default 20 s (OS8). */
   openMs?: number;
+  /** The workflow cache: a run that ends done is kept, and the same goal on the same origin replays it (WF1-WF11). */
+  workflows?: WorkflowStore;
 }
 
 export interface Agent {
@@ -214,11 +217,26 @@ export function createAgent(options: AgentOptions): Agent {
   // The current run's events and Stop, for a sign-in wait inside a page read.
   let runEmit: (event: AgentEvent) => void = noEvent;
   let runSignal: AbortSignal | undefined;
-  const shielded = shieldedPaw({ browser: browser as never, onScan: async (scan) => { await trail.append({ actor: "foxshield", kind: "shield.scan", data: scan }); }, ...(options.pass ? { fieldHints: options.pass.hints } : {}) });
+  // foxshield flagged a page of the current run: a replay ends there (WF5).
+  let tainted = false;
+  // The current run waited for a sign-in: the page changed, so a replay ends there (WF11).
+  let handedOff = false;
+  const passEmit = (event: PassEvent) => {
+    if (event.type === "handoff") handedOff = true;
+    runEmit(event);
+  };
+  const shielded = shieldedPaw({
+    browser: browser as never,
+    onScan: async (scan) => {
+      if (scan.withheld || scan.droppedControls.length || scan.top.some((t) => t.score >= 0.5)) tainted = true;
+      await trail.append({ actor: "foxshield", kind: "shield.scan", data: scan });
+    },
+    ...(options.pass ? { fieldHints: options.pass.hints } : {}),
+  });
   const paw = {
     ...shielded,
     snapshot: async (tabId: number, api?: ScriptingApi) => {
-      await options.pass?.beforeRead(tabId, { emit: runEmit, ...(runSignal ? { signal: runSignal } : {}) });
+      await options.pass?.beforeRead(tabId, { emit: passEmit, ...(runSignal ? { signal: runSignal } : {}) });
       return (lastPage = await shielded.snapshot(tabId, api));
     },
   };
@@ -370,6 +388,8 @@ export function createAgent(options: AgentOptions): Agent {
       }
       emit({ type: "start", planner: brain.planner, goal });
       lastPage = undefined;
+      tainted = false;
+      handedOff = false;
       // The newest tool result the planner got, for the done check when no snapshot was read.
       let lastTool = "";
       const brainCheck = brain.check;
@@ -503,11 +523,36 @@ export function createAgent(options: AgentOptions): Agent {
         });
       };
       const redact = options.redact;
+      // The workflow cache, for foxmate's own planner on a web tab with no loan (WF6, WF8). The key
+      // is the tab's origin and the goal with its memory notes, so a new note finds no kept run (WF9, WF11).
+      const key = domain ? workflowKey(new URL(tab.url!).origin, goal) : undefined;
+      const caching = own && !loan && Boolean(key) && Boolean(options.workflows) && input.settings.replay !== false;
+      const kept = caching ? await options.workflows!.get(key!).catch(() => undefined) : undefined;
+      const replay = kept?.steps.length ? { steps: kept.steps, at: 0, live: true } : undefined;
+      // The calls of this run that worked, in order; null once one may not be kept (WF6).
+      let record: WorkflowStep[] | null = caching ? [] : null;
+      const pending = new Map<string, WorkflowStep | null | undefined>();
+      const replayNext = async (messages: Message[]): Promise<ChatReply | undefined> => {
+        if (!replay?.live) return undefined;
+        const step = replay.steps[replay.at];
+        const call = !step ? "the kept steps ran out" : handedOff ? "the run waited for a sign-in" : replayCall(step, lastPage, messages, tainted);
+        if (typeof call === "string") {
+          replay.live = false;
+          await trail.append({ actor: "foxmate", kind: "run.route", data: { by: "planner", tried: false, why: `the replay ended: ${call}` } });
+          return undefined;
+        }
+        replay.at += 1;
+        await trail.append({ actor: "foxmate", kind: "run.route", data: { by: "replay", tried: false, step: replay.at } });
+        return { message: { role: "assistant", content: null, tool_calls: [{ id: `replay_${replay.at}`, type: "function", function: call }] }, provider: "replay", tier: "local" };
+      };
       const plannerMind: MindLike = {
         chat: async (messages, chatOptions) => {
           const framed = await withContext(messages);
           const shown = own ? { ...chatOptions, tools: chatOptions.tools.filter((d) => d.function.name === FINISH || visible.has(d.function.name)) } : chatOptions;
-          return brain.mind.chat(redact ? (JSON.parse(await redact(JSON.stringify(framed))) as Message[]) : framed, shown);
+          const sent = redact ? (JSON.parse(await redact(JSON.stringify(framed))) as Message[]) : framed;
+          const replayed = await replayNext(sent);
+          if (replayed) return replayed;
+          return brain.mind.chat(sent, shown);
         },
       };
       // open_site after the human's OK: a new tab, then the grants of its host, as for a tab the user
@@ -557,6 +602,15 @@ export function createAgent(options: AgentOptions): Agent {
           emit({ ...event, ...(text ? { exactText: text } : {}), ...withOffer(event.action) });
         } else emit(event);
         if (event.type === "tool-call" && event.name === "act" && (event.args as { op?: string } | undefined)?.op === "type") lastTyped = String((event.args as { controlId?: unknown }).controlId);
+        // The workflow cache keeps each call that worked, by its control's role and label (WF1, WF6, WF7).
+        if (record && event.type === "tool-call" && event.step > 0) pending.set(event.id, event.args && typeof event.args === "object" ? toStep(event.name, event.args as Record<string, unknown>, lastPage) : undefined);
+        if (record && event.type === "tool-result" && event.step > 0 && event.ok) {
+          const step = pending.get(event.id);
+          if (!step) record = null;
+          else record.push(event.name === ASK_USER ? { ...step, answer: event.summary } : step);
+        }
+        // Another answer to a kept question ends the replay (WF4).
+        if (replay?.live && event.type === "tool-result" && event.name === ASK_USER && event.summary !== replay.steps[replay.at - 1]?.answer) replay.live = false;
         // foxloop's first read is foxmate's, not the planner's: it does not count for G15 or G22 (G32).
         const planned = event.type === "tool-result" && event.step > 0;
         if (planned) lastOk = event.ok;
@@ -573,6 +627,11 @@ export function createAgent(options: AgentOptions): Agent {
         }
         if (event.type === "done") end = { status: "done", summary: event.summary };
         if (event.type === "blocked") end = { status: "blocked", reason: event.reason, message: event.message };
+      }
+      // Only a run that ended done, with no private data, is kept (WF6, WF7). The finish is not
+      // kept: the planner reads the newest page and writes the summary (WF10).
+      if (record?.length && end.status === "done" && !privateSource) {
+        await options.workflows!.set(key!, { steps: record }).catch(() => undefined);
       }
       return end;
     } finally {
