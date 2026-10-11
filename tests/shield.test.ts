@@ -1,7 +1,7 @@
-// Tests for docs/failure-modes.md S1-S7. The scan report comes from the real
+// Tests for docs/failure-modes.md S1-S12. The scan report comes from the real
 // foxshield (scanHtml, static mode); only foxpaw and the tab are stubs.
 import { scanDocument, scanHtml, type ScanReport } from "foxshield";
-import type { Control, Snapshot } from "foxpaw";
+import { changeText, pageText, type Control, type Snapshot } from "foxpaw";
 import { describe, expect, it } from "vitest";
 import { shieldedPaw, type ShieldScan } from "../src/shield.js";
 
@@ -24,7 +24,7 @@ const raw: Snapshot = {
   controls: [control("0:1", "Add to cart"), { ...control("0:2", "verify your account now"), offscreen: true }],
 };
 
-const fakePaw = { snapshot: async () => structuredClone(raw), act: async () => ({ ok: true }) as never, settle: async () => 0, runTask: async () => ({}) as never };
+const fakePaw = { snapshot: async () => structuredClone(raw), act: async () => ({ ok: true }) as never, settle: async () => 0, runTask: async () => ({}) as never, pageText, changeText };
 // The scan returns `result`. The second call asks the page which control nodes sit inside hidden text: `inside`.
 const tab = (result: () => Promise<unknown>, inside: number[] | "throw" = []) => ({
   scripting: {
@@ -86,6 +86,19 @@ describe("shield", () => {
     expect(shielded.act).toBe(fakePaw.act);
     expect(shielded.settle).toBe(fakePaw.settle);
     expect(shielded.runTask).toBe(fakePaw.runTask);
+  });
+
+  it("S12: pageText and changeText are foxpaw's own, and see only the shielded page", async () => {
+    const shielded = shieldedPaw({ paw: fakePaw, browser: tab(async () => [{ result: report() }], [2]) });
+    expect(shielded.pageText).toBe(fakePaw.pageText);
+    expect(shielded.changeText).toBe(fakePaw.changeText);
+    const before = await shielded.snapshot(1);
+    const text = shielded.pageText(before);
+    expect(text).toContain("Trail Mug, $18.");
+    expect(text).not.toContain("gift card");
+    expect(text).not.toContain("verify your account");
+    const after = await shielded.snapshot(1);
+    expect(shielded.changeText(before, { ...after, text: `${after.text}\nAdded to the cart.` }).text).not.toContain("gift card");
   });
 
   it("S8: harmless hidden text does not drop a real control", async () => {
