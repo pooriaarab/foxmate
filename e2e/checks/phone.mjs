@@ -51,7 +51,8 @@ export default async function phoneCheck({ session, check, record, scripted, fin
     record.runs.phone = { requests, yes: yes.status, no: no.status };
     check("F2 the phone gets the exact action, and its answer decides", { first: true, exact: true, yes: true, no: "Blocked (approval-denied)", via: ["phone", "phone"] }, {
       // The phone leads with the exact action that foxgate allows; the planner's words come after.
-      first: requests[0]?.title === "foxmate asks: browser_task on 127.0.0.1" && requests[0]?.detail.includes("foxmate says: let foxpaw fill the form") && requests[0]?.detail.includes("name: Ana Silva, party size: 2"),
+      // The title names where the form sends (UI11).
+      first: /^foxmate asks: browser_task on 127\.0\.0\.1, sends to 127\.0\.0\.1:\d+\//.test(requests[0]?.title ?? "") && requests[0]?.detail.includes("foxmate says: let foxpaw fill the form") && requests[0]?.detail.includes("name: Ana Silva, party size: 2"),
       exact: Boolean(requests[0]?.detail) && yes.steps.some((s) => s.includes(requests[0].detail.split("\n\n")[0])),
       yes: yes.done && new URL(yes.url).searchParams.get("name") === "Ana Silva",
       no: no.status.slice(0, 25),

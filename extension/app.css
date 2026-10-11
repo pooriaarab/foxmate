@@ -285,6 +285,8 @@ main { min-width: 0; height: 100%; overflow: hidden; }
 .ask .site { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
 .ask .text { display: block; margin-top: 6px; font-size: 14.5px; color: var(--text); }
 .ask .detail { color: var(--muted); margin: 6px 0 2px; font-size: 13px; }
+.ask .dest { margin-top: 2px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.ask ul.fields { margin: 6px 0 2px; padding-left: 18px; font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
 .ask .text.detail { color: var(--text); font-size: 14.5px; }
 .caption { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 details.raw { margin-top: 4px; font-size: 12px; color: var(--muted); }

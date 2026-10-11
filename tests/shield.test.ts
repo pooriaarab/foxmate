@@ -1,9 +1,10 @@
-// Tests for docs/failure-modes.md S1-S12. The scan report comes from the real
+// Tests for docs/failure-modes.md S1-S14. The scan report comes from the real
 // foxshield (scanHtml, static mode); only foxpaw and the tab are stubs.
 import { scanDocument, scanHtml, type ScanReport } from "foxshield";
-import { changeText, pageText, type Control, type Snapshot } from "foxpaw";
+import type { FieldInfo } from "foxpass";
+import { changeText, pageText, preview, runTask, type ActRequest, type Control, type RunOptions, type Snapshot } from "foxpaw";
 import { describe, expect, it } from "vitest";
-import { shieldedPaw, type ShieldScan } from "../src/shield.js";
+import { hiddenNodes, shieldedPaw, type ShieldScan } from "../src/shield.js";
 
 const PAGE = `<h1>Trail Mug</h1>
 <p>Trail Mug, $18. Free shipping.</p>
@@ -24,7 +25,7 @@ const raw: Snapshot = {
   controls: [control("0:1", "Add to cart"), { ...control("0:2", "verify your account now"), offscreen: true }],
 };
 
-const fakePaw = { snapshot: async () => structuredClone(raw), act: async () => ({ ok: true }) as never, settle: async () => 0, runTask: async () => ({}) as never, pageText, changeText };
+const fakePaw = { snapshot: async () => structuredClone(raw), act: async () => ({ ok: true }) as never, settle: async () => 0, runTask: async () => ({}) as never, preview, pageText, changeText };
 // The scan returns `result`. The second call asks the page which control nodes sit inside hidden text: `inside`.
 const tab = (result: () => Promise<unknown>, inside: number[] | "throw" = []) => ({
   scripting: {
@@ -81,11 +82,11 @@ describe("shield", () => {
     expect(scan?.withheld).toBeUndefined();
   });
 
-  it("S7: act, settle and runTask are foxpaw's own", async () => {
+  it("S7: act and settle are foxpaw's own; runTask reads through the shield (S13)", async () => {
     const shielded = shieldedPaw({ paw: fakePaw, browser: tab(async () => [{ result: report() }]) });
     expect(shielded.act).toBe(fakePaw.act);
     expect(shielded.settle).toBe(fakePaw.settle);
-    expect(shielded.runTask).toBe(fakePaw.runTask);
+    expect(shielded.runTask).not.toBe(fakePaw.runTask);
   });
 
   it("S12: pageText and changeText are foxpaw's own, and see only the shielded page", async () => {
@@ -131,5 +132,95 @@ describe("shield", () => {
     const browser = { ...tab(async () => [{ result: report() }]), tabs: { get: async () => ({ status }) } };
     await shieldedPaw({ paw, browser }).snapshot(1);
     expect(readAt).toBe("complete");
+  });
+});
+
+// S13, S14: a sign-up form where the page puts the Phone field (node 2) inside hidden text.
+const input = (node: number, label: string, more: Partial<Control> = {}): Control => ({
+  ...control(`0:${node}`, label), role: "textbox", tag: "input", type: "text", form: 1, action: "http://127.0.0.1:9/thanks", guard: "g", ...more,
+});
+function signupTab() {
+  const state = { sent: false, reads: 0, scans: 0, acted: [] as number[] };
+  const controls = [input(1, "Email", { type: "email" }), input(2, "Phone", { type: "tel" }), input(3, "Sign up", { role: "button", tag: "button", type: "submit", submit: true })];
+  const snapshot = async (): Promise<Snapshot> => {
+    state.reads += 1;
+    return {
+      ...structuredClone(raw), url: state.sent ? "http://127.0.0.1:9/thanks" : raw.url, frames: [{ frameId: 0, url: raw.url, key: "k", documentId: "doc" }],
+      controls: state.sent ? [] : structuredClone(controls),
+    };
+  };
+  const browser = {
+    scripting: {
+      executeScript: async (details: { func: unknown; args?: unknown[] }) => {
+        if (details.func === scanDocument) {
+          state.scans += 1;
+          return [{ result: report() }];
+        }
+        if (details.func === hiddenNodes) return [{ result: [2] }];
+        // foxpaw's own read, which skips the shield: it sees every control and the raw text.
+        if ((details.func as { name?: string }).name === "readFrame") {
+          const { frames: _, controls: seen, ...rest } = await snapshot();
+          return [{ frameId: 0, documentId: "doc", result: { ...rest, key: "k", controls: seen.map(({ id: _id, frameId: _f, popupFor: _p, ...c }) => c) } }];
+        }
+        if ((details.func as { name?: string }).name === "perform") {
+          const [node, request] = details.args as [number, ActRequest];
+          state.acted.push(node);
+          const found = controls.find((c) => c.node === node);
+          if (request.op === "type" && found) found.value = request.value ?? "";
+          if ((request.op === "click" && found?.submit) || request.op === "enter") {
+            state.sent = true;
+            return [{ frameId: 0, result: { ok: true, submitted: true } }];
+          }
+          return [{ frameId: 0, result: { ok: true, value: found?.value } }];
+        }
+        return [{ frameId: 0, result: 0 }];
+      },
+    },
+  };
+  return { state, controls, snapshot, browser };
+}
+const GOAL = "email: sam@example.com, phone: 555 0100, click Sign up";
+
+describe("shield: runTask", () => {
+  it("S13: every page read in runTask runs the scan", async () => {
+    const page = signupTab();
+    const shielded = shieldedPaw({ paw: { ...fakePaw, snapshot: page.snapshot, runTask }, browser: page.browser });
+    const result = await shielded.runTask(1, GOAL, { browser: page.browser as never, maxSteps: 10 });
+    expect(result.status).not.toBe("error");
+    expect(page.state.reads).toBeGreaterThanOrEqual(2);
+    expect(page.state.scans).toBe(page.state.reads);
+    expect(JSON.stringify(result)).not.toContain("gift card");
+  });
+
+  it("S13: runTask never fills a control that foxshield found hidden", async () => {
+    const page = signupTab();
+    const scans: ShieldScan[] = [];
+    const shielded = shieldedPaw({ paw: { ...fakePaw, snapshot: page.snapshot, runTask }, browser: page.browser, onScan: (s) => { scans.push(s); } });
+    const result = await shielded.runTask(1, GOAL, { browser: page.browser as never, maxSteps: 10 });
+    expect(page.state.acted.length).toBeGreaterThan(0);
+    expect(page.state.acted).not.toContain(2);
+    expect(page.controls.find((c) => c.node === 2)?.value).toBe("");
+    expect(result.unmatched).toContain("phone: 555 0100");
+    expect(scans[0]?.droppedControls).toEqual(["Phone"]);
+  });
+
+  it("S14: the read runTask gets is shielded but not foxpass-redacted", async () => {
+    const typed = { ...structuredClone(raw), controls: [input(4, "Verification", { name: "vc", value: "739204" })] };
+    const hints: FieldInfo[] = [{ selector: "#vc", tag: "input", type: "text", autocomplete: "one-time-code", name: "vc", id: "vc", label: "Verification", placeholder: "", inputMode: "", maxLength: -1, visible: true, filled: true, form: 0 }];
+    let got: Snapshot | undefined;
+    const browser = tab(async () => [{ result: report() }]);
+    const paw = {
+      ...fakePaw, snapshot: async () => structuredClone(typed),
+      runTask: async (tabId: number, _goal: string, options?: RunOptions) => {
+        got = await options?.read?.(tabId, browser as never);
+        return {} as never;
+      },
+    };
+    const shielded = shieldedPaw({ paw, browser, fieldHints: () => hints });
+    await shielded.runTask(1, "verification: 739204", {});
+    expect(got?.controls[0]?.value).toBe("739204");
+    expect(got?.text).toContain("Trail Mug, $18.");
+    expect(got?.text).not.toContain("gift card");
+    expect((await shielded.snapshot(1)).controls[0]?.value).toBe("[redacted]");
   });
 });
