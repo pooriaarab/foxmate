@@ -163,6 +163,16 @@ runs it in a sandbox page with no network and no extension APIs.
 | D4 | The Space tool works outside its sandbox domain, or a page host grant covers it | It has its own grant, for the domain `space.foxmate` and the tool `run_python` only. | E2E space |
 | D5 | A goal about a file needs a web page in the tab | A run on a tab with no web page gets no tab grants, but the Space tool still works. | E2E space |
 
+## The app page (`extension/app.html`, `target.js`)
+
+The app runs in a tab (the toolbar button opens it) and in the sidebar. In a
+tab, the active tab is the app itself.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| UI2 | A goal from the full page runs on the foxmate page itself, the active tab | The target is the tab the user picked, else the active web tab of the window, else the web tab used last. Only http and https tabs count. The composer chip names it. | E2E app UI2 |
+| UI3 | Each toolbar click opens one more app tab, each with its own port and phone link | The toolbar button brings the open app tab to the front, and opens a tab only when none is open. | E2E app UI3 |
+
 ## Sidebar link: the background page lifecycle
 
 | # | Failure mode | Wanted behaviour | Test |
@@ -279,7 +289,7 @@ in Chat.
 | # | Failure mode | Wanted behaviour | Test |
 |---|---|---|---|
 | NT1 | An approval waits while the sidebar is closed, and the user never learns of it | foxnotify shows "Approval needed" with the goal. A sidebar in view gets no notice. | E2E notify |
-| NT2 | A click on a notice approves the action | A click opens `sidebar.html#approval` in a tab, or focuses the run's tab. The approval waits there for Approve or Deny. foxmate gives foxnotify no way to answer. | E2E notify |
+| NT2 | A click on a notice approves the action | A click opens `app.html#approval` in a tab, or focuses the run's tab. The approval waits there for Approve or Deny. foxmate gives foxnotify no way to answer. | E2E notify |
 | NT3 | A sign-in wait, a finished or stuck run, or a schedule run that starts late passes with no notice | foxpass's `onNeedsUser`, the end of a run, and a schedule run more than 60 s after its time each send a notice. A finished run is low priority, so it waits for the digest. | E2E notify (task-done in the digest) |
 | NT4 | Quiet hours in Settings do not reach foxnotify | Settings saves them with `setRules`. Below `urgent`, a notice waits until quiet hours end. | E2E notify (reads `fnt:rules`) |
 | NT5 | The webhook sends titles made from goals or pages without a data declaration (foxnotify DC1) | The webhook is off by default and sends no title by default. "Put the goal in the webhook notice" asks Firefox for `websiteActivity` consent, and the background page checks it again at each send. The manifest declares `websiteActivity` as optional. | E2E notify (the stand-in webhook) |

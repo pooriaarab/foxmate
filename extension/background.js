@@ -1,7 +1,7 @@
-// The background page hosts the agent, the trail and the runs. The sidebar
-// talks to it over a "foxmate" port: it starts a goal on a tab, answers
-// approvals and stops a run. Every open sidebar gets every event of the
-// current run, so a sidebar that opens late shows the run too.
+// The background page hosts the agent, the trail and the runs. The app page
+// (a tab or the sidebar) talks to it over a "foxmate" port: it starts a goal
+// on a tab, answers approvals and stops a run. Every open app page gets every
+// event of the current run, so a page that opens late shows the run too.
 import { createFoxgate, storageAreaStore } from "foxgate";
 import { idbStore, iframeRuntime, openDen } from "foxden";
 import { createFoxlend, withDefaultRule } from "foxlend";
@@ -126,12 +126,13 @@ async function setWallet({ key }) {
 registerWebAuthnObserver(browser, { js: "passkey.js" }).catch((error) => trail.append({ actor: "foxpass", kind: "handoff.observer-failed", data: { message: error.message } }));
 const pass = createPass({ browser, trail, logins, onNeedsUser: ({ tabId }) => notice("needs-sign-in", { tabId }) });
 
-// Notices (foxnotify), while no sidebar is in view: a run needs you, ended,
+// Notices (foxnotify), while no foxmate page is in view: a run needs you, ended,
 // or a schedule ran late. A click opens the tab or the approval in a tab; it
 // never answers (NT1-NT3). The webhook is off by default and sends no title
 // unless the user ticks the box and Firefox's websiteActivity consent says
 // yes, checked at each send (NT5, foxnotify DC1).
-const APPROVAL_PAGE = browser.runtime.getURL("sidebar.html#approval");
+const APP_PAGE = browser.runtime.getURL("app.html");
+const APPROVAL_PAGE = `${APP_PAGE}#approval`;
 const noticeSettings = async () => (await browser.storage.local.get("settings")).settings?.notices ?? {};
 const webhook = {
   name: "webhook",
@@ -151,7 +152,7 @@ setRules().catch(() => undefined);
 browser.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.settings) setRules().catch(() => undefined);
 });
-/** The open sidebars, and whether each one is in view. */
+/** The open foxmate pages, and whether each one is in view. */
 const inView = new Map();
 function notice(kind, target, run = current) {
   if ([...inView.values()].some(Boolean) || !run) return;
@@ -200,7 +201,7 @@ const agent = createAgent({
 const lender = createFoxlend({ browser, host: createFoxgate({ tools: { lend: "read" }, publicSuffix }).host, publicSuffix });
 const blocked = [];
 // A blocked URL can carry what the page tried to steal (a cookie in the query),
-// so the log and the sidebar keep only its origin and path.
+// so the log and the app keep only its origin and path.
 const bare = (url) => {
   try {
     const u = new URL(url);
@@ -363,7 +364,16 @@ agent.approvals.onChange((waiting) => {
   else if (current) notifier.clear(`needs-approval:${current.taskId ?? current.id}`).catch(() => undefined);
 });
 
-browser.action.onClicked.addListener(() => browser.sidebarAction.toggle());
+// The toolbar button opens foxmate in a tab, next to the tab the user is on,
+// or brings the open one to the front. That tab stays foxmate's target.
+async function openApp(from) {
+  const open = (await browser.tabs.query({})).find((t) => t.url?.startsWith(APP_PAGE));
+  if (open) {
+    await browser.tabs.update(open.id, { active: true });
+    await browser.windows.update(open.windowId, { focused: true });
+  } else await browser.tabs.create({ url: APP_PAGE, ...(from ? { index: from.index + 1, windowId: from.windowId } : {}) });
+}
+browser.action.onClicked.addListener((tab) => openApp(tab));
 
 browser.runtime.onConnect.addListener((port) => {
   if (port.name !== "foxmate") return;
@@ -440,6 +450,7 @@ browser.runtime.onMessage.addListener(async (message) => {
     send({ rulesChanged: true });
     return { removed };
   }
+  if (message?.op === "open-app") return openApp().then(() => ({ ok: true }));
   if (message?.op === "trail-export") return { jsonl: await (await trailReady).exportJsonl() };
   return undefined;
 });
