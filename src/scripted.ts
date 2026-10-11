@@ -12,6 +12,7 @@
 // snapshot has a control with that label, and `"ifText": "words"` only
 // when the newest tool result holds those words, and `"ifSeen": "words"`
 // when any tool result so far held them; else the planner skips it.
+// A step `{ "batch": [steps] }` sends all its calls in one reply (B13).
 import { scriptedMind, type Message, type ScriptReply } from "foxloop";
 import { NOTES_HEADER } from "./recall.js";
 
@@ -22,6 +23,7 @@ export interface ScriptStepJson {
   if?: string;
   ifText?: string;
   ifSeen?: string;
+  batch?: { tool: string; args?: Record<string, unknown> }[];
 }
 
 export class ScriptError extends Error {
@@ -71,6 +73,7 @@ export function scriptMind(script: string, goal: string) {
         if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, fill(v)]));
         return value;
       };
+      if (step.batch) return { calls: step.batch.map((c) => ({ name: c.tool, args: fill(c.args ?? {}) as Record<string, unknown> })) };
       return step.tool ? { calls: [{ name: step.tool, args: fill(step.args ?? {}) as Record<string, unknown> }] } : { text: String(fill(step.text ?? "")) };
     }
   };

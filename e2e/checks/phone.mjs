@@ -1,4 +1,4 @@
-// F1-F2: phone approvals (foxsync). A second Firefox plays the phone. It
+// F1-F3: phone approvals (foxsync). A second Firefox plays the phone. It
 // pairs with the sidebar, gets each approval with the exact action, and its
 // answer decides the run. The sidebar buttons are not used.
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -56,6 +56,24 @@ export default async function phoneCheck({ session, check, record, scripted, fin
       yes: yes.done && new URL(yes.url).searchParams.get("name") === "Ana Silva",
       no: no.status.slice(0, 25),
       via: [...yes.trail, ...no.trail].filter((e) => e.kind === "approval.answer").map((e) => e.data.via),
+    });
+
+    // F3 (G33): one reply with two fills. The memory check saved a note on tables, so this run
+    // holds private data and each fill asks (G17). The phone gets one request per call, in order.
+    const seen = requests.length;
+    await phone.evaluate(() => { window.phone.decision = "approve"; });
+    const batch = await runGoal(session, {
+      url: `${site.url}/table.html`, goal: "Book a table for Kim Park at Bistro Lune.", answer: () => "wait",
+      settings: { ...scripted([{ batch: [{ tool: "act", args: { controlId: "{{control:Name}}", op: "type", value: "Kim Park" } }, { tool: "act", args: { controlId: "{{control:Party size}}", op: "select", value: "3" } }] }, { tool: "click", args: { controlId: "{{control:Book a table}}" } }, finish]), modules: { phone: true } },
+    });
+    const asked = (await phone.evaluate(() => window.phone.requests)).slice(seen);
+    record.runs.phoneBatch = { asked, steps: batch.steps };
+    check("F3 two calls in one reply ask the phone one at a time, in order", { tools: ["act", "act", "click"], values: ["Kim Park", "3"], cards: 3, done: true, booked: "Kim Park/3" }, {
+      tools: asked.map((r) => r.title.split(" ")[2]),
+      values: asked.slice(0, 2).map((r) => JSON.parse(r.detail.split("\n\n")[0]).args.value),
+      cards: batch.trail.filter((e) => e.kind === "approval.answer" && e.data.via === "phone").length,
+      done: batch.done,
+      booked: `${new URL(batch.url).searchParams.get("name")}/${new URL(batch.url).searchParams.get("party")}`,
     });
   } finally {
     await phoneFox.close();
