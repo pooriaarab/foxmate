@@ -2,14 +2,14 @@
 // into the goal, the brain picks the planner, foxloop plans and calls tools
 // through foxgate, page text passes foxshield, approvals come from a human,
 // and foxtrail records each step (docs/failure-modes.md G1-G10).
-import { createFoxgate, type Gate, type Host, type PublicSuffix, type Scope } from "foxgate";
+import { createFoxgate, type Gate, type Host, type PublicSuffix, type Scope, type Store } from "foxgate";
 import { browserTools, createLoop, toolSpecs, type CheckResult, type LoopEvent, type LoopTool, type MindLike, type ToolContext } from "foxloop";
 import { GATE_CURRENCY, PAY_TOOL, createFoxpay, payTools, type Foxpay } from "foxpay-agent";
 import type { FoxMemory } from "foxmemory";
 import * as foxpaw from "foxpaw";
 import type { ScriptingApi, Snapshot } from "foxpaw";
 import type { Provider } from "foxmind";
-import { createApprovals, type Approvals } from "./approvals.js";
+import { createApprovals, ruleOffer, type Approvals, type RuleContext, type RuleOffer } from "./approvals.js";
 import { formDetail } from "./form.js";
 import { BrainError, createBrain, type BrainSettings } from "./brain.js";
 import type { Pass, PassEvent } from "./pass.js";
@@ -53,7 +53,8 @@ export interface RunInput {
 }
 
 export type AgentEvent =
-  | (LoopEvent & { exactText?: string })
+  | (LoopEvent & { exactText?: string; ruleOffer?: RuleOffer })
+  | { type: "rule"; ruleId: string; decision: "allow" | "ask" | "deny"; note: string; tool?: string; domain?: string }
   | { type: "start"; planner: string; goal: string }
   | { type: "recall"; notes: string[]; error?: string }
   | { type: "refused"; reason: string; message: string }
@@ -72,6 +73,8 @@ export interface AgentOptions {
   trail: Trail;
   memory?: Pick<FoxMemory, "recall">;
   publicSuffix?: PublicSuffix;
+  /** Where foxgate keeps the user's standing rules, for example `storageAreaStore(browser.storage.local)` (RU4). Default: memory. */
+  ruleStore?: Store;
   /** The tools for a tab. Default: foxloop's browser tools over foxshield. */
   makeTools?: (tabId: () => number) => LoopTool[];
   /** The active loan whose container holds this cookie store, if any. A run on that tab is a loan run (G12). */
@@ -139,9 +142,24 @@ export function createAgent(options: AgentOptions): Agent {
   let foxpay: Foxpay | undefined;
   let payRun: PayRun = { off: "No run.", key: "", ask: async () => null };
   const tools = [...tabTools, ...extra.map((e) => e.tool), ...(options.pay ? [payTool(() => foxpay!, () => payRun)] : [])];
-  const { gate, host } = createFoxgate({ tools: { ...toolSpecs(tools), ...(options.pay ? payTools() : {}) }, ...(options.publicSuffix ? { publicSuffix: options.publicSuffix } : {}) });
+  // Each decision that a user rule made goes to the trail with its ruleId first; a failed write denies (RU6).
+  const VERB = { allow: "allowed", ask: "asked", deny: "denied" } as const;
+  const { gate, host } = createFoxgate({
+    tools: { ...toolSpecs(tools), ...(options.pay ? payTools() : {}) },
+    ...(options.publicSuffix ? { publicSuffix: options.publicSuffix } : {}),
+    ...(options.ruleStore ? { ruleStore: options.ruleStore } : {}),
+    onDecision: async ({ kind, action, decision }) => {
+      if (!decision.ruleId) return;
+      const note = `${VERB[decision.decision]} by rule ${decision.ruleId}`;
+      await trail.append({ actor: "foxgate", kind: "gate.rule", data: { ruleId: decision.ruleId, decision: decision.decision, via: kind, note, tool: action?.tool, domain: action?.domain, scope: action?.scope } });
+      runEmit({ type: "rule", ruleId: decision.ruleId, decision: decision.decision, note, ...(action ? { tool: action.tool, domain: action.domain } : {}) });
+    },
+  });
   if (options.pay) foxpay = createFoxpay({ gate, store: options.pay.store, methods: { x402: options.pay.x402 }, onEvent: async (event) => { await trail.append(event); } });
-  const approvals = createApprovals({ host, trail });
+  // The current run's rule context; outside a run no card offers a rule.
+  let ruleCtx: RuleContext | undefined;
+  const ruleFor = (action: Parameters<typeof ruleOffer>[0]) => (ruleCtx ? ruleOffer(action, ruleCtx) : undefined);
+  const approvals = createApprovals({ host, trail, ruleFor });
   const runMs = options.runMs ?? 10 * 60_000;
   const pageProblem = options.pageProblem ?? (async (tabId: number) => foxpaw.problemOf(await foxpaw.snapshot(tabId, browser as never)));
 
@@ -157,6 +175,11 @@ export function createAgent(options: AgentOptions): Agent {
     if (!lastOk) return { ok: false, checks: [{ part: "the last step worked", ok: false, evidence: "the newest tool result is a failure" }], problem: "the last step did not work" };
     const problem = await pageProblem(target).catch((error: unknown) => `foxmate could not read the page: ${String(error)}`);
     return { ok: !problem, checks: [{ part: "the page shows no error (no task check)", ok: !problem, evidence: problem ?? "no error page" }], ...(problem ? { problem } : {}) };
+  };
+
+  const withOffer = (action: Parameters<typeof ruleOffer>[0]) => {
+    const offer = ruleFor(action);
+    return offer ? { ruleOffer: offer } : {};
   };
 
   async function run(input: RunInput): Promise<RunEnd> {
@@ -220,7 +243,10 @@ export function createAgent(options: AgentOptions): Agent {
           grants.push(id);
         };
         for (const scope of scopes) {
-          if (!privateSource || scope === "submit") {
+          if (scope === "submit") {
+            // Only a run with no private data and no loan lets an allow rule skip the human (RU1, RU8).
+            await add({ scope, domains: [domain], expiresAt, rules: !privateSource && !loan });
+          } else if (!privateSource) {
             await add({ scope, domains: [domain], expiresAt });
           } else if (scope === "fill") {
             await add({ scope, domains: [domain], expiresAt, approval: "always" });
@@ -234,10 +260,12 @@ export function createAgent(options: AgentOptions): Agent {
       const goPrivate = async (source: string) => {
         if (privateSource) return;
         privateSource = source;
+        ruleCtx = { ...ruleCtx!, privateRun: true };
         emit({ type: "private", source });
         await trail.append({ actor: "foxmate", kind: "run.private", data: { source } });
         await grantTab();
       };
+      ruleCtx = { privateRun: false, loan: Boolean(loan), publicSuffix: options.publicSuffix, tabTools: tabTools.map((t) => t.name) };
       if (recalled.notes.length) await goPrivate("memory notes");
       else await grantTab();
       const privateTools = new Set(extra.filter((e) => e.private).map((e) => e.tool.name));
@@ -253,7 +281,7 @@ export function createAgent(options: AgentOptions): Agent {
             approvals.expect(requestId);
             const request = (await host.pending()).find((r) => r.id === requestId);
             if (!request) return null;
-            emit({ type: "approval-needed", step: ctx.step, id: `pay-${requestId}`, requestId, action: request.action, expiresAt: request.expiresAt, detail, exactText: request.text });
+            emit({ type: "approval-needed", step: ctx.step, id: `pay-${requestId}`, requestId, action: request.action, expiresAt: request.expiresAt, detail, exactText: request.text, ...withOffer(request.action) });
             return approvals.ask({ step: ctx.step, requestId, action: request.action, expiresAt: request.expiresAt, detail });
           },
         };
@@ -276,7 +304,7 @@ export function createAgent(options: AgentOptions): Agent {
           approvals.expect(event.requestId);
           // ask() reads foxgate's text when foxloop calls it; read it here too, for the event.
           const text = (await host.pending()).find((r) => r.id === event.requestId)?.text;
-          emit({ ...event, ...(text ? { exactText: text } : {}) });
+          emit({ ...event, ...(text ? { exactText: text } : {}), ...withOffer(event.action) });
         } else emit(event);
         if (event.type === "tool-call" && event.name === "act" && (event.args as { op?: string } | undefined)?.op === "type") lastTyped = String((event.args as { controlId?: unknown }).controlId);
         if (event.type === "tool-result") lastOk = event.ok;
@@ -287,6 +315,7 @@ export function createAgent(options: AgentOptions): Agent {
       }
       return end;
     } finally {
+      ruleCtx = undefined;
       payRun = { off: "No run.", key: "", ask: async () => null };
       runEmit = noEvent;
       runSignal = undefined;
