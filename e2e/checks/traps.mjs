@@ -72,8 +72,10 @@ export default async function trapsCheck({ session, bench, check, record, script
       settings: scripted([{ tool: "snapshot", args: {} }, { tool: "open_url", args: { url: "{{lastUrl}}" } }, finish]),
     });
     const last = t3.trail.filter((e) => e.kind === "loop.decision").at(-1)?.data;
-    check("T3 another host: the gate denies it before anything runs", { status: "Blocked (gate-deny)", decision: "deny", reason: "no-grant", approvals: 0, stayed: true },
-      { status: t3.status.slice(0, 19), decision: last?.decision, reason: last?.reason, approvals: t3.approvals.length, stayed: t3.url.endsWith("/inject.html") });
+    // The denial goes back to the planner as the step's result (G26); nothing opens.
+    const result = t3.trail.find((e) => e.kind === "loop.tool-result" && e.data.name === "open_url")?.data;
+    check("T3 another host: the gate denies it before anything runs, and the planner gets the reason", { result: "gate-deny", decision: "deny", reason: "no-grant", approvals: 0, stayed: true },
+      { result: result?.reason, decision: last?.decision, reason: last?.reason, approvals: t3.approvals.length, stayed: t3.url.endsWith("/inject.html") });
   } finally {
     await site.close();
   }

@@ -447,7 +447,11 @@ Read these rows with care:
   no approval, so a page can make the planner type or send what the page
   itself shows, or what the goal says. After private data, each of those
   asks you, and you must read the approval.
-- A denied approval ends the run. It does not try another way.
+- A denied approval ends the run. It does not try another way. A step that
+  the gate refuses because it is outside the run (another site, or a tool
+  with no grant) does not end it: foxmate's planner gets the reason as the
+  step's result and can try another step. The third such refusal in a row
+  ends the run. A "Never allow" rule still ends it.
 - An approval for `browser_task` covers every field and click that foxpaw
   makes in that task.
 - The form values in an approval are the ones the planner last read. A page
