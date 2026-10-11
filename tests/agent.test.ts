@@ -7,13 +7,15 @@ import { describe, expect, it, vi } from "vitest";
 import { createAgent, type AgentEvent, type RunInput } from "../src/agent.js";
 
 // G34: a stand-in fast helper on the scripted brain. `reply` undefined means no helper.
-const helper = vi.hoisted(() => ({ reply: undefined as string | undefined, seen: [] as string[] }));
+const helper = vi.hoisted(() => ({ reply: undefined as string | undefined, seen: [] as string[], tools: [] as string[][] }));
 vi.mock("../src/brain.js", async (original) => {
   const real = await original<typeof import("../src/brain.js")>();
   return {
     ...real,
     createBrain: async (...args: Parameters<typeof real.createBrain>) => {
-      const brain = await real.createBrain(...args);
+      const real0 = await real.createBrain(...args);
+      // G36: the tool names of each planner request.
+      const brain = { ...real0, mind: { chat: (messages: Parameters<typeof real0.mind.chat>[0], options: Parameters<typeof real0.mind.chat>[1]) => { helper.tools.push(options.tools.map((t) => t.function.name)); return real0.mind.chat(messages, options); } } };
       if (helper.reply === undefined) return brain;
       return { ...brain, check: async (messages: unknown[]) => { helper.seen.push(JSON.stringify(messages)); return { text: helper.reply!, provider: "scout" }; } };
     },
@@ -125,7 +127,11 @@ const finish = { tool: "finish", args: { summary: "Done." } };
 type Sent = { role: string; content: string | null; tool_call_id?: string };
 const sent = (request: string | undefined) => JSON.parse(request ?? "[]") as Sent[];
 /** The newest tab note in a request to the planner (G23, G31). */
-const tabNote = (request: string | undefined) => sent(request).findLast((m) => m.role === "user" && m.content?.startsWith("The open tab"))?.content ?? "";
+const NOTE = "The open tab and this run:";
+const tabNote = (request: string | undefined) => {
+  const content = sent(request).findLast((m) => m.content?.includes(NOTE))?.content ?? "";
+  return content.slice(content.lastIndexOf(NOTE));
+};
 const openSite = (url: string) => ({ tool: "open_site", args: { url } });
 const open = (n: number) => ({ tool: "open_url", args: { url: `https://site${n}.test/` } });
 
@@ -331,7 +337,7 @@ describe("agent", () => {
       if (i) expect(messages.slice(0, all[i - 1]!.length)).toEqual(all[i - 1]);
     }
     expect(all[0]![0]?.content).not.toContain("The open tab");
-    const notes = all.at(-1)!.filter((m) => m.role === "user" && m.content?.startsWith("The open tab"));
+    const notes = all.at(-1)!.filter((m) => m.content?.includes(NOTE)).map((m) => ({ ...m, content: m.content!.slice(m.content!.indexOf(NOTE)) }));
     expect(notes.length).toBe(2);
     expect(notes[0]?.content).toMatch(/no web page/);
     expect(notes[1]?.content).toContain("https://shop.test/");
@@ -386,6 +392,27 @@ describe("agent", () => {
     } finally {
       helper.reply = undefined;
     }
+  });
+
+  it("G35: the tab note ends the newest tool result; it is a user message only before any tool result", async () => {
+    const { run, requests } = await setup();
+    await run({ script: [{ tool: "fill", args: { text: "x" } }, finish] });
+    const first = sent(requests[0]);
+    expect(first.at(-1)?.role).toBe("tool");
+    expect(first.at(-1)?.content).toMatch(/A page\.[\s\S]*The open tab and this run:/);
+    const last = sent(requests.at(-1));
+    expect(last.filter((m) => m.role === "user").length).toBe(1);
+    const none = await setup();
+    await none.run({ noTab: true, script: [finish] });
+    expect(sent(none.requests[0]).at(-1)).toMatchObject({ role: "user" });
+    expect(sent(none.requests[0]).at(-1)?.content).toContain(NOTE);
+  });
+
+  it("G36: the planner always gets the finish tool", async () => {
+    helper.tools = [];
+    await (await setup()).run({ script: [{ tool: "fill", args: { text: "x" } }, finish] });
+    expect(helper.tools.length).toBeGreaterThan(0);
+    for (const names of helper.tools) expect(names).toContain("finish");
   });
 
   it("G24: the title is cut, on one line, with no angle brackets; the address has no query or fragment", async () => {
