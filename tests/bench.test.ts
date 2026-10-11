@@ -13,9 +13,21 @@ describe("bench", () => {
     expect(run.stderr).toContain("core, hard, security+, all");
   });
 
+  it("WF8: --replay takes only on or off, before Firefox starts", () => {
+    const run = spawnSync(process.execPath, ["cli/foxmate.mjs", "bench", "--replay", "maybe"], { encoding: "utf8", timeout: 20_000 });
+    expect(run.status).toBe(2);
+    expect(run.stderr).toContain("--replay must be on or off.");
+  });
+
   it("BN2: the metrics count planner calls, tool results and approvals from the trail", () => {
     const run = { approvals: [{}, {}], kinds: ["run.start", "loop.plan", "loop.tool-result", "loop.plan", "loop.tool-result", "loop.tool-result", "loop.done"] };
     expect((runMetrics as (r: unknown) => unknown)(run)).toEqual({ modelCalls: 2, steps: 3, approvals: 2 });
+  });
+
+  it("WF8: a replayed step is not a model call", () => {
+    const trail = [{ kind: "run.route", data: { by: "replay" } }, { kind: "run.route", data: { by: "replay" } }];
+    const run = { approvals: [], kinds: ["loop.plan", "loop.plan", "loop.plan"], trail };
+    expect((runMetrics as (r: unknown) => unknown)(run)).toEqual({ modelCalls: 1, steps: 0, approvals: 0 });
   });
 
   it("BN3: a question goes to Ask Sam on the task's site and comes back with Sam's answer", async () => {

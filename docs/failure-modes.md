@@ -34,6 +34,28 @@ never reach a cloud model.
 | B17 | The helper is not sure, or answers prose, and its guess decides | The `check` role escalates (`escalate: "unsure"`) to the planner, whose answer decides. | `tests/brain.test.ts` B17 |
 | B18 | The helper wraps its JSON in a code fence (Qwen3.5-4B does, as llama-server ignores a bare `json_object` for it), so every check counts as unsure and goes to the slow planner | The helper's requests carry a JSON schema for the verdict, so llama-server writes the verdict only. foxmate also reads a verdict inside a code fence. | `tests/brain.test.ts` B18; `tests/agent.test.ts` G34 |
 
+## Workflow cache: replay a plan that worked (`src/workflow.ts`, `src/agent.ts`)
+
+After a run ends done, foxmate keeps its successful calls for the tab's origin
+and the exact goal with its memory notes. The next run of the same goal on the
+same origin replays them with no model call, up to the end: the planner writes
+the finish. Each call still goes through the gate, and every approval is asked
+again.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| WF1 | A replayed click lands on another control, because control ids changed | A click or an act is kept as the control's role, label and submit flag. At replay, foxmate finds the one control in the newest snapshot with the same three; none, or more than one, ends the replay. | `tests/workflow.test.ts` WF1 |
+| WF2 | The replay goes on after a step failed or the page changed, on a plan that no longer fits | A failed result, a skipped call or a failed check ends the replay. The planner takes over with the history so far. | `tests/workflow.test.ts` WF2; `tests/agent.test.ts` WF2 |
+| WF3 | A replayed step skips the gate or an approval | A replayed call is a planner reply like any other: foxloop checks it with the gate, and each approval is asked. | `tests/agent.test.ts` WF3 |
+| WF4 | The user's answer to a question is replayed, though the user may answer otherwise this time | A question is asked again. When the answer differs from the kept one, the replay ends. | `tests/agent.test.ts` WF4 |
+| WF5 | A page of the replay carries a prompt injection | Once foxshield flags a page of the run (a finding at or above the threshold, a dropped control, or withheld text), the replay ends and the planner plans. | `tests/workflow.test.ts` WF5 |
+| WF6 | A secret, or private data, is kept in the cache | A run that typed into a password field, or that holds private data or runs on a loan, keeps nothing. Every kept value is in the goal or on the page already. | `tests/agent.test.ts` WF6 |
+| WF7 | A failed or stopped run is kept and replayed | Only a run that ends done is kept. Failed calls are not kept. | `tests/agent.test.ts` WF2 |
+| WF9 | A saved memory changes an argument (party size 4), but the replay types the value of an earlier run (party size 2), and the approval shows the old value | The key holds the goal with its memory notes, so another note set finds no kept run. A run with notes keeps nothing (WF6). | e2e R2 |
+| WF10 | The replay sends a kept finish, so the run reports a summary of an earlier page (an old balance) and no model reads the page now | A kept finish is never replayed. The replay ends before it, and the planner reads the newest page and writes the summary. | `tests/agent.test.ts` WF3; e2e LV1 |
+| WF11 | The page changes under the replay: a sign-in wall, a saved-login fill, another site on the same host | A sign-in wait in the run ends the replay. The key holds the origin (scheme, host and port), not the host only. | e2e LV1 |
+| WF8 | Repeat runs are mixed with cold runs in the scores | `settings.replay: false` turns the cache off. `foxmate bench --repeat` runs the suite a second time in the same Firefox and writes the second pass on its own, as repeat-run scores. `--replay` takes only on or off. | `tests/bench.test.ts` WF8; foxbench `--repeat` |
+
 ## Shield: page text before the planner (`src/shield.ts`)
 
 Every page text that foxloop's browser tools read goes through foxshield

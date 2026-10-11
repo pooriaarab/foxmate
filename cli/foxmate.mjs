@@ -2,6 +2,7 @@
 // The foxmate command.
 //   foxmate try     open a fresh Firefox profile with foxmate installed
 //   foxmate bench   score foxmate on foxbench in a real Firefox
+import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { SUITES, runSuite, taskById, tasksIn, toMarkdown, writeScore } from "foxbench";
 import { foxmateAdapter } from "./bench.mjs";
@@ -21,6 +22,9 @@ foxmate bench [options]
   --approve <rule>   careful (default), all or none: how the stand-in human answers
   --ask <on|off>     on (default): the planner may ask the user, and Ask Sam answers
   --scout <url|off>  the fast helper model (default http://127.0.0.1:8082/v1), or off
+  --replay <on|off>  on (default): a goal that ran done before replays its kept calls
+  --repeat           run the tasks a second time in the same Firefox, and write
+                     that pass to <out>/repeat as repeat-run scores
   --tasks <ids>      only these tasks, from any suite, comma-separated
   --timeout <s>      the longest time for one task (default 600)
   --out <dir>        where to write the scoreboard (default artifacts)
@@ -31,7 +35,7 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     planner: { type: "string", default: "scripted" }, model: { type: "string" }, "base-url": { type: "string" },
-    approve: { type: "string", default: "careful" }, ask: { type: "string", default: "on" }, scout: { type: "string" }, suite: { type: "string", default: "core" }, tasks: { type: "string" }, timeout: { type: "string", default: "600" },
+    approve: { type: "string", default: "careful" }, ask: { type: "string", default: "on" }, scout: { type: "string" }, replay: { type: "string", default: "on" }, repeat: { type: "boolean", default: false }, suite: { type: "string", default: "core" }, tasks: { type: "string" }, timeout: { type: "string", default: "600" },
     out: { type: "string", default: "artifacts" }, headed: { type: "boolean", default: false }, firefox: { type: "string" }, help: { type: "boolean" },
   },
 });
@@ -65,23 +69,28 @@ if (values.help || !command) {
     console.error(`--tasks names a task that foxbench does not have. Run "npx foxbench list".`);
     process.exit(2);
   }
-  if (!["on", "off"].includes(values.ask)) {
-    console.error("--ask must be on or off.");
-    process.exit(2);
+  for (const flag of ["ask", "replay"]) {
+    if (!["on", "off"].includes(values[flag])) {
+      console.error(`--${flag} must be on or off.`);
+      process.exit(2);
+    }
   }
   const scout = values.scout === undefined ? {} : { helper: values.scout === "off" ? { off: true } : { baseURL: values.scout } };
-  const planner = { planner: values.planner, ...(values.model ? { model: values.model } : {}), ...(values["base-url"] ? { baseURL: values["base-url"] } : {}), ...(values.ask === "off" ? { ask: false } : {}), ...scout };
+  const planner = { planner: values.planner, ...(values.model ? { model: values.model } : {}), ...(values["base-url"] ? { baseURL: values["base-url"] } : {}), ...(values.ask === "off" ? { ask: false } : {}), ...(values.replay === "off" ? { replay: false } : {}), ...scout };
   const session = await startFox({ headless: !values.headed, ...(values.firefox ? { firefox: values.firefox } : {}) });
   try {
     const adapter = foxmateAdapter(session, { planner, approve: values.approve, timeoutMs: Number(values.timeout) * 1000 });
-    const board = await runSuite({
-      adapter,
-      timeoutMs: Number(values.timeout) * 1000 + 30_000,
-      tasks: only ?? tasksIn(values.suite),
-      onResult: (r) => console.log(`${r.success ? "pass" : "fail"} ${r.id}${r.attack ? ` (attack ${r.attack})` : ""}`),
-    });
-    console.log(toMarkdown(board));
-    console.log(writeScore(board, values.out));
+    // A second pass in the same Firefox finds the first pass's kept workflows (WF8).
+    for (const [pass, out] of [["", values.out], ...(values.repeat ? [["repeat ", join(values.out, "repeat")]] : [])]) {
+      const board = await runSuite({
+        adapter,
+        timeoutMs: Number(values.timeout) * 1000 + 30_000,
+        tasks: only ?? tasksIn(values.suite),
+        onResult: (r) => console.log(`${pass}${r.success ? "pass" : "fail"} ${r.id}${r.attack ? ` (attack ${r.attack})` : ""}`),
+      });
+      console.log(toMarkdown(board));
+      console.log(writeScore(board, out));
+    }
   } finally {
     await session.fox.close();
   }
