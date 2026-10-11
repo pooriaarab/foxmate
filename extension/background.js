@@ -292,6 +292,8 @@ async function runClaimed({ goal, tabId, loanId, taskId, signal, allowPrivate, m
   const onEvent = (event) => {
     // A run with no tab opened one (open_site): its notices name that tab.
     if (event.type === "opened") run.tabId = event.tabId;
+    // A question waits for the user, as an approval does (AQ1).
+    if (event.type === "question") notice("needs-approval", { url: APP_PAGE }, run);
     run.events.push(event);
     tap?.(event);
     send({ runId: run.id, event });
@@ -403,6 +405,8 @@ browser.runtime.onConnect.addListener((port) => {
         if (result === "no-rule") port.postMessage({ ruleFailed: message.requestId, error: "foxmate could not add that rule. Approve or Deny this step." });
       }
       else if (message.op === "fill-login") await pass.fillSaved();
+      // The user's answer to the planner's question, or no answer (Skip) (AQ1, AQ2).
+      else if (message.op === "reply") agent.reply(String(message.id), typeof message.text === "string" ? message.text : undefined);
       else if (message.op === "stop") current?.controller.abort();
       else if (message.op === "seen") inView.set(port, Boolean(message.visible));
       else if (message.op === "bridge-share") await bridge.share(message.tabId);
