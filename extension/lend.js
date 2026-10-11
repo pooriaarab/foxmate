@@ -1,6 +1,8 @@
-// The Lend view: lend the current site to foxmate with foxlend, run a goal
+// The Lend view: lend the target tab's site to foxmate with foxlend, run a goal
 // in the lent tab, and revoke. It also lists the requests that the guard
 // blocked.
+import { targetTab } from "./target.js";
+
 const $ = (id) => document.getElementById(id);
 const SCOPES = { read: "read", fill: "read and fill", submit: "read, fill and send" };
 let show;
@@ -59,8 +61,8 @@ async function load(status) {
   $("blocked").replaceChildren(...blocked.toReversed().map(blockedRow));
   if (status !== undefined) $("lend-status").textContent = status;
   if (!$("lend-url").value) {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    if (tab?.url?.startsWith("http")) $("lend-url").value = tab.url;
+    const tab = await targetTab();
+    if (tab) $("lend-url").value = tab.url;
   }
 }
 

@@ -1,5 +1,5 @@
 // The E2E test: foxmate in a real Firefox. It installs dist-ext/, runs
-// goals through the real sidebar, background page, foxloop, foxgate,
+// goals through the real app page, background page, foxloop, foxgate,
 // foxshield and foxtrail on the foxbench sites, and writes
 // artifacts/e2e-<date>.json. The planner is the scripted one, so each run
 // is the same. Usage: pnpm e2e [--headed]. Env: FIREFOX, and E2E_ONLY (a
@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { writeArtifact } from "create-foxkit/e2e";
 import { sites, startServer } from "foxbench";
 import activity from "./checks/activity.mjs";
+import app from "./checks/app.mjs";
 import bridge from "./checks/bridge.mjs";
 import keepalive from "./checks/keepalive.mjs";
 import lend from "./checks/lend.mjs";
@@ -29,8 +30,9 @@ import { BANK_HOSTS } from "./bank.mjs";
 import { runGoal, startFox } from "./lib.mjs";
 
 // rules goes after activity: Activity shows the newest 300 entries, and its runs would push the older kinds out.
-// notify goes first: foxnotify allows 4 notices a minute, and the later checks send some too.
-const CHECKS = { notify, signup, pass, vault, local, traps, memory, lend, space, phone, modules, activity, rules, pay, bridge, voice, tasks, keepalive };
+// app goes first: it checks the tabs before other checks open some. notify comes
+// next: foxnotify allows 4 notices a minute, and the later checks send some too.
+const CHECKS = { app, notify, signup, pass, vault, local, traps, memory, lend, space, phone, modules, activity, rules, pay, bridge, voice, tasks, keepalive };
 
 const record = { startedAt: new Date().toISOString(), checks: [], runs: {} };
 const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });

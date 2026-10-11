@@ -1,5 +1,7 @@
-// The Claude Code bridge in Chat: share the current tab, and the Stop
+// The Claude Code bridge in the target menu: share the target tab, and the Stop
 // switch. The background page owns the native port and the shared tab.
+import { targetTab } from "./target.js";
+
 const $ = (id) => document.getElementById(id);
 // Firefox's consent for page content, and the native messaging permission (BR9, BR10).
 const NEEDED = { permissions: ["nativeMessaging"], data_collection: ["websiteContent"] };
@@ -19,8 +21,8 @@ export const bridge = {
       if (!$("bridge-share").checked) return port.postMessage({ op: "bridge-stop" });
       // Asked in the click. A refusal or an error keeps the bridge off.
       await browser.permissions.request(NEEDED).catch(() => false);
-      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-      if (tab?.id !== undefined) bridge.share(tab.id);
+      const tab = await targetTab();
+      if (tab) bridge.share(tab.id);
     });
     $("bridge-stop").addEventListener("click", () => port.postMessage({ op: "bridge-stop" }));
   },

@@ -100,11 +100,11 @@ export default async function notifyCheck({ session, check, record, runGoal }) {
     // NT2: the click opens the approval in a tab. It approves nothing.
     if (shown) await alerts(fox, "Approval needed");
     const opened = await until(async () => {
-      for (const p of await fox.browser.pages()) if (await p.evaluate(() => location.href.endsWith("/sidebar.html#approval")).catch(() => false)) return p;
+      for (const p of await fox.browser.pages()) if (await p.evaluate(() => location.href.endsWith("/app.html#approval")).catch(() => false)) return p;
       return null;
     }, 10_000);
     display("NT2 a click on the notice opens the approval page", true, Boolean(opened));
-    const sidebar = opened ?? (await fox.openExtensionPage("sidebar.html#approval"));
+    const sidebar = opened ?? (await fox.openExtensionPage("app.html#approval"));
     session.sidebar = sidebar;
     await poll(sidebar, () => Boolean(window.foxmate));
     const waits = await poll(sidebar, async () => {

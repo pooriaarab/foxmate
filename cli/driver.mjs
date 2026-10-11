@@ -1,5 +1,5 @@
 // Drive foxmate in a real Firefox: start Firefox with the built extension,
-// and run a goal through the real sidebar. `foxmate try`, `foxmate bench`
+// and run a goal through the real app page. `foxmate try`, `foxmate bench`
 // and the E2E test use it.
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,10 +8,10 @@ import { launch, poll } from "create-foxkit/e2e";
 /** The built extension that ships in the npm package. */
 export const EXTENSION = join(dirname(dirname(fileURLToPath(import.meta.url))), "dist-ext");
 
-/** Starts Firefox with dist-ext/ and opens the sidebar page in a tab. */
+/** Starts Firefox with dist-ext/ and opens the app page in a tab. */
 export async function startFox({ extension = EXTENSION, headless = true, prefs, firefox } = {}) {
   const fox = await launch({ extension, headless, ...(prefs ? { prefs } : {}), ...(firefox ? { firefox } : {}) });
-  const sidebar = await fox.openExtensionPage("sidebar.html");
+  const sidebar = await fox.openExtensionPage("app.html");
   await poll(sidebar, () => Boolean(window.foxmate));
   return { fox, sidebar };
 }

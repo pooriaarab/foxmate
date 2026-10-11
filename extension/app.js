@@ -1,5 +1,5 @@
-// The sidebar: a nav over views, and one port to the background page.
-// Each view is a module. The E2E test drives the same code through
+// The foxmate app: one page for the full tab and the sidebar. One port goes
+// to the background page. Each view is a module. The E2E test drives the same code through
 // window.foxmate.
 import { activity } from "./activity.js";
 import { bridge } from "./bridge-view.js";
@@ -15,13 +15,14 @@ import { phone } from "./phone.js";
 import { rules } from "./rules.js";
 import { settings } from "./settings.js";
 import { space } from "./space.js";
+import { target, targetTab } from "./target.js";
 import { today } from "./today.js";
 
 const $ = (id) => document.getElementById(id);
-const views = { chat, talk, today, lend, space, memory, activity, settings, phone, modules, notices, pay, bridge, logins, rules };
+const views = { chat, talk, today, lend, space, memory, activity, settings, phone, modules, notices, pay, bridge, logins, rules, target };
 // The port to the background page. Firefox unloads an idle background page
-// even while a sidebar has a port open (K1), so the sidebar sends a message
-// every 20 s. When the page restarts anyway, the sidebar connects again (K2).
+// even while a page has a port open (K1), so the page sends a message
+// every 20 s. When the background page restarts anyway, it connects again (K2).
 let current;
 const port = {
   // A runtime port, not window.postMessage: it takes no target origin.
@@ -30,7 +31,7 @@ const port = {
   onDisconnect: { addListener: (fn) => disconnected.add(fn) },
 };
 const disconnected = new Set();
-// The background page sends a notice only while no sidebar is in view (NT1).
+// The background page sends a notice only while no foxmate page is in view (NT1).
 // A runtime port, not window.postMessage: it takes no target origin.
 // oxlint-disable-next-line unicorn/require-post-message-target-origin
 const seen = () => current?.postMessage({ op: "seen", visible: document.visibilityState === "visible" });
@@ -66,6 +67,15 @@ $("nav").addEventListener("click", (event) => {
   if (name) show(name);
 });
 
+// The same page runs in a tab and in the sidebar. The header button moves it to the other place.
+const inSidebar = browser.extension.getViews({ type: "sidebar" }).includes(window);
+document.body.dataset.place = inSidebar ? "sidebar" : "tab";
+$("dock-toggle").querySelector("span").textContent = inSidebar ? "Open full page" : "Open in sidebar";
+$("dock-toggle").addEventListener("click", () => {
+  if (inSidebar) browser.runtime.sendMessage({ op: "open-app" });
+  else browser.sidebarAction.open();
+});
+
 for (const view of Object.values(views)) view.init?.(port, { show });
 connect();
 
@@ -78,4 +88,4 @@ async function tabFor(prefix) {
 
 show("chat");
 // keepAlive(false) is for the E2E test of K2: it lets Firefox unload the background page.
-window.foxmate = { port, show, tabFor, keepAlive: (on) => { keepAlive = on; }, start: (tabId, goal, loanId) => chat.start(tabId, goal, loanId), share: (tabId) => bridge.share(tabId) };
+window.foxmate = { port, show, tabFor, target: targetTab, keepAlive: (on) => { keepAlive = on; }, start: (tabId, goal, loanId) => chat.start(tabId, goal, loanId), share: (tabId) => bridge.share(tabId) };

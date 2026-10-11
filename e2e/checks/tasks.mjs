@@ -19,7 +19,7 @@ export default async function tasksCheck({ session, check, record, scripted, fin
     await poll(session.sidebar, () => Boolean(document.querySelector("#conversation > li:last-child li.ask .row button")), undefined, 60_000);
     await session.sidebar.evaluate(() => browser.runtime.reload()).catch(() => undefined);
     await new Promise((r) => setTimeout(r, 1500));
-    session.sidebar = await session.fox.openExtensionPage("sidebar.html");
+    session.sidebar = await session.fox.openExtensionPage("app.html");
     await poll(session.sidebar, () => Boolean(window.foxmate));
     await page.bringToFront();
     // foxrunner finds the cut-short step at the next wake and runs it again: the approval comes back.
@@ -42,7 +42,7 @@ export default async function tasksCheck({ session, check, record, scripted, fin
     await page.goto(`${site.url.replace("127.0.0.1", "localhost")}/table.html`);
     await session.sidebar.evaluate(() => browser.runtime.reload()).catch(() => undefined);
     await new Promise((r) => setTimeout(r, 1500));
-    session.sidebar = await session.fox.openExtensionPage("sidebar.html");
+    session.sidebar = await session.fox.openExtensionPage("app.html");
     await poll(session.sidebar, () => Boolean(window.foxmate));
     const moved = await poll(session.sidebar, async () => {
       const { tasks: list } = await browser.runtime.sendMessage({ op: "tasks" });

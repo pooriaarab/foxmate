@@ -2,12 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>foxmate</title>
-    <link rel="stylesheet" href="sidebar.css" />
+    <link rel="stylesheet" href="app.css" />
   </head>
   <body>
     <header>
       <h1>foxmate</h1>
+      <button id="dock-toggle" type="button" class="rail-small"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></svg><span>Open in sidebar</span></button>
     </header>
     <nav id="nav">
       <button type="button" data-view="chat" aria-pressed="true">Chat</button>
@@ -21,8 +23,15 @@
     <section data-view="chat">
       <ol id="conversation" aria-live="polite"></ol>
       <form id="goal-form">
-        <label for="goal">Goal for the current tab</label>
+        <label for="goal">Goal</label>
         <textarea id="goal" rows="3" required placeholder="Sign me up for the Pro plan with my work email."></textarea>
+        <div class="row">
+          <button id="target" type="button" class="target" popovertarget="target-menu" aria-expanded="false">
+            <span class="target-dot" aria-hidden="true"></span>
+            <span class="target-text"><span class="target-label">Working on</span> <span id="target-name">No tab yet</span></span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+          </button>
+        </div>
         <div class="row">
           <button id="run" type="submit">Run</button>
           <button id="stop" type="button" disabled>Stop</button>
@@ -34,10 +43,14 @@
         <label class="inline"><input id="speak-result" type="checkbox" /> Speak the result</label>
         <p id="talk-hint" class="hint">Hold the button, or Space on it, while you speak. Whisper runs in Firefox, so the audio stays on this computer. The first press downloads a 43 MB model.</p>
       </form>
-      <div id="bridge-panel">
-        <label class="inline"><input id="bridge-share" type="checkbox" /> Share this tab with Claude Code</label>
-        <div class="row"><button id="bridge-stop" type="button" disabled>Stop now</button><span id="bridge-status" class="muted" role="status">Not shared.</span></div>
-        <p class="hint">Claude Code reads this tab, and you approve each change here. It sends what it reads to its own model. Set it up one time: <code>foxbridge install --extension-id foxmate@pooriaarab</code>.</p>
+      <div id="target-menu" class="menu" popover>
+        <p class="menu-title">foxmate works on</p>
+        <ul id="target-list" class="menu-list"></ul>
+        <div id="bridge-panel" class="menu-section">
+          <label class="switch"><input id="bridge-share" type="checkbox" /> Share this tab with Claude Code</label>
+          <p class="hint">Claude Code reads the tab and sends it to its own model. You approve each change here. Set it up once: <code>foxbridge install --extension-id foxmate@pooriaarab</code></p>
+          <div class="row"><span id="bridge-status" class="muted" role="status">Not shared.</span><button id="bridge-stop" type="button" class="small" disabled>Stop now</button></div>
+        </div>
       </div>
     </section>
     <section data-view="today" hidden>
@@ -176,6 +189,6 @@
         <p id="pay-status" class="hint">foxvault keeps the key encrypted. The planner never gets it.</p>
       </div>
     </section>
-    <script type="module" src="sidebar.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>
