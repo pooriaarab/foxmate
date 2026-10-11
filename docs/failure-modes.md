@@ -40,7 +40,7 @@ After a run ends done, foxmate keeps its successful calls for the tab's origin
 and the exact goal with its memory notes. The next run of the same goal on the
 same origin replays them with no model call, up to the end: the planner writes
 the finish. A goal of the same shape, the same task with other values, replays
-them too, with its own values (WF12-WF17). Each call still goes through the
+them too, with its own values (WF12-WF21). Each call still goes through the
 gate, and every approval is asked again.
 
 | # | Failure mode | Wanted behaviour | Test |
@@ -62,6 +62,10 @@ gate, and every approval is asked again.
 | WF15 | Two goals have the same values in other words ("Book the cheapest" and "Book the latest"), and one replays the other | Every word that is not a value must be the same, in the same order. A first word of a sentence is never a value ("Do not subscribe"). | `tests/workflow.test.ts` WF15 |
 | WF16 | A value of the new goal that no kept step uses: the old run left the page default ("one" mug), so a shape replay of "two mugs" orders one | A shape replay starts only when each value that changed is in a kept step: in an argument or a control label, in one of its forms. Else the planner plans the run. | `tests/workflow.test.ts` WF16 |
 | WF17 | A rewritten label is a guess: the page names the new value in other words ("Toronto Pearson (YYZ)", not "Toronto (YYZ)"; "Trail Mug", not "Trail Mugs"), so the replay ends early | When no control has the rewritten label, the one control of the same role and submit flag whose label holds each new value (a plural "s" aside) is used. None, or more than one, ends the replay. | `tests/workflow.test.ts` WF17 |
+| WF18 | Two values swap places ("from Paris to London", then "from London to Paris"). A rewrite of one value after another turns "Paris to London" into "Paris to Paris": a typed value or a label keeps the old direction, and no old word is left over to catch it | Every old value in a text is rewritten in one pass, each match to the value in the same place of the new goal, so "Paris to London" becomes "London to Paris". | `tests/workflow.test.ts` WF18 |
+| WF19 | One old value is a part of another ("York" and "New York"), so a rewrite of the short one breaks the long one ("New Leeds") | The one pass tries the longest old value first at each place, and an unchanged value is kept as it is. | `tests/workflow.test.ts` WF19 |
+| WF20 | One value is in the old goal twice, with two new values ("from Paris to Paris", then "from Rome to Oslo"), so a kept "Paris" has two rewrites | When a text holds an old value with more than one new value, the rewrite is a guess: the replay ends before that step. | `tests/workflow.test.ts` WF20 |
+| WF21 | The loose label match (WF17) ignores word order, so a rewritten "London to Paris" picks the old-direction control "Paris to London" | The loose match finds each new value in the label in the order of the rewritten label. | `tests/workflow.test.ts` WF21 |
 
 ## Shield: page text before the planner (`src/shield.ts`)
 

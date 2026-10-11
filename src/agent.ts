@@ -15,7 +15,7 @@ import { BrainError, createBrain, type Brain, type BrainSettings } from "./brain
 import { maskCards, type Pass, type PassEvent } from "./pass.js";
 import { payTool, type PayOptions, type PayRun } from "./pay.js";
 import { recallNotes, withNotes } from "./recall.js";
-import { replayCall, toStep, workflowKey, type WorkflowStep, type WorkflowStore } from "./workflow.js";
+import { generalStep, replayCall, shapeFits, shapeKey, toStep, workflowKey, type WorkflowStep, type WorkflowStore } from "./workflow.js";
 import { shieldedPaw } from "./shield.js";
 
 export interface Trail {
@@ -115,7 +115,7 @@ export interface AgentOptions {
   runMs?: number;
   /** How long `open_site` waits for the new tab to load. Default 20 s (OS8). */
   openMs?: number;
-  /** The workflow cache: a run that ends done is kept, and the same goal on the same origin replays it (WF1-WF11). */
+  /** The workflow cache: a run that ends done is kept, and the same goal on the same origin replays it, or a goal of the same shape with its own values (WF1-WF17). */
   workflows?: WorkflowStore;
 }
 
@@ -538,17 +538,22 @@ export function createAgent(options: AgentOptions): Agent {
       const redact = options.redact;
       // The workflow cache, for foxmate's own planner on a web tab with no loan (WF6, WF8). The key
       // is the tab's origin and the goal with its memory notes, so a new note finds no kept run (WF9, WF11).
-      const key = domain ? workflowKey(new URL(tab.url!).origin, goal) : undefined;
-      const caching = own && !loan && Boolean(key) && Boolean(options.workflows) && input.settings.replay !== false;
-      const kept = caching ? await options.workflows!.get(key!).catch(() => undefined) : undefined;
-      const replay = kept?.steps.length ? { steps: kept.steps, at: 0, live: true } : undefined;
+      const origin = domain ? new URL(tab.url!).origin : undefined;
+      const caching = own && !loan && Boolean(origin) && Boolean(options.workflows) && input.settings.replay !== false;
+      const exact = caching ? await options.workflows!.get(workflowKey(origin!, goal)).catch(() => undefined) : undefined;
+      // No run of this exact goal: a kept run of a goal with the same shape replays with this goal's values (WF12).
+      const shaped = caching && !exact?.steps.length ? await options.workflows!.get(shapeKey(origin!, goal)).catch(() => undefined) : undefined;
+      // A changed value that no kept step uses has no step to replay (WF16).
+      const kept = exact?.steps.length ? exact : shaped?.goal && !shapeFits(shaped.steps, shaped.goal, goal) ? shaped : undefined;
+      const replay = kept?.steps.length ? { steps: kept.steps, at: 0, live: true, from: kept === shaped ? kept.goal : undefined } : undefined;
       // The calls of this run that worked, in order; null once one may not be kept (WF6).
       let record: WorkflowStep[] | null = caching ? [] : null;
       const pending = new Map<string, WorkflowStep | null | undefined>();
       const replayNext = async (messages: Message[]): Promise<ChatReply | undefined> => {
         if (!replay?.live) return undefined;
-        const step = replay.steps[replay.at];
-        const call = !step ? "the kept steps ran out" : handedOff ? "the run waited for a sign-in" : replayCall(step, lastPage, messages, tainted);
+        const next = replay.steps[replay.at];
+        const step = next && replay.from !== undefined ? generalStep(next, replay.from, goal) : next;
+        const call = !step ? "the kept steps ran out" : handedOff ? "the run waited for a sign-in" : typeof step === "string" ? step : replayCall(step, lastPage, messages, tainted);
         if (typeof call === "string") {
           replay.live = false;
           await trail.append({ actor: "foxmate", kind: "run.route", data: { by: "planner", tried: false, why: `the replay ended: ${call}` } });
@@ -644,7 +649,9 @@ export function createAgent(options: AgentOptions): Agent {
       // Only a run that ended done, with no private data, is kept (WF6, WF7). The finish is not
       // kept: the planner reads the newest page and writes the summary (WF10).
       if (record?.length && end.status === "done" && !privateSource) {
-        await options.workflows!.set(key!, { steps: record }).catch(() => undefined);
+        const workflow = { steps: record, goal };
+        await options.workflows!.set(workflowKey(origin!, goal), workflow).catch(() => undefined);
+        await options.workflows!.set(shapeKey(origin!, goal), workflow).catch(() => undefined);
       }
       return end;
     } finally {

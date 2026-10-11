@@ -1,4 +1,4 @@
-// Tests for docs/failure-modes.md WF1, WF2 and WF5: how a kept step maps to
+// Tests for docs/failure-modes.md WF1, WF2, WF5 and WF12-WF21: how a kept step maps to
 // the newest snapshot, and when a replay ends.
 import type { Message } from "foxloop";
 import type { Control, Snapshot } from "foxpaw";
@@ -116,5 +116,47 @@ describe("workflow shapes (WF12-WF17)", () => {
     expect(goalShape(oneway.replace("Book a one-way", "Book the latest one-way")).shape).not.toBe(goalShape(trap).shape);
     expect(goalShape("Do not subscribe. Create an account for Ana Silva.").shape).not.toBe(goalShape("Subscribe. Create an account for Ana Silva.").shape);
     expect(goalShape("Reply to Dana Lee's email about the Q4 budget.").values).toEqual(["Dana Lee", "Q4"]);
+  });
+});
+
+describe("workflow shapes: one-pass rewrite (WF18-WF21)", () => {
+  const there = "Book a flight from Paris to London.";
+  const back = "Book a flight from London to Paris.";
+  const recent = { name: "click", args: {}, control: { role: "link", label: "Recent: Paris to London", submit: false } };
+
+  it("WF18: swapped values are rewritten in one pass, in typed values and labels", () => {
+    expect(generalStep(step({ op: "type", value: "Paris to London" }, "Route"), there, back)).toEqual(step({ op: "type", value: "London to Paris" }, "Route"));
+    const r = generalStep(recent, there, back) as WorkflowStep;
+    expect(r.control?.label).toBe("Recent: London to Paris");
+    expect(r.control?.must).toEqual(["London", "Paris"]);
+    // The old-direction link is not the new route.
+    expect(replayCall(r, page(control("0:3", "link", "Recent: Paris to London")), ok, false)).toMatch(/no control/);
+  });
+
+  it("WF19: a value that is part of another value is not rewritten inside it", () => {
+    const a = "Book a flight from York to New York.", b = "Book a flight from Leeds to New Jersey.";
+    expect(goalShape(a).values).toEqual(["York", "New York"]);
+    expect(generalStep(step({ op: "type", value: "York to New York" }, "Route"), a, b)).toEqual(step({ op: "type", value: "Leeds to New Jersey" }, "Route"));
+    // An unchanged long value keeps its short part.
+    const c = "Book a flight from York to New York.", d = "Book a flight from Leeds to New York.";
+    expect(generalStep(step({ op: "type", value: "York to New York" }, "Route"), c, d)).toEqual(step({ op: "type", value: "Leeds to New York" }, "Route"));
+  });
+
+  it("WF20: an old value with two new values ends the replay", () => {
+    const a = "Book a flight from Paris to Paris.", b = "Book a flight from Rome to Oslo.";
+    expect(generalStep(step({ op: "type", value: "Paris" }, "From"), a, b)).toMatch(/guess|two|more than one/);
+    expect(generalStep({ name: "click", args: {}, control: { role: "link", label: "Fly to Paris now", submit: false } }, a, b)).toMatch(/guess|two|more than one/);
+    // One new value for both places is not a guess.
+    expect(generalStep(step({ op: "type", value: "Paris" }, "From"), a, "Book a flight from Rome to Rome.")).toEqual(step({ op: "type", value: "Rome" }, "From"));
+  });
+
+  it("WF21: the loose label match keeps the order of the new values", () => {
+    const s: WorkflowStep = { name: "click", args: {}, control: { role: "link", label: "London to Paris", submit: false, must: ["London", "Paris"] } };
+    expect(replayCall(s, page(control("0:3", "link", "Recent: Paris to London")), ok, false)).toMatch(/no control/);
+    expect(replayCall(s, page(control("0:3", "link", "Recent: Paris to London"), control("0:4", "link", "Recent: London (LHR) to Paris (CDG)")), ok, false))
+      .toEqual({ name: "click", arguments: JSON.stringify({ controlId: "0:4" }) });
+    // A value named twice must be there twice.
+    const twice: WorkflowStep = { name: "click", args: {}, control: { role: "link", label: "Rome to Rome", submit: false, must: ["Rome", "Rome"] } };
+    expect(replayCall(twice, page(control("0:5", "link", "Rome round trip")), ok, false)).toMatch(/no control/);
   });
 });
