@@ -1,5 +1,6 @@
-// The foxmate app: one page for the full tab and the sidebar. One port goes
-// to the background page. Each view is a module. The E2E test drives the same code through
+// The foxmate app: one page for the full tab and the sidebar. Chat is
+// home; the rail opens the other views. One port goes to the background
+// page. Each view is a module. The E2E test drives the same code through
 // window.foxmate.
 import { activity } from "./activity.js";
 import { bridge } from "./bridge-view.js";
@@ -58,16 +59,20 @@ setInterval(() => {
 }, 20_000);
 
 function show(name) {
-  for (const button of $("nav").querySelectorAll("button")) button.setAttribute("aria-pressed", String(button.dataset.view === name));
-  for (const section of document.querySelectorAll("section[data-view]")) section.hidden = section.dataset.view !== name;
+  for (const button of $("nav").querySelectorAll("button[data-view]")) {
+    if (button.dataset.view === name) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  }
+  for (const section of document.querySelectorAll("main > section[data-view]")) section.hidden = section.dataset.view !== name;
+  document.title = name === "chat" ? "foxmate" : `${name[0].toUpperCase()}${name.slice(1)} · foxmate`;
   views[name]?.shown?.();
 }
 $("nav").addEventListener("click", (event) => {
-  const name = event.target.closest("button")?.dataset.view;
+  const name = event.target.closest("button[data-view]")?.dataset.view;
   if (name) show(name);
 });
 
-// The same page runs in a tab and in the sidebar. The header button moves it to the other place.
+// The same page runs in a tab and in the sidebar. The rail button moves it to the other place.
 const inSidebar = browser.extension.getViews({ type: "sidebar" }).includes(window);
 document.body.dataset.place = inSidebar ? "sidebar" : "tab";
 $("dock-toggle").querySelector("span").textContent = inSidebar ? "Open full page" : "Open in sidebar";
