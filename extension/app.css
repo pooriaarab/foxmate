@@ -253,6 +253,54 @@ main { min-width: 0; height: 100%; overflow: hidden; }
 .open > .more::before { rotate: -135deg; margin-top: 3px; }
 .fill { display: flex; align-items: center; gap: 4px; margin-top: 8px; }
 
+.steps > li.ask {
+  margin: 10px 0;
+  padding: 14px 16px 16px;
+  background: var(--ask-bg);
+  border: 1px solid var(--ask-line);
+  border-radius: 16px;
+  color: var(--text);
+  animation: card-in 260ms var(--ease-out) both;
+}
+.steps > li.ask::before { top: 22px; }
+/* The card: the site's icon and name, one line of what happens, then the three answers. */
+.ask-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.site-icon {
+  --hue: 40;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: oklch(0.5 0.1 var(--hue));
+  color: oklch(0.99 0 0);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+}
+.site-icon:has(img) { background: var(--raise); }
+.site-icon img { width: 16px; height: 16px; }
+.ask .site { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.ask .text { display: block; margin-top: 6px; font-size: 14.5px; color: var(--text); }
+.ask .detail { color: var(--muted); margin: 6px 0 2px; font-size: 13px; }
+.ask .text.detail { color: var(--text); font-size: 14.5px; }
+.caption { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+details.raw { margin-top: 4px; font-size: 12px; color: var(--muted); }
+details.raw > summary { cursor: pointer; width: fit-content; list-style: none; }
+details.raw > summary::-webkit-details-marker { display: none; }
+details.raw > summary::before { content: "▸ "; }
+details.raw[open] > summary::before { content: "▾ "; }
+details.raw pre { margin-top: 4px; white-space: pre-wrap; }
+.ask details.raw { margin-top: 8px; }
+.ask .row { margin-top: 14px; justify-content: flex-end; }
+.ask .row button { min-width: 92px; }
+.ask .row button.ghost { margin-right: auto; padding-inline: 10px; min-width: 0; }
+.answered { margin-top: 12px; font-weight: 550; }
+.steps > li.ask.settled { background: transparent; border-color: var(--line); }
+.steps > li.ask.settled .site-icon { opacity: 0.6; }
+
 .end { margin: 10px 0 0 20px; font-weight: 550; color: var(--text); animation: rise var(--med) var(--ease-out) both; overflow-wrap: anywhere; }
 .end.done::before { content: "✓"; color: var(--ok); margin-right: 8px; }
 .end.bad { color: var(--bad); }
@@ -398,12 +446,6 @@ body.solo .page { height: auto; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; animation-delay: 0ms !important; transition-duration: 0.01ms !important; }
 }
-
-/* The approval card keeps its first form until it gets its own layout. */
-.steps > li.ask { margin: 10px 0; padding: 12px 14px; background: var(--ask-bg); border: 1px solid var(--ask-line); border-radius: 16px; color: var(--text); }
-.steps > li.ask .kind { color: var(--accent); }
-.ask .detail { color: var(--muted); margin: 6px 0 2px; font-size: 13px; }
-.ask pre { margin-top: 8px; }
 
 /* Narrow: the sidebar, or a small window. The rail becomes a top bar of icons. */
 @media (max-width: 720px) {

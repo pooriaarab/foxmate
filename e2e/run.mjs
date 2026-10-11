@@ -16,6 +16,7 @@ import local from "./checks/local.mjs";
 import memory from "./checks/memory.mjs";
 import modules from "./checks/modules.mjs";
 import notify from "./checks/notify.mjs";
+import open, { OPEN_HOSTS } from "./checks/open.mjs";
 import pass from "./checks/pass.mjs";
 import pay from "./checks/pay.mjs";
 import rules, { RULE_HOSTS } from "./checks/rules.mjs";
@@ -29,10 +30,11 @@ import voice from "./checks/voice.mjs";
 import { BANK_HOSTS } from "./bank.mjs";
 import { runGoal, startFox } from "./lib.mjs";
 
-// rules goes after activity: Activity shows the newest 300 entries, and its runs would push the older kinds out.
-// app goes first: it checks the tabs before other checks open some. notify comes
-// next: foxnotify allows 4 notices a minute, and the later checks send some too.
-const CHECKS = { app, notify, signup, pass, vault, local, traps, memory, lend, space, phone, modules, activity, rules, pay, bridge, voice, tasks, keepalive };
+// app goes first: it checks the tabs before other checks open some. notify
+// comes next: foxnotify allows 4 notices a minute, and the later checks send
+// some too. rules and modules go after activity: Activity shows the newest 300
+// entries, and their runs would push the older kinds out.
+const CHECKS = { app, notify, signup, pass, vault, local, traps, memory, lend, space, phone, activity, modules, rules, open, pay, bridge, voice, tasks, keepalive };
 
 const record = { startedAt: new Date().toISOString(), checks: [], runs: {} };
 const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });
@@ -43,7 +45,7 @@ const bench = await startServer({ sites, controlKey: randomUUID() });
 let session;
 try {
   const headless = !process.argv.includes("--headed");
-  session = { ...(await startFox({ headless, prefs: { "network.dns.localDomains": `${BANK_HOSTS},${RULE_HOSTS}`, "alerts.useSystemBackend": false, "media.navigator.streams.fake": true, "media.navigator.permission.disabled": true, ...PHONE_PREFS } })), headless };
+  session = { ...(await startFox({ headless, prefs: { "network.dns.localDomains": `${BANK_HOSTS},${RULE_HOSTS},${OPEN_HOSTS}`, "alerts.useSystemBackend": false, "media.navigator.streams.fake": true, "media.navigator.permission.disabled": true, ...PHONE_PREFS } })), headless };
   record.firefox = await session.fox.browser.version();
 
   const only = process.env.E2E_ONLY?.split(",").map((n) => n.trim());
