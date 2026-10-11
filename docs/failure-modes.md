@@ -357,6 +357,15 @@ row is a way that the listed build or the submission can go wrong.
 | AR-U1 | A `local_hosts` reason for a host permission also clears a test content script on the same pattern | Each reason names its use (`host_permission`, `content_script`, `web_accessible_resource`, `externally_connectable`); a use without its own reason stops the check |
 | AR-U2 | `local_hosts` keeps a reason for a use that the release build does not have | The check stops and names the pattern and the use |
 
+## Firefox driver (`cli/driver.mjs`)
+
+`foxmate try`, `foxmate bench` and the E2E test start Firefox through
+`startFox`.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| DR1 | Firefox starts, then the app page does not open or foxmate does not load in it, and the Firefox session stays open with its temporary profile | `startFox` closes the Firefox session, then throws the first error. | `tests/driver.test.ts` DR1 |
+
 ## Bench command (`cli/foxmate.mjs`, `cli/bench.mjs`)
 
 | # | Failure mode | Wanted behaviour | Test |
