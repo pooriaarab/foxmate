@@ -6,7 +6,10 @@ turns its feature on. This page lists what leaves the browser, and the type
 that covers it.
 
 The planner always runs on this computer or in Firefox, so the goal and page
-text never go to a model provider through foxmate.
+text never go to a model provider through foxmate. Saved logins stay in a
+foxvault in this Firefox profile. A fill writes a password into a page after
+you approve it, which is the sign-in you asked for, not a transmission by
+foxmate.
 
 | What | To whom | When | AMO data type |
 |---|---|---|---|
