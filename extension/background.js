@@ -163,8 +163,21 @@ function notice(kind, target, run = current) {
 // foxgate and foxlend share one public suffix rule and one gate host.
 const publicSuffix = withDefaultRule(browser.publicSuffix);
 // The user's standing rules (foxgate) live in storage.local, so they last across restarts (RU4).
+// The workflow cache: the newest 50 runs that ended done, by host and goal (WF1-WF8).
+const WORKFLOWS = 50;
+const workflows = {
+  get: async (key) => (await browser.storage.local.get("workflows")).workflows?.[key],
+  set: async (key, workflow) => {
+    const { workflows: all = {} } = await browser.storage.local.get("workflows");
+    delete all[key];
+    all[key] = workflow;
+    const keys = Object.keys(all);
+    for (const old of keys.slice(0, Math.max(0, keys.length - WORKFLOWS))) delete all[old];
+    await browser.storage.local.set({ workflows: all });
+  },
+};
 const agent = createAgent({
-  browser, trail, memory, publicSuffix, ruleStore: storageAreaStore(browser.storage.local), maxSteps: 30, pay: payOptions, pass, redact: (text) => logins.redact(text),
+  browser, trail, memory, publicSuffix, ruleStore: storageAreaStore(browser.storage.local), maxSteps: 30, pay: payOptions, pass, redact: (text) => logins.redact(text), workflows,
   extraTools: [
     // The Space's files and the user's mail are private data: after either, foxmate asks
     // before each typing and each page it opens (G16).
