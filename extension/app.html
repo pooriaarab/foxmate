@@ -199,8 +199,10 @@
             <div data-for="saluki ollama llama-server">
               <label for="model">Model name</label><input id="model" autocomplete="off" />
               <label for="base-url">Server address</label><input id="base-url" autocomplete="off" />
-              </div>
+              <div class="row"><button id="model-check" type="button" class="small">Check the connection</button><span id="model-check-status" class="muted" role="status"></span></div>
+            </div>
             <div data-for="scripted"><label for="script">Script (JSON tool calls)</label><textarea id="script" rows="6"></textarea></div>
+            <div class="row"><button id="onboarding-again" type="button" class="small">Run the setup again</button></div>
           </div>
 
           <h2>Approval rules</h2>
@@ -282,6 +284,80 @@
         </section>
       </main>
     </div>
+
+    <dialog id="onboarding" class="onboarding" aria-labelledby="ob-title">
+      <div class="ob-frame">
+        <div class="ob-fox"><span class="fox" data-size="l" data-state="idle"></span></div>
+        <ol class="ob-progress" aria-hidden="true"><li></li><li></li><li></li><li></li><li></li></ol>
+
+        <section data-step="welcome">
+          <h1 id="ob-title">Meet foxmate</h1>
+          <p class="ob-lede">Your agent, in your own Firefox.</p>
+          <ul class="ob-points">
+            <li><strong>It works on your tabs.</strong> Tell it a goal. It reads the page and does the steps, with your logins.</li>
+            <li><strong>It stays on this computer.</strong> The model runs here, so your pages, logins and words stay here. Each optional extra says what it sends.</li>
+            <li><strong>It asks first.</strong> Before it sends a form, pays or opens a new site, it asks you.</li>
+          </ul>
+          <div class="ob-actions"><button type="button" class="primary" data-next>Set it up</button></div>
+        </section>
+
+        <section data-step="model" hidden>
+          <h1>Connect a model</h1>
+          <p class="ob-lede">foxmate needs a model server on this computer. Start one, and this page finds it.</p>
+          <div class="server" data-server="llama">
+            <div class="server-head"><span class="dot" aria-hidden="true"></span><strong>llama-server</strong><span class="server-status" role="status">Looking…</span></div>
+            <p class="hint">Underdog Saluki 27B is the default model. Start it with:</p>
+            <div class="copy"><code>llama-server -m Underdog-Saluki-27B-1.0-IQ2-mix.gguf --jinja -ngl 99 -fa on -c 32768</code><button type="button" class="small" data-copy>Copy</button></div>
+          </div>
+          <div class="server" data-server="ollama">
+            <div class="server-head"><span class="dot" aria-hidden="true"></span><strong>Ollama</strong><span class="server-status" role="status">Looking…</span></div>
+            <p class="hint">Start Ollama so it lets foxmate in:</p>
+            <div class="copy"><code>OLLAMA_ORIGINS="moz-extension://*" ollama serve</code><button type="button" class="small" data-copy>Copy</button></div>
+          </div>
+          <p id="ob-model-choice" class="ob-choice" role="status"></p>
+          <div class="ob-actions"><button type="button" class="ghost" data-back>Back</button><span class="grow"></span><button type="button" class="ghost" data-next>Skip for now</button><button id="ob-model-next" type="button" class="primary" data-next disabled>Continue</button></div>
+        </section>
+
+        <section data-step="approvals" hidden>
+          <h1>You stay in charge</h1>
+          <p class="ob-lede">foxmate reads and types on its own. Anything more waits for your OK. Try it:</p>
+          <ol id="ob-demo" class="steps demo"></ol>
+          <p id="ob-demo-result" class="ob-choice" role="status"></p>
+          <div class="ob-actions"><button type="button" class="ghost" data-back>Back</button><span class="grow"></span><button type="button" class="primary" data-next>Continue</button></div>
+        </section>
+
+        <section data-step="extras" hidden>
+          <h1>Extras</h1>
+          <p class="ob-lede">All optional. You can set them up later in Settings.</p>
+          <ul class="ob-extras">
+            <li>
+              <div class="ob-extra-row"><div><strong>Voice</strong><p class="hint">Hold the mic button and speak.</p></div><button id="ob-mic" type="button" class="small">Allow the microphone</button></div>
+            </li>
+            <li>
+              <div class="ob-extra-row"><div><strong>Approve from your phone</strong><p class="hint">Answer each OK on your phone too.</p></div><button id="ob-phone-pair" type="button" class="small">Pair a phone</button></div>
+              <div id="ob-phone-slot"></div>
+            </li>
+            <li>
+              <div class="ob-extra-row"><div><strong>Saved logins</strong><p class="hint">foxmate fills a saved login when a site asks you to sign in. It asks first.</p></div><button id="ob-login-open" type="button" class="small" aria-expanded="false" aria-controls="ob-login-form">Save a login</button></div>
+              <form id="ob-login-form" class="ob-login" hidden>
+                <label for="ob-login-site">Site</label><input id="ob-login-site" autocomplete="off" required placeholder="www.example.com" />
+                <label for="ob-login-user">Username or email (optional)</label><input id="ob-login-user" autocomplete="off" />
+                <label for="ob-login-pass">Password</label><input id="ob-login-pass" type="password" autocomplete="new-password" required />
+                <div class="row"><button id="ob-login-save" type="submit" class="small">Save login</button><span id="ob-login-status" class="muted" role="status"></span></div>
+              </form>
+            </li>
+          </ul>
+          <div class="ob-actions"><button type="button" class="ghost" data-back>Back</button><span class="grow"></span><button type="button" class="primary" data-next>Continue</button></div>
+        </section>
+
+        <section data-step="first" hidden>
+          <h1>Try a first task</h1>
+          <p class="ob-lede">Pick a goal. foxmate works on the tab you used last. With no tab open, it asks before it opens a site.</p>
+          <ul id="ob-ideas" class="suggestions"></ul>
+          <div class="ob-actions"><button type="button" class="ghost" data-back>Back</button><span class="grow"></span><button id="ob-finish" type="button" class="primary">Start using foxmate</button></div>
+        </section>
+      </div>
+    </dialog>
 
     <script type="module" src="app.js"></script>
   </body>

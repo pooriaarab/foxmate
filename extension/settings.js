@@ -1,6 +1,9 @@
 // Settings: the planner. Every planner runs on this computer or in
-// Firefox. Approval rules and saved logins live in safety.js.
+// Firefox. "Check the connection" asks the server for its models. "Run the
+// setup again" opens the onboarding.
 import { PLANNERS } from "../src/planners.ts";
+import { describe, probe } from "./local-models.js";
+import { onboarding } from "./onboarding.js";
 import { safety } from "./safety.js";
 
 const $ = (id) => document.getElementById(id);
@@ -34,17 +37,29 @@ async function load() {
   render();
 }
 
+async function check() {
+  const planner = PLANNERS.find((p) => p.id === $("planner").value);
+  const baseURL = $("base-url").value.trim() || planner?.baseURL;
+  if (!baseURL) return;
+  $("model-check-status").textContent = "Checking…";
+  const result = await probe(baseURL);
+  $("model-check-status").textContent = describe(planner.id === "ollama" ? "ollama" : "llama", result);
+}
+
 export const settings = {
   init() {
     document.querySelector('section[data-view="settings"]').addEventListener("change", (event) => {
       if (OWN.has(event.target.id) && !event.target.closest(OTHERS)) save();
     });
+    $("model-check").addEventListener("click", check);
+    $("onboarding-again").addEventListener("click", () => onboarding.open());
     browser.storage.onChanged.addListener((changes, area) => {
       if (area === "local" && changes.settings) load();
     });
     load();
   },
   shown() {
+    $("model-check-status").textContent = "";
     void load();
     void safety.load();
   },

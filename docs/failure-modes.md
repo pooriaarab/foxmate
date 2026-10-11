@@ -163,17 +163,20 @@ runs it in a sandbox page with no network and no extension APIs.
 | D4 | The Space tool works outside its sandbox domain, or a page host grant covers it | It has its own grant, for the domain `space.foxmate` and the tool `run_python` only. | E2E space |
 | D5 | A goal about a file needs a web page in the tab | A run on a tab with no web page gets no tab grants, but the Space tool still works. | E2E space |
 
-## The app page (`extension/app.html`, `target.js`)
+## The app page (`extension/app.html`, `target.js`, `onboarding.js`)
 
 The app runs in a tab (the toolbar button opens it) and in the sidebar. In a
 tab, the active tab is the app itself.
 
 | # | Failure mode | Wanted behaviour | Test |
 |---|---|---|---|
+| UI1 | The onboarding's demo approval reaches the background page, or stays in the page where a view or a test takes it for a real approval | The demo card has no port. Its answer only changes the demo text, and the card leaves the page when the onboarding closes. | E2E app UI1 |
 | UI2 | A goal from the full page runs on the foxmate page itself, the active tab | The target is the tab the user picked, else the active web tab of the window, else the web tab used last. Only http and https tabs count. The composer chip names it. | E2E app UI2 |
 | UI3 | Each toolbar click opens one more app tab, each with its own port and phone link | The toolbar button brings the open app tab to the front, and opens a tab only when none is open. | E2E app UI3 |
 | UI4 | The approval card loads the site's icon from the web with the user's cookies, so the site learns that foxmate looked | The card uses the tab's `favIconUrl` only when it is a `data:` address. Any other icon is a letter in a circle. The page fetches nothing. | E2E app UI4 |
 | UI5 | "Always allow" shows on a card where the engine offers no rule (pay, a saved-login fill, a private run, a lent login, a host with no registrable site, `open_site`, a mail read) | The button exists only when the event has a `ruleOffer`. | E2E rules RU1; E2E app UI5 |
+| UI6 | The onboarding pairs a phone with no way to finish, or leaves the pairing panel in the closed dialog | "Pair a phone" turns phone approvals on and moves the Settings pairing panel into the step. The panel goes back to Settings when the step ends. | E2E app UI6 |
+| UI7 | The onboarding's saved-login form keeps the password in the page, or saves it in clear | The form uses the Settings path (`login-save`). The field clears at the save (LV12). | E2E app UI7 |
 | UI8 | A goal with no web page open stops at "Open a web page first" | The goal starts with no tab. The run asks before it opens a site (OS1-OS8). | E2E open |
 
 ## Sidebar link: the background page lifecycle

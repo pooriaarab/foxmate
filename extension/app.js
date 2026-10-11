@@ -12,6 +12,7 @@ import { memory } from "./memory.js";
 import { pay } from "./pay.js";
 import { modules } from "./modules.js";
 import { notices } from "./notices.js";
+import { onboarding } from "./onboarding.js";
 import { phone } from "./phone.js";
 import { safety } from "./safety.js";
 import { settings } from "./settings.js";
@@ -20,7 +21,7 @@ import { target, targetTab } from "./target.js";
 import { today } from "./today.js";
 
 const $ = (id) => document.getElementById(id);
-const views = { chat, talk, today, lend, space, memory, activity, settings, safety, phone, modules, notices, pay, bridge, target };
+const views = { chat, talk, today, lend, space, memory, activity, settings, safety, phone, modules, notices, pay, bridge, target, onboarding };
 // The port to the background page. Firefox unloads an idle background page
 // even while a page has a port open (K1), so the page sends a message
 // every 20 s. When the background page restarts anyway, it connects again (K2).
@@ -82,7 +83,7 @@ $("dock-toggle").addEventListener("click", () => {
 });
 
 draw();
-for (const view of Object.values(views)) view.init?.(port, { show });
+for (const view of Object.values(views)) view.init?.(port, { show, fill: chat.fill });
 connect();
 
 /** The id of the newest tab whose address starts with `prefix`. */
@@ -94,4 +95,4 @@ async function tabFor(prefix) {
 
 show("chat");
 // keepAlive(false) is for the E2E test of K2: it lets Firefox unload the background page.
-window.foxmate = { port, show, tabFor, target: targetTab, keepAlive: (on) => { keepAlive = on; }, start: (tabId, goal, loanId) => chat.start(tabId, goal, loanId), share: (tabId) => bridge.share(tabId) };
+window.foxmate = { port, show, tabFor, target: targetTab, onboarding, keepAlive: (on) => { keepAlive = on; }, start: (tabId, goal, loanId) => chat.start(tabId, goal, loanId), share: (tabId) => bridge.share(tabId) };
