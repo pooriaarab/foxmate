@@ -129,7 +129,8 @@ export const chat = {
   },
   start(tabId, goal, loanId) {
     $("goal").value = goal;
-    port.postMessage({ op: "run", tabId, goal, allowPrivate: $("allow-private").checked, ...(loanId ? { loanId } : {}) });
+    // Mail and calendar ask in the run, once each (G18): there is no switch for them.
+    port.postMessage({ op: "run", tabId, goal, ...(loanId ? { loanId } : {}) });
   },
   message(message) {
     if (message.run && shown.has(message.run.id)) {

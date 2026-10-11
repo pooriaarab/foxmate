@@ -239,14 +239,31 @@ describe("agent", () => {
     expect(ran).toEqual([]);
   });
 
-  it("G18: the mail tool is not granted on a web tab unless the goal opts in", async () => {
-    const plain = await setup();
-    const end = await plain.run({ script: [{ tool: "read_inbox", args: {} }, finish] });
-    expect(end.status).toBe("blocked");
-    expect(plain.events.some((e) => e.type === "tool-result" && e.name === "read_inbox" && e.ok)).toBe(false);
-    const opted = await setup();
-    const ok = await opted.run({ allowPrivate: true, script: [{ tool: "read_inbox", args: {} }, { tool: "click", args: { button: "Buy" } }, finish] });
+  it("G18: the first mail read of a run waits for an approval; a schedule's opt-in asks nothing", async () => {
+    const denied = await setup();
+    const end = await denied.run({ script: [{ tool: "read_inbox", args: {} }, finish] }, "deny");
+    expect(end).toMatchObject({ status: "blocked", reason: "approval-denied" });
+    expect(denied.events.find((e) => e.type === "approval-needed")).toMatchObject({ action: { tool: "read_inbox", domain: "www.googleapis.com" } });
+    expect(denied.events.some((e) => e.type === "tool-result" && e.name === "read_inbox")).toBe(false);
+    const approved = await setup();
+    const ok = await approved.run({ script: [{ tool: "read_inbox", args: {} }, { tool: "click", args: { button: "Buy" } }, finish] });
     expect(ok.status).toBe("done");
+    const opted = await setup();
+    await opted.run({ allowPrivate: true, script: [{ tool: "read_inbox", args: {} }, finish] }, "deny");
+    expect(opted.events.filter((e) => e.type === "approval-needed").map((e) => "action" in e && e.action.tool)).toEqual([]);
+    const loan = await setup();
+    await loan.run({ tabId: 2, script: [{ tool: "read_inbox", args: {} }, finish] });
+    expect(loan.events.some((e) => e.type === "approval-needed" || (e.type === "tool-result" && e.name === "read_inbox" && e.ok))).toBe(false);
+  });
+
+  it("G30: one approval covers that tool for this run only", async () => {
+    const { run, events } = await setup();
+    await run({ script: [{ tool: "read_inbox", args: {} }, { tool: "read_inbox", args: {} }, finish] });
+    expect(events.filter((e) => e.type === "approval-needed" && "action" in e && e.action.tool === "read_inbox").length).toBe(1);
+    expect(events.filter((e) => e.type === "tool-result" && e.name === "read_inbox" && e.ok).length).toBe(2);
+    events.length = 0;
+    await run({ script: [{ tool: "read_inbox", args: {} }, finish] }, "deny");
+    expect(events.filter((e) => e.type === "approval-needed").length).toBe(1);
   });
 
   it("G19: a loan that is not active refuses the run", async () => {
@@ -298,11 +315,11 @@ describe("agent", () => {
 
   it("G25: the planner gets only tools that the run holds a grant for", async () => {
     const { run, requests } = await setup();
-    await run({ script: [{ tool: "read_inbox", args: {} }, finish] });
-    expect(requests[1]).toContain('There is no tool \\"read_inbox\\"');
-    const opted = await setup();
-    await opted.run({ allowPrivate: true, script: [{ tool: "read_inbox", args: {} }, finish] });
-    expect(opted.requests[1]).not.toContain("There is no tool");
+    await run({ script: [{ tool: "run_python", args: {} }, finish] });
+    expect(requests[1]).not.toContain("There is no tool");
+    const lent = await setup();
+    await lent.run({ tabId: 2, script: [{ tool: "read_inbox", args: {} }, finish] });
+    expect(lent.requests[1]).toContain('There is no tool \\"read_inbox\\"');
     const loan = await setup();
     await loan.run({ tabId: 2, script: [{ tool: "click", args: { button: "Send" } }, finish] });
     expect(loan.requests[1]).toContain('There is no tool \\"click\\"');
