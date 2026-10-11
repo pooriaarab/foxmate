@@ -2,6 +2,7 @@
 // Firefox. "Check the connection" asks the server for its models. "Run the
 // setup again" opens the onboarding.
 import { PLANNERS } from "../src/planners.ts";
+import { HELPER_URL } from "./local-models.js";
 import { describe, probe } from "./local-models.js";
 import { onboarding } from "./onboarding.js";
 import { safety } from "./safety.js";
@@ -10,7 +11,7 @@ const $ = (id) => document.getElementById(id);
 const DEFAULT_SCRIPT = JSON.stringify([{ tool: "snapshot", args: {} }, { tool: "finish", args: { summary: "I read the page." } }], null, 1);
 // These fields belong to other modules, which save them on their own.
 const OTHERS = "#phone-panel, #lens-panel, #google-panel, #pay-panel, #notice-panel, #login-form";
-const OWN = new Set(["planner", "model", "base-url", "script"]);
+const OWN = new Set(["planner", "model", "base-url", "script", "helper-on", "helper-url"]);
 let current = {};
 
 function render() {
@@ -23,11 +24,14 @@ function render() {
   $("base-url").value = current.baseURL ?? "";
   $("base-url").placeholder = planner.baseURL ?? "the server's address";
   $("script").value = current.script || DEFAULT_SCRIPT;
+  $("helper-on").checked = !current.helper?.off;
+  $("helper-url").value = current.helper?.baseURL ?? "";
+  $("helper-url").placeholder = HELPER_URL;
   for (const div of document.querySelectorAll("[data-for]")) div.hidden = !div.dataset.for.split(" ").includes(planner.id);
 }
 
 async function save() {
-  current = { ...current, planner: $("planner").value, model: $("model").value.trim(), baseURL: $("base-url").value.trim(), script: $("script").value };
+  current = { ...current, planner: $("planner").value, model: $("model").value.trim(), baseURL: $("base-url").value.trim(), script: $("script").value, helper: { off: !$("helper-on").checked, baseURL: $("helper-url").value.trim() } };
   await browser.storage.local.set({ settings: current });
   render();
 }

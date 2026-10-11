@@ -5,7 +5,7 @@
 import { approvalCard, settle } from "./chat.js";
 import { logins } from "./engine.js";
 import { setFox } from "./fox.js";
-import { SERVERS, describe, plannerFor, probe } from "./local-models.js";
+import { HELPER_URL, SERVERS, describe, plannerFor, probe } from "./local-models.js";
 
 const $ = (id) => document.getElementById(id);
 const STEPS = ["welcome", "model", "approvals", "extras", "first"];
@@ -62,6 +62,11 @@ async function look() {
     row.querySelector(".server-status").textContent = describe(id, result);
     if (result.state === "ok" && !best) best = { id, ...plannerFor(id, result.models), label: result.models[0] ?? server.name };
   }
+  // The fast helper is optional: it never blocks Continue, and foxmate uses it whenever it answers.
+  const helper = await probe(HELPER_URL);
+  const row = dialog().querySelector('[data-server="helper"]');
+  row.dataset.state = helper.state;
+  row.querySelector(".server-status").textContent = helper.state === "ok" ? describe("llama", helper) : "Not running (optional)";
   if (step !== "model") return;
   $("ob-model-next").disabled = !best;
   if (!best) {
