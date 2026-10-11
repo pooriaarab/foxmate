@@ -60,7 +60,7 @@ export default async function notifyCheck({ session, check, record, runGoal }) {
     // NT4-NT7: the notice settings, through the Settings view. Quiet hours start in 2 h, so nothing waits now.
     const quiet = { start: hhmm(Date.now() + 2 * 3_600_000), end: hhmm(Date.now() + 3 * 3_600_000) };
     const set = await session.sidebar.evaluate(async (url, q) => {
-      await browser.storage.local.set({ settings: { privacy: "private", planner: "scripted" } });
+      await browser.storage.local.set({ settings: { planner: "scripted" } });
       window.foxmate.show("settings");
       // oxlint-disable-next-line unicorn/consistent-function-scoping -- this function runs in the page
       const field = (id, value) => {
@@ -126,7 +126,7 @@ export default async function notifyCheck({ session, check, record, runGoal }) {
     check("NT6 the webhook body has the keys and type of the preview", { keys: Object.keys(set.preview.body), type: set.preview.headers["Content-Type"] }, first && { keys: Object.keys(JSON.parse(first.body)), type: first.type });
     const stuck = async () => {
       const count = hook.got.length;
-      await runGoal(session, { page, goal: GOAL, settings: { ...settings, notices: { ...settings.notices, webhookTitle: true }, planner: "anthropic" } });
+      await runGoal(session, { page, goal: GOAL, settings: { ...settings, notices: { ...settings.notices, webhookTitle: true }, planner: "no-such-planner" } });
       return (await until(async () => hook.got[count]))?.body ?? "";
     };
     check("NT5 with the title box set but no consent, the webhook gets no title", false, (await stuck()).includes("Bistro"));

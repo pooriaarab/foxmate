@@ -23,7 +23,6 @@ export interface Trail {
 
 export interface AgentBrowser {
   tabs: { get(tabId: number): Promise<{ id?: number; url?: string; cookieStoreId?: string }> };
-  permissions?: { contains(permissions: unknown): Promise<boolean> };
   scripting?: { executeScript(details: unknown): Promise<unknown> };
 }
 
@@ -55,7 +54,7 @@ export interface RunInput {
 
 export type AgentEvent =
   | (LoopEvent & { exactText?: string })
-  | { type: "start"; planner: string; privacy: string; goal: string }
+  | { type: "start"; planner: string; goal: string }
   | { type: "recall"; notes: string[]; error?: string }
   | { type: "refused"; reason: string; message: string }
   | { type: "private"; source: string }
@@ -188,10 +187,9 @@ export function createAgent(options: AgentOptions): Agent {
       const recalled = options.memory && !input.mind ? await recallNotes(options.memory, input.goal) : { notes: [] };
       if (!input.mind) emit({ type: "recall", ...recalled });
       const goal = withNotes(input.goal, recalled.notes);
-      let brain: { mind: MindLike; planner: string; privacy: string } | undefined = input.mind && { mind: input.mind, planner: "foxbridge", privacy: "outside" };
+      let brain: { mind: MindLike; planner: string } | undefined = input.mind && { mind: input.mind, planner: "foxbridge" };
       if (!brain) try {
         brain = await createBrain(input.settings, {
-          hasDataConsent: async () => (await browser.permissions?.contains({ data_collection: ["websiteContent"] })) ?? false,
           goal,
           ...(options.browserModel ? { browserModel: options.browserModel } : {}),
         });
@@ -199,7 +197,7 @@ export function createAgent(options: AgentOptions): Agent {
         if (error instanceof BrainError) return await refuse(error.code, error.message);
         throw error;
       }
-      emit({ type: "start", planner: brain.planner, privacy: brain.privacy, goal });
+      emit({ type: "start", planner: brain.planner, goal });
       target = input.tabId;
       const expiresAt = Date.now() + runMs;
       const scopes = loan ? SCOPES.slice(0, SCOPES.indexOf(loan.scope) + 1) : SCOPES;

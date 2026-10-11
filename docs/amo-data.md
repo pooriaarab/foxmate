@@ -5,9 +5,11 @@ and four optional types. Firefox asks for an optional type at the click that
 turns its feature on. This page lists what leaves the browser, and the type
 that covers it.
 
+The planner always runs on this computer or in Firefox, so the goal and page
+text never go to a model provider through foxmate.
+
 | What | To whom | When | AMO data type |
 |---|---|---|---|
-| The goal, page text, memory notes and tool results | The cloud provider of your own key | Only in own-key mode, after you tick "Send page text to this provider" | `websiteContent` (optional) |
 | Page text of one shared tab | Claude Code, through the foxbridge host | Only while you share the tab | `websiteContent` (optional) |
 | Mail and calendar requests, with Google tokens | Google's API | Only after you connect Google with your own OAuth client id | `personalCommunications`, `authenticationInfo` (optional) |
 | Approvals | Your paired phone, over an encrypted WebRTC link | Only after you pair a phone | None: the link ends at your own device |

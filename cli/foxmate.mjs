@@ -57,7 +57,7 @@ if (values.help || !command) {
     console.error(`--tasks names a task that foxbench does not have. Run "npx foxbench list".`);
     process.exit(2);
   }
-  const planner = { privacy: "private", planner: values.planner, ...(values.model ? { model: values.model } : {}), ...(values["base-url"] ? { baseURL: values["base-url"] } : {}) };
+  const planner = { planner: values.planner, ...(values.model ? { model: values.model } : {}), ...(values["base-url"] ? { baseURL: values["base-url"] } : {}) };
   const session = await startFox({ headless: !values.headed, ...(values.firefox ? { firefox: values.firefox } : {}) });
   try {
     const adapter = foxmateAdapter(session, { planner, approve: values.approve, timeoutMs: Number(values.timeout) * 1000 });

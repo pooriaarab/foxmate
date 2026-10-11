@@ -8,7 +8,6 @@
   <body>
     <header>
       <h1>foxmate</h1>
-      <span id="privacy" class="badge">Private</span>
     </header>
     <nav id="nav">
       <button type="button" data-view="chat" aria-pressed="true">Chat</button>
@@ -104,22 +103,13 @@
       <ol id="trail" class="steps"></ol>
     </section>
     <section data-view="settings" hidden>
-      <h2>Privacy</h2>
-      <label class="inline"><input type="radio" name="privacy" value="private" /> Private: only models on this computer or in Firefox</label>
-      <label class="inline"><input type="radio" name="privacy" value="own-key" /> Own key: a cloud model that you pay for with your key</label>
-      <p id="privacy-hint" class="hint"></p>
       <label for="planner">Planner</label>
       <select id="planner"></select>
+      <p class="hint">foxmate uses only models on this computer or in Firefox. Page text never goes to a cloud model.</p>
       <p id="planner-hint" class="hint"></p>
-      <div data-for="saluki ollama llama-server openai anthropic">
+      <div data-for="saluki ollama llama-server">
         <label for="model">Model name</label><input id="model" autocomplete="off" />
         <label for="base-url">Server address</label><input id="base-url" autocomplete="off" />
-      </div>
-      <div data-for="openai anthropic">
-        <label for="api-key">API key</label>
-        <div class="row"><input id="api-key" type="password" autocomplete="off" /><button id="save-key" type="button">Save key</button></div>
-        <p id="key-status" class="hint">foxvault keeps the key encrypted. The planner gets only a handle.</p>
-        <label class="inline"><input id="consent" type="checkbox" /> Send page text to this provider</label>
       </div>
       <div data-for="scripted"><label for="script">Script (JSON tool calls)</label><textarea id="script" rows="6"></textarea></div>
       <h2>Optional modules</h2>

@@ -17,7 +17,7 @@ import { x402 } from "foxpay-agent";
 import { registerWebAuthnObserver } from "foxpass";
 import { createNotifier, webhookChannel } from "foxnotify";
 import { createBridge } from "./bridge.js";
-import { KEY_HANDLE, SPACE_DOMAIN, createAgent, createPass, googleTools, lookTool, parsePayees, shieldedMailText, shieldedText, spaceTool, toAtomic } from "../src/index.ts";
+import { SPACE_DOMAIN, createAgent, createPass, googleTools, lookTool, parsePayees, shieldedMailText, shieldedText, spaceTool, toAtomic } from "../src/index.ts";
 
 /** foxshield on an HTML string: a parsed document, scanned in static mode (no layout). */
 const sanitizeHtml = (html) => sanitize(scanDocument(new DOMParser().parseFromString(html, "text/html"), { mode: "static" }));
@@ -72,8 +72,8 @@ const googleOn = async () => Boolean((await modules()).google)
   && (await browser.permissions.contains({ data_collection: ["personalCommunications"] }).catch(() => false))
   && (await google().then((l) => l.status(), () => ({ connected: false }))).connected;
 
-// The own key lives in foxvault. foxvault puts it in the request header as
-// the request leaves Firefox, for the key's host only.
+// foxvault keeps the wallet key and foxlink's Google tokens. foxvault puts a
+// token in the request header as the request leaves Firefox, for its hosts only.
 const vault = createVault({ store: storageAreaStore(browser.storage.local), keyStore: indexedDbKeyStore("foxmate-vault") });
 attachHeaderInjection(vault, browser);
 
@@ -209,18 +209,6 @@ async function lend({ domain, url, scope, ttlMs, allow }) {
   return loan;
 }
 
-/** Stores the own key for the planner's host, with its header rule. Returns the host. */
-async function setKey({ key, planner, baseURL }) {
-  const anthropic = planner === "anthropic";
-  const host = new URL(baseURL || (anthropic ? "https://api.anthropic.com" : "https://api.openai.com/v1")).hostname;
-  if ((await vault.status()) === "new") await vault.initialize();
-  await vault.unlock();
-  if ((await vault.list()).some((s) => s.handle === KEY_HANDLE)) await vault.remove(KEY_HANDLE);
-  await vault.set(KEY_HANDLE, key, { domains: [host] });
-  await vault.injectHeader({ handle: KEY_HANDLE, header: anthropic ? "x-api-key" : "Authorization", hosts: [host], format: anthropic ? "{secret}" : "Bearer {secret}" });
-  return host;
-}
-
 const ports = new Set();
 /** The newest run: { id, goal, tabId, events, end, controller }. */
 let current;
@@ -255,8 +243,6 @@ async function runNow(input) {
 
 async function runClaimed({ goal, tabId, loanId, taskId, signal, allowPrivate, mind, tap }) {
   const { settings = {} } = await browser.storage.local.get("settings");
-  // Device mode unlocks without a passphrase; the header rule needs it unlocked.
-  if (settings.privacy === "own-key" && (await vault.status()) === "locked") await vault.unlock();
   // A run on a loan works in the loan's tab, with the loan's scope at most.
   const loan = loanId ? (await lender.listLoans()).find((l) => l.id === loanId && l.state === "active") : undefined;
   if (loanId && !loan) return { status: "refused", reason: "no-loan", message: "That loan is not active." };
@@ -361,10 +347,6 @@ browser.runtime.onConnect.addListener((port) => {
       else if (message.op === "seen") inView.set(port, Boolean(message.visible));
       else if (message.op === "bridge-share") await bridge.share(message.tabId);
       else if (message.op === "bridge-stop") bridge.stop();
-      else if (message.op === "set-key") {
-        const saved = await setKey(message).then((host) => ({ keySaved: host }), (error) => ({ keyError: error.message }));
-        port.postMessage(saved);
-      }
       else if (message.op === "set-wallet") {
         port.postMessage(await setWallet(message).then((hosts) => ({ walletSaved: hosts.join(", ") }), (error) => ({ walletError: error.message })));
       }

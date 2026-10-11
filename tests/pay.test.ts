@@ -31,7 +31,7 @@ async function setup(cap = 50_000) {
     domain: () => "bills.test", run: async () => ({ ok: true, summary: "Read the page.", untrusted: "Amount due: 0.01 USDC." }),
   };
   const agent = createAgent({
-    browser: { tabs: { get: async (id: number) => ({ id, ...TABS[id] }) }, permissions: { contains: async () => false } },
+    browser: { tabs: { get: async (id: number) => ({ id, ...TABS[id] }) } },
     trail: new Log({ store: new MemoryStore(), key: await generateKey() }),
     makeTools: () => [snapshot],
     loanFor: async (cookieStoreId) => (cookieStoreId === "firefox-container-7" ? { cookieStoreId, scope: "submit", domain: "bills.test", state: "active" } : undefined),
