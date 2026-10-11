@@ -198,6 +198,32 @@ foxpass names the step, and the run waits for the user.
 | HP8 | foxpass needs `webNavigation`, so every install sees a permission prompt on update | foxmate gives foxpass a stand-in that reads the tab address from `tabs.get`. foxpass then reads the top frame of the tab. The manifest gets no new permission. | E2E pass (reads `dist-ext/manifest.json`) |
 | HP9 | A sign-up form, where the goal gives a new password, pauses the run | A password field with `autocomplete="new-password"` is not a wall for foxmate. The planner fills it, and the send still asks you. | E2E signup (E1) |
 
+## Saved logins: fill a sign-in from foxvault (`src/logins.ts`)
+
+The user saves a login for a site in Settings: the host, the username and the
+password. A login vault (foxvault, its own store and key) keeps the password.
+At a sign-in wait, Chat offers "Fill saved login". foxpass's `fillWall` fills
+the password only into the field that its scan found as the sign-in step,
+after the user approves. The planner never asks for a fill and never sees the
+value.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| LV1 | The saved password reaches the planner: as a field value, or as page text that repeats it (an error page that echoes it) | The fill runs while the run waits, before the planner reads the page. Every message to the planner passes the login vault's `redact` first, so a copy shows the handle. | `tests/logins.test.ts` LV1; E2E vault |
+| LV2 | The tab is on a look-alike host (`bank.example.evil.test`) or on another host than the saved one | Chat offers the fill only when the wall's host equals the saved host. The secret holds that one host, so foxvault refuses `domain` too. | `tests/logins.test.ts` LV2 |
+| LV3 | The sign-in form is in an iframe | foxpass scans the top document only, so there is no password wall and no fill (`no-password-field`). foxvault fills the top document only. | `tests/logins.test.ts` LV3 |
+| LV4 | A fill runs with no approval, or after Deny | The fill has a foxgate of its own, with `foxvault.fill` as its one tool. Its only grants are `approval: "always"`, for the wall's host, one per click, for 2 minutes. Deny fills nothing. | `tests/logins.test.ts` LV4; E2E vault |
+| LV5 | The approval hides where the password goes | The approval text is foxgate's canonical JSON of the fill: the handle, the host and the selector. The detail names the host and the field. | `tests/logins.test.ts` LV5; E2E vault |
+| LV6 | The value reaches the log or its export | Every log entry passes the login vault's `redact` before foxtrail writes it. foxvault's `onEvent` writes `vault.release` with the handle and the host only. | `tests/logins.test.ts` LV6; E2E vault (export) |
+| LV7 | The phone approves a fill | A fill approval is a `login-approval` event, which the phone does not show. An answer that does not come from the sidebar decides nothing. | `tests/logins.test.ts` LV7 |
+| LV8 | A fill click comes when no run waits at a sign-in, or after the wait ended | foxmate refuses `no-wait`. The end of the wait rejects its open fill requests and revokes the grants. | `tests/logins.test.ts` LV8 |
+| LV9 | The page changes between the scan and the fill (a redirect, a reload) | The fill is pinned to the document that the scan read (`documentId`). foxvault refuses `page-changed`. | `tests/logins.test.ts` LV9 |
+| LV10 | The fill writes into a plain `http:` page on the network, where others can read the password | foxvault refuses `http`. foxmate sets `allowHttp` only for a host on this computer (`127.0.0.1`, `localhost`, `*.localhost`). | `tests/logins.test.ts` LV10 |
+| LV11 | The username goes into a field that the user did not approve | The username goes only into an empty email or username field of the same form as the approved password field, in the same document, after that fill worked. The approval detail names that field. | `tests/logins.test.ts` LV11; E2E vault |
+| LV12 | The password stays in the Settings field, or reaches `storage.local` or the sidebar in clear | The field clears at the save. The login vault keeps ciphertext only. The list shows the host and the username, never the password. | E2E vault |
+| LV13 | foxvault needs `webNavigation` for the document, so every install sees a permission prompt | foxmate gives foxvault and the fill scan a stand-in: `scripting.executeScript` on frame 0 reports the URL and the `documentId`. The manifest gets no new permission (HP8). | E2E vault (reads `dist-ext/manifest.json`) |
+| LV14 | The planner asks for a fill | `foxvault.fill` is not a planner tool. Only the Chat button starts a fill. | `tests/logins.test.ts` LV14 |
+
 ## Notices: when a run needs the user (`extension/background.js`, `extension/notices.js`)
 
 foxnotify tells the user that a run waits for them, ended, or that a
