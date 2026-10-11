@@ -18,7 +18,8 @@ export default async function modulesCheck({ session, check, record, scripted, f
       url: `${site.url}/canvas.html`, goal: "What does this page say?", shot: "chat-mail-ask",
       settings: scripted([{ tool: "look", args: {} }, { tool: "read_calendar", args: {} }, { tool: "read_calendar", args: { max: 3 } }, finish, finish]),
     });
-    const results = off.trail.filter((e) => e.kind === "loop.tool-result").map((e) => [e.data.name, e.data.ok, e.data.summary]);
+    // foxloop's first read (read_0) is foxmate's, not a planned step (G32).
+    const results = off.trail.filter((e) => e.kind === "loop.tool-result" && e.data.id !== "read_0").map((e) => [e.data.name, e.data.ok, e.data.summary]);
     check("O1 the look tool refuses while screenshots are off", ["look", false, "Screenshots are off. The user can turn them on in Settings."], results[0]);
     check("O2 after one OK, the calendar tools say Google is not connected, and the second read asks nothing",
       { asks: 1, result: ["read_calendar", false, "Google is not connected. The user can connect it in Settings."] }, { asks: off.approvals.length, result: results[1] });

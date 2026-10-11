@@ -1,6 +1,8 @@
 # foxmate
 
-An open-source personal agent that runs in your own Firefox.
+An open-source, private alternative to Meta Muse, ChatGPT Dots, Grok Bot
+and Instinct. It runs only in your own Firefox, with a model on your
+computer.
 
 foxmate is a Firefox extension. You type a goal in its page, and an AI
 planner works on the tab you pick with your logins, on your computer. It
@@ -10,6 +12,11 @@ any change. It is the reference app of the
 and foxmate puts them together.
 
 ## What foxmate is
+
+Meta Muse, ChatGPT Dots, Grok Bot and Instinct are personal agents that do
+tasks for you with the vendor's model. foxmate does the same job with no
+vendor: the agent, the model and your logins stay on your computer. It is
+MIT-licensed, and you can read every line.
 
 Meta Muse (launched 2026-09-08) runs its agent in a virtual machine in
 Meta's cloud. To act for you there, it needs your logins in that cloud.

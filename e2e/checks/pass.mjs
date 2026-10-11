@@ -67,7 +67,8 @@ export default async function passCheck({ session, check, record, runGoal }) {
     const again = sidebar.evaluate(() => document.querySelectorAll("#conversation > li").length).then((n) => signInLine(sidebar, n).then(() => sidebar.evaluate(() => document.getElementById("stop").click())));
     const stopped = await runGoal(session, { page, goal: "Read my balance on my bank.", settings });
     await again;
-    check("HP4 Stop ends the wait and the run", { status: "Stopped.", ended: "cancelled", requests: 1 },
+    // The first read (G32) meets the wall before any planner request.
+    check("HP4 Stop ends the wait and the run", { status: "Stopped.", ended: "cancelled", requests: 0 },
       { status: stopped.status, ended: stopped.trail.find((e) => e.kind === "handoff.ended")?.data.status, requests: planner.bodies.length });
 
     const manifest = JSON.parse(readFileSync("dist-ext/manifest.json", "utf8"));

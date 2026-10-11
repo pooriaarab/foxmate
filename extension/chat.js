@@ -263,7 +263,9 @@ function show(event) {
     if (runState() !== "needs-approval") state("working");
   } else if (event.type === "approval-needed" || event.type === "login-approval") approval(event);
   else if (event.type === "tool-result") {
-    line(event.ok ? "Result" : "Failed", ` ${event.summary}`, event.ok ? "ok" : "bad", `${event.name}${event.reason ? ` (${event.reason})` : ""}${event.detail ? `\n${event.detail}` : ""}`);
+    // A call that foxloop skipped did not run: the reply's batch ended before it (G33).
+    const skipped = event.reason === "skipped";
+    line(event.ok ? "Result" : skipped ? "Skipped" : "Failed", ` ${event.summary}`, event.ok ? "ok" : skipped ? "meta" : "bad", `${event.name}${event.reason ? ` (${event.reason})` : ""}${event.detail ? `\n${event.detail}` : ""}`);
     state("working");
   } else if (event.type === "check") line(event.ok ? "Check passed" : "Check failed", ` ${event.checks.map((c) => `${c.ok ? "ok" : "not ok"} ${c.part}`).join("; ")}`, event.ok ? "ok" : "bad");
   else if (event.type === "refused") line("Refused", ` ${event.message}`, "bad");
