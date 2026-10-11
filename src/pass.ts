@@ -105,3 +105,23 @@ export function redactPage(page: Snapshot, hints: FieldInfo[], quotes: string[] 
   const controls = page.controls.map((c, i) => ({ ...c, value: String(safe.fields?.[i]?.value ?? c.value) }));
   return { page: { ...page, title: safe.title, text: safe.text, controls }, quotes: safe.quotes };
 }
+
+const CARD = /(?<![\d-])\d(?:[ -]?\d){12,18}(?![\d-])/g;
+/** The Luhn check that every payment card number passes. */
+function luhn(digits: string): boolean {
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let d = Number(digits[digits.length - 1 - i]);
+    if (i % 2 === 1) d = d * 2 > 9 ? d * 2 - 9 : d * 2;
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
+const CODE = /\b(CVC|CVV|CSC|CID|security code)(\s*[:=]?\s*)\d{3,4}\b/gi;
+/** Each card number in the text as "•••• 4242", its last 4 digits only, and each card code as "•••" (G37). */
+export function maskCards(text: string): string {
+  return text.replace(CARD, (found) => {
+    const digits = found.replace(/\D/g, "");
+    return luhn(digits) ? `•••• ${digits.slice(-4)}` : found;
+  }).replace(CODE, (_found, name: string, gap: string) => `${name}${gap}•••`);
+}

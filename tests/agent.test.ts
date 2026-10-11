@@ -408,6 +408,18 @@ describe("agent", () => {
     expect(sent(none.requests[0]).at(-1)?.content).toContain(NOTE);
   });
 
+  it("G37: a card number in the done summary shows only its last 4 digits", async () => {
+    const { run, events } = await setup();
+    const summary = "Order TH-5000 placed, paid with the card 4242 4242 4242 4242 (also 4000-0000-0000-0002, 5555555555554444), CVC 123, cvv: 4567. Call 416 555 0199.";
+    const end = await run({ script: [{ tool: "click", args: { button: "Buy" } }, { tool: "finish", args: { summary } }] });
+    expect(end.status).toBe("done");
+    const shown = [end.summary ?? "", ...events.filter((e) => e.type === "done").map((e) => (e as { summary: string }).summary)];
+    expect(shown).toHaveLength(2);
+    for (const text of shown) {
+      expect(text).toBe("Order TH-5000 placed, paid with the card •••• 4242 (also •••• 0002, •••• 4444), CVC •••, cvv: •••. Call 416 555 0199.");
+    }
+  });
+
   it("G36: the planner always gets the finish tool", async () => {
     helper.tools = [];
     await (await setup()).run({ script: [{ tool: "fill", args: { text: "x" } }, finish] });
