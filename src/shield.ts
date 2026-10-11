@@ -73,6 +73,9 @@ export function shieldedPaw(options: ShieldOptions): PawLike {
     act: paw.act,
     settle: paw.settle,
     runTask: paw.runTask,
+    // Pure text formats: foxloop gives them only snapshots that came through this shield (S12).
+    pageText: paw.pageText,
+    changeText: paw.changeText,
     async snapshot(tabId: number, browser?: ScriptingApi): Promise<Snapshot> {
       const done = async (page: Snapshot, seen: ShieldScan): Promise<Snapshot> => {
         const safe = redactPage(page, options.fieldHints?.(tabId) ?? [], seen.top.map((t) => t.text));
