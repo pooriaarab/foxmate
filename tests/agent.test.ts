@@ -5,9 +5,11 @@ import type { LoopTool } from "foxloop";
 import { Log, MemoryStore, generateKey } from "foxtrail";
 import { describe, expect, it, vi } from "vitest";
 import { createAgent, type AgentEvent, type RunInput } from "../src/agent.js";
+import type { Workflow, WorkflowStore } from "../src/workflow.js";
 
 // G34: a stand-in fast helper on the scripted brain. `reply` undefined means no helper.
-const helper = vi.hoisted(() => ({ reply: undefined as string | undefined, seen: [] as string[], tools: [] as string[][] }));
+// WF1-WF8: `planned` records each request to the planner.
+const helper = vi.hoisted(() => ({ reply: undefined as string | undefined, seen: [] as string[], tools: [] as string[][], planned: [] as string[] }));
 vi.mock("../src/brain.js", async (original) => {
   const real = await original<typeof import("../src/brain.js")>();
   return {
@@ -15,7 +17,7 @@ vi.mock("../src/brain.js", async (original) => {
     createBrain: async (...args: Parameters<typeof real.createBrain>) => {
       const real0 = await real.createBrain(...args);
       // G36: the tool names of each planner request.
-      const brain = { ...real0, mind: { chat: (messages: Parameters<typeof real0.mind.chat>[0], options: Parameters<typeof real0.mind.chat>[1]) => { helper.tools.push(options.tools.map((t) => t.function.name)); return real0.mind.chat(messages, options); } } };
+      const brain = { ...real0, mind: { chat: (messages: Parameters<typeof real0.mind.chat>[0], options: Parameters<typeof real0.mind.chat>[1]) => { helper.tools.push(options.tools.map((t) => t.function.name)); helper.planned.push(JSON.stringify(messages)); return real0.mind.chat(messages, options); } } };
       if (helper.reply === undefined) return brain;
       return { ...brain, check: async (messages: unknown[]) => { helper.seen.push(JSON.stringify(messages)); return { text: helper.reply!, provider: "scout" }; } };
     },
@@ -32,7 +34,7 @@ const TABS: Record<number, { url: string; cookieStoreId: string; title?: string;
 
 const host = (tabId: () => number) => async () => new URL(TABS[tabId()]?.url ?? "").hostname;
 
-async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { getDomain(host: string): string | null }; redirect?: Record<string, string>; loading?: boolean } = {}) {
+async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { getDomain(host: string): string | null }; redirect?: Record<string, string>; loading?: boolean; workflows?: WorkflowStore } = {}) {
   // Every request to the planner, as text: the redact hook sees each one before it goes out.
   const requests: string[] = [];
   const ran: { tool: string; args: Record<string, unknown>; domain?: string }[] = [];
@@ -110,6 +112,7 @@ async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { 
       return text;
     },
     ...(options.publicSuffix ? { publicSuffix: options.publicSuffix } : {}),
+    ...(options.workflows ? { workflows: options.workflows } : {}),
   });
   agentRef = agent;
   const events: AgentEvent[] = [];
@@ -142,6 +145,8 @@ const tabNote = (request: string | undefined) => {
 };
 const openSite = (url: string) => ({ tool: "open_site", args: { url } });
 const open = (n: number) => ({ tool: "open_url", args: { url: `https://site${n}.test/` } });
+/** An address on the tab's own host, which the run's grants cover (WF1-WF8). */
+const shopPage = (n: number) => ({ tool: "open_url", args: { url: `http://shop.test/page${n}` } });
 
 describe("agent", () => {
   it("G1: the approval shows the exact action, and only that action runs", async () => {
@@ -648,5 +653,60 @@ describe("agent", () => {
     const off = await questions();
     await off.run({ settings: { planner: "scripted", ask: false, script: JSON.stringify([finish, finish]) } });
     expect(systemOf(off.requests[0])).not.toContain("ask_user");
+  });
+  it("WF3, WF10: a run that ended done replays up to the finish, which the planner writes, and each approval is asked again", async () => {
+    const kept = new Map<string, Workflow>();
+    const workflows: WorkflowStore = { get: async (k) => kept.get(k), set: async (k, w) => { kept.set(k, w); } };
+    helper.planned = [];
+    const first = await setup({ workflows });
+    expect((await first.run({ script: [shopPage(1), { tool: "click", args: { button: "Pay" } }, finish] })).status).toBe("done");
+    expect(kept.size).toBe(1);
+    const plannedFirst = helper.planned.length;
+    const second = await setup({ workflows });
+    const end = await second.run({ script: [finish] });
+    expect(end.status).toBe("done");
+    expect(helper.planned.length).toBe(plannedFirst + 1);
+    expect(second.ran.map((r) => r.tool)).toEqual(["open_url", "click"]);
+    expect(second.events.filter((e) => e.type === "approval-needed").length).toBe(1);
+    expect(second.events.filter((e) => e.type === "plan").map((e) => (e as { provider?: string }).provider === "replay")).toEqual([true, true, false]);
+  });
+
+  it("WF2, WF7: a run that did not end done keeps nothing", async () => {
+    const kept = new Map<string, Workflow>();
+    const workflows: WorkflowStore = { get: async (k) => kept.get(k), set: async (k, w) => { kept.set(k, w); } };
+    const first = await setup({ workflows });
+    first.setProblem("error page");
+    expect((await first.run({ script: [shopPage(1), finish, finish] })).status).toBe("blocked");
+    expect(kept.size).toBe(0);
+  });
+
+  it("WF4: a question is asked again, and another answer ends the replay", async () => {
+    const kept = new Map<string, Workflow>();
+    const workflows: WorkflowStore = { get: async (k) => kept.get(k), set: async (k, w) => { kept.set(k, w); } };
+    const runWith = async (answer: string, script: unknown[]) => {
+      const made = await setup({ workflows });
+      const events: AgentEvent[] = [];
+      helper.planned = [];
+      const end = await made.agent.run({
+        goal: "Buy the hoodie", tabId: 1, settings: { planner: "scripted", script: JSON.stringify(script) },
+        onEvent: (e) => { events.push(e); if (e.type === "question") setTimeout(() => void made.agent.reply(e.id, answer), 1); },
+      });
+      return { end, events, planned: helper.planned.length };
+    };
+    expect((await runWith("L", [{ tool: "ask_user", args: { question: "Which size?" } }, shopPage(1), finish])).end.status).toBe("done");
+    const same = await runWith("L", [finish]);
+    expect(same.end.status).toBe("done");
+    expect(same.planned).toBe(1);
+    const other = await runWith("M", [shopPage(2), finish]);
+    expect(other.events.filter((e) => e.type === "question").length).toBe(1);
+    expect(other.planned).toBeGreaterThan(0);
+  });
+
+  it("WF6: a run with private data keeps nothing", async () => {
+    const kept = new Map<string, Workflow>();
+    const workflows: WorkflowStore = { get: async (k) => kept.get(k), set: async (k, w) => { kept.set(k, w); } };
+    const made = await setup({ workflows });
+    expect((await made.run({ goal: "Book a table", script: [shopPage(1), finish] })).status).toBe("done");
+    expect(kept.size).toBe(0);
   });
 });
