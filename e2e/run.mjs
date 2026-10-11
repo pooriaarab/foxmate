@@ -30,10 +30,10 @@ import voice from "./checks/voice.mjs";
 import { BANK_HOSTS } from "./bank.mjs";
 import { runGoal, startFox } from "./lib.mjs";
 
-// app goes first: it checks the tabs before other checks open some. notify
-// comes next: foxnotify allows 4 notices a minute, and the later checks send
-// some too. rules and modules go after activity: Activity shows the newest 300
-// entries, and their runs would push the older kinds out.
+// app goes first: it starts from a fresh first run. notify comes next: foxnotify
+// allows 4 notices a minute, and the later checks send some too. rules
+// and modules go after activity: Activity shows the newest 300 entries, and their runs would
+// push the older kinds out.
 const CHECKS = { app, notify, signup, pass, vault, local, traps, memory, lend, space, phone, activity, modules, rules, open, pay, bridge, voice, tasks, keepalive };
 
 const record = { startedAt: new Date().toISOString(), checks: [], runs: {} };
