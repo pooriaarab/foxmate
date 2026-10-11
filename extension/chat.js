@@ -1,6 +1,8 @@
 // The Chat view: a goal box, and each run as a conversation. A run shows
 // the planner's steps, each tool call and gate decision, inline approvals
 // with the exact action, the results and the final check.
+import { targetTab } from "./target.js";
+
 const $ = (id) => document.getElementById(id);
 let port;
 let steps;
@@ -122,15 +124,16 @@ export const chat = {
     });
     $("goal-form").addEventListener("submit", async (event) => {
       event.preventDefault();
-      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-      if (tab?.id !== undefined) chat.start(tab.id, $("goal").value);
+      // With no web page open, the run asks before it opens a site (OS1-OS8).
+      const tab = await targetTab();
+      chat.start(tab?.id, $("goal").value);
     });
     $("stop").addEventListener("click", () => port.postMessage({ op: "stop" }));
   },
   start(tabId, goal, loanId) {
     $("goal").value = goal;
     // Mail and calendar ask in the run, once each (G18): there is no switch for them.
-    port.postMessage({ op: "run", tabId, goal, ...(loanId ? { loanId } : {}) });
+    port.postMessage({ op: "run", ...(tabId === undefined ? {} : { tabId }), goal, ...(loanId ? { loanId } : {}) });
   },
   message(message) {
     if (message.run && shown.has(message.run.id)) {
