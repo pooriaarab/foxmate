@@ -5,6 +5,7 @@
 import { activity } from "./activity.js";
 import { bridge } from "./bridge-view.js";
 import { chat } from "./chat.js";
+import { draw } from "./fox.js";
 import { talk } from "./voice.js";
 import { lend } from "./lend.js";
 import { memory } from "./memory.js";
@@ -80,6 +81,7 @@ $("dock-toggle").addEventListener("click", () => {
   else browser.sidebarAction.open();
 });
 
+draw();
 for (const view of Object.values(views)) view.init?.(port, { show });
 connect();
 

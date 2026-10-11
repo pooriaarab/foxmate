@@ -5,11 +5,53 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>foxmate</title>
     <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="fox.css" />
   </head>
   <body>
+    <!-- The fox: one original drawing, cloned by fox.js. It has no mouth. It shows how it feels with its eyes, ears, posture and tail. Each part is its own group, so fox.js can move it. -->
+    <template id="fox-art">
+      <svg class="fox-art" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+        <g class="fx-rig">
+          <g class="fx-tail">
+            <path class="fox-fur" d="M60 86 C76 88 92 78 92 60 C92 48 86 40 80 38 C82 50 78 62 66 68 C60 72 56 78 60 86 Z" />
+            <path class="fox-cream" d="M80 38 C86 40 92 48 92 58 C88 54 84 52 80 52 C82 47 82 42 80 38 Z" />
+          </g>
+          <g class="fx-body">
+            <path class="fox-fur" d="M33 92 C31 74 39 60 50 60 C61 60 69 74 67 92 Z" />
+            <path class="fox-cream" d="M42 92 C42 79 45 70 50 70 C55 70 58 79 58 92 Z" />
+          </g>
+          <g class="fx-head">
+            <g class="fx-ear-l">
+              <path class="fox-fur" d="M25 36 L27 9 L45 26 Z" />
+              <path class="fox-inner" d="M29 31 L30 16 L40 26 Z" />
+            </g>
+            <g class="fx-ear-r">
+              <path class="fox-fur" d="M75 36 L73 9 L55 26 Z" />
+              <path class="fox-inner" d="M71 31 L70 16 L60 26 Z" />
+            </g>
+            <path class="fox-fur" d="M20 37 C26 27 38 23 50 23 C62 23 74 27 80 37 C76 49 63 59 50 63 C37 59 24 49 20 37 Z" />
+            <path class="fox-cream" d="M20 37 C29 42 39 45 50 46 C61 45 71 42 80 37 C76 49 63 59 50 63 C37 59 24 49 20 37 Z" />
+            <g class="fx-eyes">
+              <g class="fx-eyes-open">
+                <ellipse class="fox-ink" cx="39" cy="40" rx="3.1" ry="4" />
+                <ellipse class="fox-ink" cx="61" cy="40" rx="3.1" ry="4" />
+                <circle class="fox-cream fx-glint" cx="40.1" cy="38.5" r="1" />
+                <circle class="fox-cream fx-glint" cx="62.1" cy="38.5" r="1" />
+              </g>
+              <g class="fx-eyes-happy">
+                <path class="fox-line" d="M35 41 Q39 36 43 41" />
+                <path class="fox-line" d="M57 41 Q61 36 65 41" />
+              </g>
+            </g>
+            <g class="fx-nose"><ellipse class="fox-ink" cx="50" cy="56" rx="3.2" ry="2.3" /></g>
+          </g>
+        </g>
+      </svg>
+    </template>
+
     <div class="app">
       <nav id="nav" class="rail" aria-label="foxmate">
-        <div class="brand"><span class="brand-name">foxmate</span></div>
+        <div class="brand"><span class="fox" data-size="xs" data-state="idle"></span><span class="brand-name">foxmate</span></div>
         <ul class="rail-list">
           <li><button type="button" data-view="chat" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" /></svg><span>Chat</span></button></li>
           <li><button type="button" data-view="today"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 10h16M9 3v4M15 3v4" /></svg><span>Today</span></button></li>
@@ -29,6 +71,7 @@
         <section data-view="chat" class="chat" aria-label="Chat">
           <div id="thread" class="thread">
             <div id="empty" class="empty">
+              <span class="fox" data-size="l" data-state="idle" data-follow></span>
               <h1>What can I do for you?</h1>
               <p>I work on your tabs, with your logins. I ask before I send anything.</p>
               <ul id="suggestions" class="suggestions" aria-label="Ideas to start">
@@ -43,6 +86,7 @@
 
           <div class="dock">
             <div id="presence" class="presence" data-state="idle">
+              <span class="fox" data-size="s" data-state="idle" data-follow></span>
               <span id="status" role="status"></span>
             </div>
             <form id="goal-form" class="composer">

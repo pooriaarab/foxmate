@@ -439,6 +439,29 @@ details.raw pre { margin-top: 4px; white-space: pre-wrap; }
 #notice-preview { max-height: 220px; overflow: auto; }
 body.solo .page { height: auto; }
 
+/* The fox */
+.fox { --size: 30px; position: relative; display: inline-block; flex: none; width: var(--size); height: var(--size); transition: opacity 400ms var(--ease-out), scale 400ms var(--ease-out); }
+.fox[data-size="xs"] { --size: 30px; }
+.fox[data-size="l"] { --size: 96px; }
+.fox-fur { fill: var(--fox-fur); }
+.fox-cream { fill: var(--fox-cream); }
+.fox-ink { fill: var(--fox-ink); }
+.fox-inner { fill: var(--fox-inner); }
+.fox-line { fill: none; stroke: var(--fox-ink); stroke-width: 2.6; stroke-linecap: round; }
+
+.presence[data-state="needs-approval"] .fox::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  animation: fx-ring 1.8s 420ms var(--ease-out) infinite both;
+}
+.presence[data-state="needs-approval"] { color: var(--text); }
+/* A long run: the fox steps back and goes quiet until something needs you. */
+.fox.stepped-back { opacity: 0.55; scale: 0.82; }
+.fox[data-size="xs"], .fox[data-size="xs"] * { animation: none !important; }
+
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
 @keyframes card-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
 @keyframes pop { from { opacity: 0; transform: translateY(4px) scale(0.97); } }
