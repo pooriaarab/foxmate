@@ -13,6 +13,8 @@ function summary({ kind, data = {} }) {
   if (kind === "loop.decision") return `gate ${data.via} ${data.decision}${data.reason ? `: ${data.reason}` : ""}`;
   if (kind === "loop.tool-result") return `${data.name}: ${data.summary}`;
   if (kind === "loop.done") return `Done: ${data.summary}`;
+  if (kind === "rule.add") return `Rule ${data.ruleId}: ${data.effect} ${data.tool ?? data.scope} on ${data.site}`;
+  if (kind === "gate.rule") return `${data.tool ?? ""} on ${data.domain ?? ""}: ${data.note}`;
   if (kind === "loop.blocked") return `Blocked: ${data.reason}`;
   return "";
 }
