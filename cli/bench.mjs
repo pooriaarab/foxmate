@@ -52,7 +52,9 @@ export async function signInBySam(url, page) {
 /** foxbench metrics from one run: planner calls, tool results and approvals (BN2). */
 export function runMetrics(run) {
   const count = (kind) => run.kinds.filter((k) => k === kind).length;
-  return { modelCalls: count("loop.plan"), steps: count("loop.tool-result"), approvals: run.approvals.length };
+  // A replayed step of the workflow cache is a plan event with no model call (WF8).
+  const replayed = (run.trail ?? []).filter((e) => e.kind === "run.route" && e.data?.by === "replay").length;
+  return { modelCalls: count("loop.plan") - replayed, steps: count("loop.tool-result"), approvals: run.approvals.length };
 }
 
 /** The foxbench adapter. `planner` is foxmate's settings without the script. */
