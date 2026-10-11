@@ -104,6 +104,27 @@ answer must reach the one request it names, once.
 | G21 | The approval shows the form's values cut to 80 and 240 characters, so the end of a long value that the planner typed (an address, a message) is hidden | The field the planner typed last is shown in full. | `tests/form.test.ts` G21 |
 | G22 | The last tool calls fail (no control, nothing done), the planner calls `finish`, and the run ends as done because an earlier step worked and the page shows no error (seen in the same run) | With no task check, `finish` passes only when the newest tool result is good. |  `tests/agent.test.ts` G22 |
 
+## Rules: standing answers for one site (`src/approvals.ts`, `src/agent.ts`)
+
+foxgate keeps user rules: "always allow click on example.com", "always ask
+before it reads bank.com", "never let it submit on shop.com". An approval
+card offers "Always allow <tool> on <site>". Settings lists the rules, with
+Remove, and adds "Always ask" and "Never allow" for the current site. A rule
+changes only the approval step of a grant that the run already has.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| RU1 | The run read private data (mail, Space files, memory notes, a paid answer), and an `allow` rule skips the approval of a submit, so the data leaves with no human | Only the submit grant of a run with no private data has `rules: true`. After private data foxmate adds it again without `rules`, so the click asks. The card does not offer "Always allow" on a private run. | `tests/rules.test.ts` RU1; E2E rules |
+| RU2 | The card offers "Always allow" for a payment or a saved-login fill | The offer exists only for `read` and `submit` actions on a run's own tab tools. A pay approval and a fill approval (its own gate) get no offer. An `always-allow` answer to such a request decides nothing. | `tests/rules.test.ts` RU2 |
+| RU3 | A rule for `a.com` acts on `b.com`, or a rule made on `shop.a.com` widens to the whole public suffix | The rule site is the registrable domain of the action's host, from the same public suffix list as foxgate. A host with no registrable domain (an IP address, `localhost`) gets no offer. foxgate matches by whole labels (foxgate U1). | `tests/rules.test.ts` RU3; E2E rules |
+| RU4 | A rule outlives the run's grants and allows an action with no grant: the next run on another tab, or after a revoke | A rule never makes a grant. The run's grants end with the run (G2), and the next action with no grant gets `no-grant`. The rule itself stays across runs and restarts, in `browser.storage.local`. | `tests/rules.test.ts` RU4 |
+| RU5 | The user removes a rule, and the next action still skips the approval | Remove calls foxgate's `removeRule`. The next check reads the rules again, so the click asks. | E2E rules |
+| RU6 | The trail cannot show that a rule decided, or which one | foxgate's `onDecision` writes `gate.rule` with the `ruleId` for each decision that a rule made ("allowed by rule <id>", "denied by rule <id>"). "Always allow" writes `rule.add` with the rule before it approves. A failed write gives `deny` `hook-failed`, and no rule is added. | `tests/rules.test.ts` RU6; E2E rules |
+| RU7 | The phone (or any channel but the sidebar) adds a standing rule | An `always-allow` answer counts from the sidebar only. The phone never shows the choice. | `tests/rules.test.ts` RU7 |
+| RU8 | A lent login gets a standing `allow` | A loan run adds no grant with `rules: true` and the card makes no offer. | `tests/rules.test.ts` RU8 |
+| RU9 | A page message adds an `allow` rule with no approval card | `rules:add` takes `ask` and `deny` only, for the registrable site of the tab it names. The only way to add `allow` is the card's answer to a waiting request. | E2E rules |
+| RU10 | `addRule` throws (`bad-rule`, a storage error), and the request is approved anyway or hangs | foxmate records nothing, approves nothing, and the request still waits for Approve or Deny. | `tests/rules.test.ts` RU10 |
+
 ## Space: Python on a dropped file (`src/space.ts`)
 
 The planner can run Python on files the user drops into the Space. foxden
