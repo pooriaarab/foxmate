@@ -1,7 +1,7 @@
 // Tests for docs/failure-modes.md S1-S12. The scan report comes from the real
 // foxshield (scanHtml, static mode); only foxpaw and the tab are stubs.
 import { scanDocument, scanHtml, type ScanReport } from "foxshield";
-import { changeText, pageText, type Control, type Snapshot } from "foxpaw";
+import { changeText, pageText, preview, type Control, type Snapshot } from "foxpaw";
 import { describe, expect, it } from "vitest";
 import { shieldedPaw, type ShieldScan } from "../src/shield.js";
 
@@ -24,7 +24,7 @@ const raw: Snapshot = {
   controls: [control("0:1", "Add to cart"), { ...control("0:2", "verify your account now"), offscreen: true }],
 };
 
-const fakePaw = { snapshot: async () => structuredClone(raw), act: async () => ({ ok: true }) as never, settle: async () => 0, runTask: async () => ({}) as never, pageText, changeText };
+const fakePaw = { snapshot: async () => structuredClone(raw), act: async () => ({ ok: true }) as never, settle: async () => 0, runTask: async () => ({}) as never, preview, pageText, changeText };
 // The scan returns `result`. The second call asks the page which control nodes sit inside hidden text: `inside`.
 const tab = (result: () => Promise<unknown>, inside: number[] | "throw" = []) => ({
   scripting: {
