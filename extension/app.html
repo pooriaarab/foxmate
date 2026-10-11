@@ -201,6 +201,11 @@
               <label for="base-url">Server address</label><input id="base-url" autocomplete="off" />
               <div class="row"><button id="model-check" type="button" class="small">Check the connection</button><span id="model-check-status" class="muted" role="status"></span></div>
             </div>
+            <div data-for="saluki ollama llama-server">
+              <label class="check"><input id="helper-on" type="checkbox" /> Fast helper model (optional)</label>
+              <p class="hint">A small model on a second server checks if a goal is done, so the planner does less. foxmate uses it only when it answers. Start Qwen3.5-4B with: <code>llama-server -m Qwen3.5-4B-Q4_K_M.gguf --jinja -ngl 99 -fa on -c 16384 -np 2 --port 8082</code></p>
+              <label for="helper-url">Helper address</label><input id="helper-url" autocomplete="off" />
+            </div>
             <div data-for="scripted"><label for="script">Script (JSON tool calls)</label><textarea id="script" rows="6"></textarea></div>
             <div class="row"><button id="onboarding-again" type="button" class="small">Run the setup again</button></div>
           </div>
@@ -313,6 +318,11 @@
             <div class="server-head"><span class="dot" aria-hidden="true"></span><strong>Ollama</strong><span class="server-status" role="status">Looking…</span></div>
             <p class="hint">Start Ollama so it lets foxmate in:</p>
             <div class="copy"><code>OLLAMA_ORIGINS="moz-extension://*" ollama serve</code><button type="button" class="small" data-copy>Copy</button></div>
+          </div>
+          <div class="server" data-server="helper">
+            <div class="server-head"><span class="dot" aria-hidden="true"></span><strong>Fast helper (optional)</strong><span class="server-status" role="status">Looking…</span></div>
+            <p class="hint">A small second model checks if a goal is done, so runs end sooner. Start Qwen3.5-4B with:</p>
+            <div class="copy"><code>llama-server -m Qwen3.5-4B-Q4_K_M.gguf --jinja -ngl 99 -fa on -c 16384 -np 2 --port 8082</code><button type="button" class="small" data-copy>Copy</button></div>
           </div>
           <p id="ob-model-choice" class="ob-choice" role="status"></p>
           <div class="ob-actions"><button type="button" class="ghost" data-back>Back</button><span class="grow"></span><button type="button" class="ghost" data-next>Skip for now</button><button id="ob-model-next" type="button" class="primary" data-next disabled>Continue</button></div>
