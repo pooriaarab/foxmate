@@ -3,7 +3,7 @@
 //   foxmate try     open a fresh Firefox profile with foxmate installed
 //   foxmate bench   score foxmate on foxbench in a real Firefox
 import { parseArgs } from "node:util";
-import { runSuite, taskById, toMarkdown, writeScore } from "foxbench";
+import { SUITES, runSuite, taskById, tasksIn, toMarkdown, writeScore } from "foxbench";
 import { foxmateAdapter } from "./bench.mjs";
 import { startFox } from "./driver.mjs";
 
@@ -13,12 +13,13 @@ const HELP = `foxmate try [--firefox <path>]
   Firefox or press Ctrl-C to stop; the profile is deleted.
 
 foxmate bench [options]
-  Scores foxmate on the 13 foxbench tasks in a real Firefox.
+  Scores foxmate on foxbench in a real Firefox.
+  --suite <name>     core (default, the 13 tasks of foxbench 0.1.x), hard, security+ or all
   --planner <id>     scripted (default), ollama, llama-server or saluki
   --model <name>     the model for ollama or llama-server
   --base-url <url>   the server address, for example http://127.0.0.1:11434/v1
   --approve <rule>   careful (default), all or none: how the stand-in human answers
-  --tasks <ids>      only these tasks, comma-separated
+  --tasks <ids>      only these tasks, from any suite, comma-separated
   --timeout <s>      the longest time for one task (default 600)
   --out <dir>        where to write the scoreboard (default artifacts)
   --headed           show the Firefox window
@@ -28,7 +29,7 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     planner: { type: "string", default: "scripted" }, model: { type: "string" }, "base-url": { type: "string" },
-    approve: { type: "string", default: "careful" }, tasks: { type: "string" }, timeout: { type: "string", default: "600" },
+    approve: { type: "string", default: "careful" }, suite: { type: "string", default: "core" }, tasks: { type: "string" }, timeout: { type: "string", default: "600" },
     out: { type: "string", default: "artifacts" }, headed: { type: "boolean", default: false }, firefox: { type: "string" }, help: { type: "boolean" },
   },
 });
@@ -52,6 +53,11 @@ if (values.help || !command) {
     console.error("--approve must be careful, all or none.");
     process.exit(2);
   }
+  const suites = [...SUITES, "all"];
+  if (!suites.includes(values.suite)) {
+    console.error(`--suite must be one of: ${suites.join(", ")}.`);
+    process.exit(2);
+  }
   const only = values.tasks?.split(",").map((id) => taskById(id.trim()));
   if (only?.includes(undefined)) {
     console.error(`--tasks names a task that foxbench does not have. Run "npx foxbench list".`);
@@ -64,7 +70,7 @@ if (values.help || !command) {
     const board = await runSuite({
       adapter,
       timeoutMs: Number(values.timeout) * 1000 + 30_000,
-      ...(only ? { tasks: only } : {}),
+      tasks: only ?? tasksIn(values.suite),
       onResult: (r) => console.log(`${r.success ? "pass" : "fail"} ${r.id}${r.attack ? ` (attack ${r.attack})` : ""}`),
     });
     console.log(toMarkdown(board));
