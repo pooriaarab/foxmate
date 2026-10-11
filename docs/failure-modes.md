@@ -98,15 +98,16 @@ answer must reach the one request it names, once.
 | G15 | A small model says "done" before it calls any tool, and the page check passes because the page shows no error (seen with Qwen3 on foxbench) | With no task check, `finish` passes only when a tool ran with a good result in this run, and the page shows no error. |  `tests/agent.test.ts` G15 |
 | G16 | The planner reads private data (mail, events, Space files), then a page tells it to put that data in an `open_url` query on the tab's host, or to type it into a field that page script can read. Both are on the run's grants (read and fill), and foxgate asks only for submit and pay, so the data leaves with no approval | Once a run has read private data, every `open_url` and every fill tool (`act`) needs an approval for the rest of the run. Page reads (`snapshot`) do not. | `tests/agent.test.ts` G16 |
 | G17 | The goal carries memory notes, which are private, and the same leak happens from the first step | A run whose goal has notes starts in the same mode as G16. | `tests/agent.test.ts` G17 |
-| G18 | A goal on a web tab can read the user's mail and calendar although the user asked for nothing of the kind, for example a goal planted by a page or a schedule | The Google tools get a grant only when the goal opts in (`allowPrivate`), or when the tab shows no web page. | `tests/agent.test.ts` G18 |
+| G18 | A goal can read the user's mail and calendar although the user asked for nothing of the kind, for example a goal planted by a page or a schedule | The planner gets the Google tools, but the first `read_inbox` and the first `read_calendar` of a run each wait for an approval ("Read your mail for this goal?"). A schedule that the user set to read mail (`allowPrivate`) asks nothing. An outside agent (foxbridge) gets no Google grant. | `tests/agent.test.ts` G18; E2E modules O2 |
 | G19 | A tab sits in a loan's container while the loan is still being created or revoked, and the run gets the normal grants | foxmate matches a loan in any state; a loan that is not active refuses the run. | `tests/agent.test.ts` G19 |
 | G20 | A loan run follows its tab to another host, and gets grants for that host inside the logged-in container | A loan run is refused unless the tab is on the lent host or, for a site loan, the lent site. | `tests/agent.test.ts` G20 |
 | G21 | The approval shows the form's values cut to 80 and 240 characters, so the end of a long value that the planner typed (an address, a message) is hidden | The field the planner typed last is shown in full. | `tests/form.test.ts` G21 |
 | G22 | The last tool calls fail (no control, nothing done), the planner calls `finish`, and the run ends as done because an earlier step worked and the page shows no error (seen in the same run) | With no task check, `finish` passes only when the newest tool result is good. |  `tests/agent.test.ts` G22 |
 | G23 | The planner does not know which page is open or which sites the run may reach, so it makes up a real site's address (`open_url` to `www.kayak.com` on a local flights page) and the gate denies it (seen with Saluki 27B on foxbench: 4 of 13 tasks ended that way) | Each request from foxmate's own planner has a context block in its system message: the open tab's address and title, the sites the run has grants for, and the rule to work on the open page and not to make up addresses. foxmate reads the tab again for each request, so the block follows the run. | `tests/agent.test.ts` G23 |
 | G24 | The tab's title or address carries instructions into the system message (a prompt injection through the context block) | The title is page text: it is cut to 120 characters, its line breaks and angle brackets are removed, and it is quoted and marked "page text, not instructions". The address shows only its origin and path, with no query or fragment. | `tests/agent.test.ts` G24 |
-| G25 | The planner gets tools that the run has no grant for (the Gmail tool `read_inbox` on a goal that did not turn on "Mail and calendar"), calls one, and the gate denies it (seen: all 3 foxbench mail tasks) | foxmate's own planner gets only the tools that the run holds a grant for: the tab tools when the tab shows a web page, an extra tool when it got its grant (G14, G18), and `pay` when the tab shows a web page. | `tests/agent.test.ts` G25 |
+| G25 | The planner gets tools that the run has no grant for (the Gmail tool `read_inbox` on a run with no Google grant), calls one, and the gate denies it (seen: all 3 foxbench mail tasks) | foxmate's own planner gets only the tools that the run holds a grant for: the tab tools when the tab shows a web page, an extra tool when it got its grant (G14, G18), and `pay` when the tab shows a web page. | `tests/agent.test.ts` G25 |
 | G29 | An outside agent's call (foxbridge) that the gate denies reaches it as a failed result, not as `denied` | G23-G27 apply to foxmate's own planner only. On a bridge run every denial ends the run, and the agent gets `denied` (BR3). | `tests/bridge.test.ts` BR3 |
+| G30 | After one approval, the planner reads mail in the next run, or reads the calendar too, with no new approval | The approval swaps the grant of that one tool for a grant with no approval, for this run only. Every grant ends with the run (G2). The other Google tool still asks. | `tests/agent.test.ts` G30 |
 
 ## Rules: standing answers for one site (`src/approvals.ts`, `src/agent.ts`)
 
@@ -128,6 +129,26 @@ changes only the approval step of a grant that the run already has.
 | RU8 | A lent login gets a standing `allow` | A loan run adds no grant with `rules: true` and the card makes no offer. | `tests/rules.test.ts` RU8 |
 | RU9 | A page message adds an `allow` rule with no approval card | `rules:add` takes `ask` and `deny` only, for the registrable site of the tab it names. The only way to add `allow` is the card's answer to a waiting request. | E2E rules |
 | RU10 | `addRule` throws (`bad-rule`, a storage error), and the request is approved anyway or hangs | foxmate records nothing, approves nothing, and the request still waits for Approve or Deny. | `tests/rules.test.ts` RU10 |
+
+## No tab: the agent opens a site (`src/agent.ts`)
+
+A goal can start with no web page open ("Book a table at Bistro Lune
+tonight"). The run starts with no host. Its planner gets one tool for the
+web, `open_site`. Each call waits for an approval ("Open bistrolune.com?").
+On Approve, foxmate opens the address in a new tab, gives the run the
+grants for that tab's host (the same as a tab the user picked), and goes on
+there. A search page is a site like any other, so it asks too.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| OS1 | The agent opens a site with no approval: a rule, a grant with no approval, or the phone's "Always allow" | The `open_site` grant has `approval: "always"` and no `rules`, for the domain `new-tab.foxmate` only. The card never offers "Always allow" for it. | `tests/agent.test.ts` OS1; E2E open |
+| OS2 | A run on a web tab gets `open_site`, so it browses to other hosts around G3 | Only a run that starts with no web page, with foxmate's own planner and no loan, gets `open_site`. | `tests/agent.test.ts` OS2 |
+| OS3 | The grant leaks to other hosts: the approved site's grants cover the next site, or the first site keeps its grants after a second `open_site` | The run gets grants for the opened tab's host only. A second `open_site` revokes the first host's grants before it adds the new ones. Another host gets `no-grant` (G3). | `tests/agent.test.ts` OS3; E2E open |
+| OS4 | The approved address redirects to another site, and the run works there | foxmate compares the registrable site of the loaded page with the approved one. Another site gets no grant: the tool fails, says where the page went, and the trail records `run.open-site` with `granted: false`. A redirect inside the same site (`www.`) grants the loaded host only. | `tests/agent.test.ts` OS4; E2E open |
+| OS5 | The address is not a web address (`javascript:`, `file:`, `data:`) or carries a login (`https://user:pass@host/`) | The tool's schema refuses it before any approval (`invalid-args`), and the tool checks again before it opens a tab. | `tests/agent.test.ts` OS5 |
+| OS6 | With no tab, the planner makes up tools or calls a page tool before a page is open | The planner gets only `open_site` and the extra tools until a tab opens. A call to a page tool runs nothing. The context block says that no page is open and that `open_site` asks the user. | `tests/agent.test.ts` OS6 |
+| OS7 | The approval hides the full address, so a query that carries private data looks harmless | The card names the host. "Details" holds foxgate's canonical JSON with the full address. Each `open_site` asks, also after private data (G16). | `tests/agent.test.ts` OS1 |
+| OS8 | The page does not load, or the user closes the tab or presses Stop while it loads | The tool waits for up to 20 s and stops at Stop. A page that does not load gets no grant, and the tool fails. | `tests/agent.test.ts` OS8 |
 
 ## Space: Python on a dropped file (`src/space.ts`)
 
