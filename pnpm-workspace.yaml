@@ -5,27 +5,9 @@ allowBuilds:
   # transformers.js pulls these in. The browser build does not need their scripts.
   onnxruntime-node: false
   protobufjs: false
+# Fox packages younger than pnpm's one-day minimum release age.
 minimumReleaseAgeExclude:
-  - create-foxkit@0.1.0
-  - foxgate@0.1.0
-  - foxloop@0.1.0
-  - foxmind@0.1.0 || 0.1.2
-  - foxpaw@0.1.0
-  - foxmemory@0.1.0
-  - foxshield@0.1.0
-  - foxtrail@0.1.0
-  - foxbench@0.1.0
-  - foxvault@0.1.0
-  - foxlend@0.1.0
-  - foxrunner@0.1.0
-  - '@pooriaarab/foxden@0.1.0'
-  - foxsync@0.1.0
-  - '@pooriaarab/foxlink@0.1.0'
-  - foxlens@0.1.0
-  - foxden-sandbox@0.1.0
-  - foxlink-oauth@0.1.0
-  - foxpay-agent@0.1.2
-  - foxbridge@0.1.2
-  - foxpass@0.1.0
+  - foxgate@0.1.3
   - foxnotify@0.1.0
+  - foxpass@0.1.0
   - foxvoice@0.1.0
