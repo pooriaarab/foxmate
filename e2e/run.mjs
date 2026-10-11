@@ -22,12 +22,13 @@ import signup from "./checks/signup.mjs";
 import space from "./checks/space.mjs";
 import tasks from "./checks/tasks.mjs";
 import traps from "./checks/traps.mjs";
+import vault from "./checks/vault.mjs";
 import voice from "./checks/voice.mjs";
 import { BANK_HOSTS } from "./bank.mjs";
 import { runGoal, startFox } from "./lib.mjs";
 
 // notify goes first: foxnotify allows 4 notices a minute, and the later checks send some too.
-const CHECKS = { notify, signup, pass, local, traps, memory, lend, space, phone, modules, activity, pay, bridge, voice, tasks, keepalive };
+const CHECKS = { notify, signup, pass, vault, local, traps, memory, lend, space, phone, modules, activity, pay, bridge, voice, tasks, keepalive };
 
 const record = { startedAt: new Date().toISOString(), checks: [], runs: {} };
 const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });
