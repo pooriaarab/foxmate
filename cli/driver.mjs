@@ -14,10 +14,16 @@ export const EXTENSION = join(dirname(dirname(fileURLToPath(import.meta.url))), 
  */
 export async function startFox({ extension = EXTENSION, headless = true, prefs, firefox, onboarding = false } = {}) {
   const fox = await launch({ extension, headless, ...(prefs ? { prefs } : {}), ...(firefox ? { firefox } : {}) });
-  const sidebar = await fox.openExtensionPage("app.html");
-  await poll(sidebar, () => Boolean(window.foxmate));
-  if (!onboarding) await sidebar.evaluate(() => browser.storage.local.set({ onboarding: { done: true } }));
-  return { fox, sidebar };
+  try {
+    const sidebar = await fox.openExtensionPage("app.html");
+    await poll(sidebar, () => Boolean(window.foxmate));
+    if (!onboarding) await sidebar.evaluate(() => browser.storage.local.set({ onboarding: { done: true } }));
+    return { fox, sidebar };
+  } catch (error) {
+    // A failed start must not leave Firefox and its temporary profile behind (DR1).
+    await fox.close().catch(() => undefined);
+    throw error;
+  }
 }
 
 export const setSettings = (sidebar, settings) => sidebar.evaluate((s) => browser.storage.local.set({ settings: s }), settings);
