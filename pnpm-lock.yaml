@@ -30,8 +30,8 @@ importers:
         specifier: npm:foxlink-oauth@^0.1.2
         version: foxlink-oauth@0.1.2
       foxloop:
-        specifier: ^0.1.6
-        version: 0.1.6
+        specifier: ^0.1.8
+        version: 0.1.8
       foxmemory:
         specifier: ^0.1.2
         version: 0.1.2
@@ -45,8 +45,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0
       foxpaw:
-        specifier: ^0.1.6
-        version: 0.1.6
+        specifier: ^0.1.7
+        version: 0.1.7
       foxpay-agent:
         specifier: ^0.1.2
         version: 0.1.2
@@ -1640,8 +1640,8 @@ packages:
     resolution: {integrity: sha512-V9sxhOEmk9ls4E65W208ILr5NJbl23pu1/r0vipCgNaAaZ6DzbXYd5SMoK607XaSKWDv1Gr8OR6pyjnejzU69Q==}
     engines: {node: '>=24'}
 
-  foxloop@0.1.6:
-    resolution: {integrity: sha512-O0O/EXPWqaDaPdrNzJTgTTATt4EpWmUr8D+xCdKkXpejfw8HphXZSBoFhYhuZAqbvOVBut3bmy5LXa1EAOvCDw==}
+  foxloop@0.1.8:
+    resolution: {integrity: sha512-34ZhCLrFz9/6aHRPBNUQYKBn0x+KsOCMq9hrExtSzw4P5MHVyKvTBvONFyAtAtCbkCelHU7wVI0TYOZE7ZpazQ==}
     engines: {node: '>=24'}
 
   foxmemory@0.1.2:
@@ -1682,8 +1682,8 @@ packages:
     resolution: {integrity: sha512-aW/UeTirWctpce45g31OJo3q9e3CDnNm/wrOpSvA2F6mJlDzDpCdWdNw4262G6q7w+F6CTiBMG70Keg8yj+c5g==}
     engines: {node: '>=24'}
 
-  foxpaw@0.1.6:
-    resolution: {integrity: sha512-dvcSQH4bBBA4qUhfyFJIH8SJNoUZ12xS7ooMepgu1ltiG+Bm2sW6fVYcd+X3QO/I1+xPVcy8v6aESX6aIcpe3w==}
+  foxpaw@0.1.7:
+    resolution: {integrity: sha512-1jsDvZmsoZJjr/PtfgIBE/mSpcWDcV2bOleH3vki9wM7tYJQydv6BC83VyBc/21BiG8MpkwpVFlK5aVBtEfHOA==}
     engines: {node: '>=24'}
 
   foxpay-agent@0.1.2:
@@ -4228,10 +4228,10 @@ snapshots:
       foxgate: 0.1.3
       foxvault: 0.1.2
 
-  foxloop@0.1.6:
+  foxloop@0.1.8:
     dependencies:
       foxgate: 0.1.3
-      foxpaw: 0.1.6
+      foxpaw: 0.1.7
 
   foxmemory@0.1.2: {}
 
@@ -4249,7 +4249,7 @@ snapshots:
 
   foxpass@0.1.0: {}
 
-  foxpaw@0.1.6: {}
+  foxpaw@0.1.7: {}
 
   foxpay-agent@0.1.2:
     dependencies:

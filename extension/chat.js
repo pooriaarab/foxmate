@@ -7,7 +7,7 @@
 // .row button[data-answer], and .end.
 import { logins, rules } from "./engine.js";
 import { runState, setRunState } from "./fox.js";
-import { details, plain } from "./plain.js";
+import { details, fieldsOf, plain, sendsTo } from "./plain.js";
 import { hostOf, targetTab } from "./target.js";
 
 const $ = (id) => document.getElementById(id);
@@ -138,12 +138,32 @@ export function approvalCard(event, { onAnswer, favIconUrl } = {}) {
   what.className = pay ? "text detail" : "text";
   what.textContent = lineOf(event);
   li.append(head, what);
+  // A form fill names where it sends, as a short second line; its fields sit behind Details (UI10).
+  const to = sendsTo(event.action);
+  if (to) {
+    const dest = document.createElement("p");
+    dest.className = "dest";
+    dest.textContent = to;
+    li.append(dest);
+  }
 
   const box = document.createElement("details");
   box.className = "raw";
   const summary = document.createElement("summary");
   summary.textContent = "Details";
   box.append(summary);
+  const fields = fieldsOf(event.action);
+  if (fields.length) {
+    const list = document.createElement("ul");
+    list.className = "fields";
+    list.setAttribute("aria-label", "Fields that get a value");
+    for (const field of fields) {
+      const item = document.createElement("li");
+      item.textContent = field;
+      list.append(item);
+    }
+    box.append(list);
+  }
   if (event.detail && !pay) {
     const detail = document.createElement("p");
     detail.className = "detail";

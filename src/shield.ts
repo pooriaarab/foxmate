@@ -73,6 +73,8 @@ export function shieldedPaw(options: ShieldOptions): PawLike {
     act: paw.act,
     settle: paw.settle,
     runTask: paw.runTask,
+    // A pure function of a snapshot that came through this shield: foxloop's browser_task preview (UI10).
+    preview: paw.preview,
     // Pure text formats: foxloop gives them only snapshots that came through this shield (S12).
     pageText: paw.pageText,
     changeText: paw.changeText,

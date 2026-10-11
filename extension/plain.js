@@ -59,3 +59,47 @@ export function details(text, caption) {
   box.append(pre);
   return box;
 }
+
+// A form fill's approval: foxloop's browser_task puts foxpaw's preview of
+// the form in action.args.form (foxloop G16, docs/failure-modes.md UI10, UI11).
+const MAX_PART = 60;
+const cut = (text) => {
+  const s = String(text ?? "").replace(/\s+/g, " ").trim();
+  return s.length > MAX_PART ? `${s.slice(0, MAX_PART - 1)}…` : s;
+};
+const formOf = (action) => (action?.tool === "browser_task" && action.args?.form && typeof action.args.form === "object" ? action.args.form : undefined);
+
+/** Where the form sends, as host and path: "shop.example/checkout/pay". Empty when it is not a web address. */
+function destinationOf(form) {
+  try {
+    const url = new URL(String(form.destination));
+    return /^https?:$/.test(url.protocol) ? `${url.host}${url.pathname}` : "";
+  } catch {
+    return "";
+  }
+}
+
+/** "Sends to shop.example/checkout/pay" for a form fill that sends; "" for anything else. */
+export function sendsTo(action) {
+  const form = formOf(action);
+  if (!form?.sends) return "";
+  const to = form.destination ? destinationOf(form) : "";
+  return to ? `Sends to ${to}` : "foxpaw found no destination, so nothing will be sent";
+}
+
+/** Each field that a form fill gives a value, as "Label: value". foxpaw masks sensitive values. */
+export function fieldsOf(action) {
+  const fields = formOf(action)?.fields;
+  return Array.isArray(fields) ? fields.map((f) => `${cut(f?.label)}: ${cut(f?.value)}`) : [];
+}
+
+/** The phone's title and detail: the exact action first, then the fields, then foxmate's words. */
+export function phoneApproval(event) {
+  const exact = event.exactText ?? JSON.stringify(event.action);
+  const to = sendsTo(event.action);
+  const fields = fieldsOf(event.action);
+  return {
+    title: `foxmate asks: ${event.action.tool} on ${event.action.domain}${to ? `, ${to.charAt(0).toLowerCase()}${to.slice(1)}` : ""}`,
+    detail: [exact, fields.length ? `Fields: ${fields.join("; ")}` : "", event.detail ? `foxmate says: ${event.detail}` : ""].filter(Boolean).join("\n\n"),
+  };
+}
