@@ -33,7 +33,7 @@ async function load() {
 export const settings = {
   init() {
     $("nav").closest("body").querySelector('section[data-view="settings"]').addEventListener("change", (event) => {
-      if (!event.target.closest("#phone-panel, #lens-panel, #google-panel, #pay-panel, #notice-panel, #login-panel") && !event.target.id.startsWith("module-")) save();
+      if (!event.target.closest("#phone-panel, #lens-panel, #google-panel, #pay-panel, #notice-panel, #login-panel, #rules-panel") && !event.target.id.startsWith("module-")) save();
     });
     browser.storage.onChanged.addListener((changes, area) => {
       if (area === "local" && changes.settings) load();

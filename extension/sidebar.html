@@ -148,6 +148,15 @@
         <p id="login-status" class="muted" role="status"></p>
         <ul id="login-list" class="memories"></ul>
       </div>
+      <h2>Rules (foxgate)</h2>
+      <div id="rules-panel">
+        <p class="hint">A rule is a standing answer for one site. "Always allow" on an approval card skips that step next time, but never after the goal read private data, never for a payment or a saved-login fill, and never on a lent login. "Always ask" and "Never allow" make foxmate stricter.</p>
+        <label for="rule-scope">For the site of the current tab</label>
+        <select id="rule-scope"><option value="submit">Clicks that send or buy (submit)</option><option value="read">Page reads (read)</option></select>
+        <div class="row"><button id="rule-ask" type="button">Always ask</button><button id="rule-deny" type="button">Never allow</button></div>
+        <p id="rules-status" class="muted" role="status"></p>
+        <ul id="rules-list" class="memories"></ul>
+      </div>
       <h2>Notices (foxnotify)</h2>
       <div id="notice-panel">
         <p class="hint">When a goal needs you, ends, or a schedule runs late, and no sidebar is in view, foxmate shows a notice on this computer. A click opens the tab or the approval. It never approves.</p>
