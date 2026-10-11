@@ -91,6 +91,11 @@ export interface AgentOptions {
   pay?: PayOptions;
   /** The sign-in handoff: a wall makes each page read wait for the user (HP1-HP9). */
   pass?: Pass;
+  /**
+   * Runs on each message to the planner before it goes out, for example the
+   * login vault's redact, so a saved password shows its handle (LV1).
+   */
+  redact?: (text: string) => Promise<string>;
   maxSteps?: number;
   /** The time budget of a run, and the life of its grants. Default 10 minutes. */
   runMs?: number;
@@ -257,7 +262,11 @@ export function createAgent(options: AgentOptions): Agent {
       }
       const granted = extra.filter((e) => scopes.includes(e.tool.scope) && (!e.optIn || input.allowPrivate || !domain));
       for (const { tool, domain: own } of granted) grants.push((await host.addGrant({ scope: tool.scope, domains: [own], tools: [tool.name], expiresAt })).id);
-      const loop = createLoop({ mind: brain.mind, gate, tools, trail, check, maxSteps: options.maxSteps ?? 20, budget: { ms: runMs }, onApproval: (request) => approvals.ask(request) });
+      const redact = options.redact;
+      const plannerMind: MindLike = redact
+        ? { chat: async (messages, chatOptions) => brain.mind.chat(JSON.parse(await redact(JSON.stringify(messages))) as typeof messages, chatOptions) }
+        : brain.mind;
+      const loop = createLoop({ mind: plannerMind, gate, tools, trail, check, maxSteps: options.maxSteps ?? 20, budget: { ms: runMs }, onApproval: (request) => approvals.ask(request) });
       let end: RunEnd = { status: "aborted" };
       worked = 0;
       lastOk = false;
