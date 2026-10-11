@@ -1,6 +1,7 @@
 // The Chat view: a goal box, and each run as a conversation. A run shows
 // the planner's steps, each tool call and gate decision, inline approvals
 // with the exact action, the results and the final check.
+import { logins, rules } from "./engine.js";
 import { targetTab } from "./target.js";
 
 const $ = (id) => document.getElementById(id);
@@ -40,7 +41,8 @@ function approval(event) {
     button.textContent = label;
     button.dataset.answer = answer;
     button.addEventListener("click", () => {
-      port.postMessage({ op: "answer", requestId: event.requestId, answer });
+      if (answer === "always-allow") rules.approveAlways(port, event);
+      else port.postMessage({ op: "answer", requestId: event.requestId, answer });
       if (answer === "always-allow") {
         // The rule may fail; the buttons come back then (ruleFailed).
         for (const b of row.querySelectorAll("button")) b.disabled = true;
@@ -66,7 +68,7 @@ function handoff(event) {
   button.textContent = "Fill saved login";
   button.addEventListener("click", () => {
     button.disabled = true;
-    port.postMessage({ op: "fill-login" });
+    logins.fill(port);
   });
   row.append(button);
   li.append(row);

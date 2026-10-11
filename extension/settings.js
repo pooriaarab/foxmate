@@ -1,9 +1,13 @@
-// The Settings view: the planner. Every planner runs on this computer or in
-// Firefox.
+// Settings: the planner. Every planner runs on this computer or in
+// Firefox. Approval rules and saved logins live in safety.js.
 import { PLANNERS } from "../src/planners.ts";
+import { safety } from "./safety.js";
 
 const $ = (id) => document.getElementById(id);
 const DEFAULT_SCRIPT = JSON.stringify([{ tool: "snapshot", args: {} }, { tool: "finish", args: { summary: "I read the page." } }], null, 1);
+// These fields belong to other modules, which save them on their own.
+const OTHERS = "#phone-panel, #lens-panel, #google-panel, #pay-panel, #notice-panel, #login-form";
+const OWN = new Set(["planner", "model", "base-url", "script"]);
 let current = {};
 
 function render() {
@@ -32,13 +36,16 @@ async function load() {
 
 export const settings = {
   init() {
-    $("nav").closest("body").querySelector('section[data-view="settings"]').addEventListener("change", (event) => {
-      if (!event.target.closest("#phone-panel, #lens-panel, #google-panel, #pay-panel, #notice-panel, #login-panel, #rules-panel") && !event.target.id.startsWith("module-")) save();
+    document.querySelector('section[data-view="settings"]').addEventListener("change", (event) => {
+      if (OWN.has(event.target.id) && !event.target.closest(OTHERS)) save();
     });
     browser.storage.onChanged.addListener((changes, area) => {
       if (area === "local" && changes.settings) load();
     });
     load();
   },
-  shown: load,
+  shown() {
+    void load();
+    void safety.load();
+  },
 };
