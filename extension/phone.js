@@ -1,5 +1,5 @@
 // Phone approvals (foxsync), off by default. The desktop end of the link
-// lives in this sidebar: WebRTC in the background page would die when the
+// lives in this page: WebRTC in the background page would die when the
 // page unloads. Each approval goes to the phone with the exact action, and
 // the first answer, from the phone or the sidebar, decides.
 import { askApproval, pairDesktop } from "foxsync";
@@ -59,7 +59,7 @@ export const phone = {
   },
   shown: render,
   message(message) {
-    // A sidebar that opens late gets the run's events at once; their approvals go to the phone too.
+    // A page that opens late gets the run's events at once; their approvals go to the phone too.
     for (const event of [...(message.events ?? []), ...(message.event ? [message.event] : [])]) ask(event);
   },
 };
