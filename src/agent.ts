@@ -124,6 +124,9 @@ export interface Agent {
 
 const SCOPES: Scope[] = ["read", "fill", "submit"];
 const noEvent = () => undefined;
+// The gate denials that go back to foxmate's own planner as a tool result:
+// a step outside the run's grants. Every other denial ends the run (G26, G28).
+const RETRY = new Set(["no-grant", "unknown-tool", "wrong-scope", "bad-action"]);
 /** The gate domain of `open_site`. Its one grant always asks a human (OS1). */
 export const OPEN_DOMAIN = "new-tab.foxmate";
 export const OPEN_TOOL = "open_site";
@@ -374,7 +377,8 @@ export function createAgent(options: AgentOptions): Agent {
       // open_site: one grant that always asks, and no rules (OS1).
       if (opens) grants.push((await host.addGrant({ scope: "read", domains: [OPEN_DOMAIN], tools: [OPEN_TOOL], approval: "always", expiresAt })).id);
       // foxmate's own planner gets the tab and the run's sites in its system message (G23), only the
-      // tools that hold a grant (G25). An outside agent over foxbridge keeps every tool (G29).
+      // tools that hold a grant (G25), and gate denials of a step outside the grants as a result (G26-G28).
+      // An outside agent over foxbridge keeps every tool and every denial as a stop (G29).
       // A run that may open a site holds the tab tools from the start, but the planner sees them
       // only once a tab is open (OS6).
       const pageTools = tabTools.filter((t) => scopes.includes(t.scope));
@@ -425,7 +429,10 @@ export function createAgent(options: AgentOptions): Agent {
         emit({ type: "opened", tabId: created.id, host: loaded });
         return { ok: true, summary: `Opened ${loaded} in a new tab. Read it with snapshot.` };
       };
-      const loop = createLoop({ mind: plannerMind, gate, tools: offered, trail, check, maxSteps: options.maxSteps ?? 20, budget: { ms: runMs }, onApproval: (request) => approvals.ask(request) });
+      const loop = createLoop({
+        mind: plannerMind, gate, tools: offered, trail, check, maxSteps: options.maxSteps ?? 20, budget: { ms: runMs }, onApproval: (request) => approvals.ask(request),
+        ...(own ? { denials: { retry: (reason: string) => RETRY.has(reason) } } : {}),
+      });
       let end: RunEnd = { status: "aborted" };
       worked = 0;
       lastOk = false;
