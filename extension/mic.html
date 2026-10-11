@@ -2,15 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>foxmate: set up the microphone</title>
     <link rel="stylesheet" href="app.css" />
   </head>
-  <body>
-    <h1>Set up the microphone</h1>
-    <p>foxmate uses the microphone only while you hold the talk button in Chat. Firefox asks once in this tab, and then the sidebar can use it.</p>
-    <p class="hint">The audio stays on this computer. Whisper turns it into text in Firefox.</p>
-    <div class="row"><button id="allow" type="button">Allow the microphone</button></div>
-    <p id="result" role="status"></p>
+  <body class="solo">
+    <main class="page">
+      <header class="page-head"><h1>Set up the microphone</h1><p>foxmate uses the microphone only while you hold the microphone button in Chat. Firefox asks once in this tab. Then foxmate can use it, also in the sidebar.</p></header>
+      <p class="hint">The audio stays on this computer. Whisper turns it into text in Firefox.</p>
+      <div class="row"><button id="allow" type="button" class="primary">Allow the microphone</button></div>
+      <p id="result" role="status"></p>
+    </main>
     <script type="module" src="mic.js"></script>
   </body>
 </html>
