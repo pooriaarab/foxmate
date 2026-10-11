@@ -1,8 +1,9 @@
 // The shield: a foxpaw wrapper for foxloop's browser tools. Each snapshot
 // runs foxshield's scanDocument in the tab, and the planner gets sanitize()
 // output in place of the raw page text. When the scan fails, the page text
-// is withheld (docs/failure-modes.md S1-S7). Last, foxpass's redaction takes
-// typed secrets out of the page and the quotes (HP5, HP6).
+// is withheld (docs/failure-modes.md S1-S7). runTask reads each page through
+// the same scan (S13). Last, foxpass's redaction takes typed secrets out of
+// the page the planner reads and out of the quotes (HP5, HP6, S14).
 import type { PawLike } from "foxloop";
 import * as foxpaw from "foxpaw";
 import type { Control, ScriptingApi, Snapshot } from "foxpaw";
@@ -66,60 +67,84 @@ async function scan(options: ShieldOptions, tabId: number): Promise<ScanReport> 
   return report;
 }
 
-/** foxpaw, with every snapshot's text passed through foxshield. */
+/** A page as the shield sees it, before foxpass's redaction, with what foxshield did. */
+interface ShieldRead { page: Snapshot; seen: ShieldScan }
+
+/**
+ * The shield-only read: wait for the load (S11), read, scan, drop the controls
+ * inside hidden elements (S5), and sanitize the text or withhold it (S3, S4, S10).
+ */
+async function shieldRead(options: ShieldOptions, paw: PawLike, tabId: number, browser?: ScriptingApi): Promise<ShieldRead> {
+  // A click on a link starts a navigation; reading before it ends sees the old page or an empty one (S11).
+  for (let waited = 0; options.browser.tabs && waited < LOAD_WAIT_MS; waited += 100) {
+    if ((await options.browser.tabs.get(tabId).catch(() => ({ status: "complete" }))).status === "complete") break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  const page = await paw.snapshot(tabId, browser);
+  let report: ScanReport;
+  try {
+    report = await scan(options, tabId);
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error);
+    return { page: { ...page, text: WITHHELD }, seen: { url: page.url, findings: 0, top: [], droppedControls: [], withheld: why } };
+  }
+  const threshold = options.threshold ?? 0.5;
+  // Ask the page which controls sit inside an element that foxshield found hidden. A word
+  // match is not enough: trap text often names real fields, such as "password".
+  const selectors = report.findings.filter((f) => HIDDEN.has(f.kind) && !f.selector.includes(">>>")).map((f) => f.selector);
+  let hiddenSet = new Set<number>();
+  if (selectors.length) {
+    try {
+      const results = await options.browser.scripting.executeScript({ target: { tabId, frameIds: [0] }, func: hiddenNodes, args: [selectors, page.controls.filter((c) => c.frameId === 0).map((c) => c.node)] });
+      const nodes = Array.isArray(results) ? (results[0] as { result?: unknown } | undefined)?.result : undefined;
+      if (!Array.isArray(nodes)) throw new Error("The page gave no answer.");
+      hiddenSet = new Set(nodes as number[]);
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error);
+      return { page: { ...page, text: WITHHELD }, seen: { url: page.url, findings: report.findings.length, top: [], droppedControls: [], withheld: why } };
+    }
+  }
+  const inHidden = (c: Control) => c.frameId === 0 && hiddenSet.has(c.node);
+  return {
+    page: { ...page, controls: page.controls.filter((c) => !inHidden(c)), text: cut(sanitize(report, { threshold }), MAX_TEXT) },
+    seen: {
+      url: page.url,
+      findings: report.findings.length,
+      top: report.findings.slice(0, 5).map((f) => ({ kind: f.kind, reason: f.reason, score: f.score, text: f.text })),
+      droppedControls: page.controls.filter(inHidden).map((c) => c.label),
+    },
+  };
+}
+
+/**
+ * foxpaw, with every page read passed through foxshield: each snapshot, and
+ * each read inside runTask (S13). Only the snapshot, which the planner reads,
+ * also gets foxpass's redaction; runTask needs the real field values (S14).
+ */
 export function shieldedPaw(options: ShieldOptions): PawLike {
   const paw = options.paw ?? foxpaw;
+  /** Redacts the page with foxpass. The quotes for the trail are always redacted. */
+  const redact = async (tabId: number, { page, seen }: ShieldRead): Promise<Snapshot> => {
+    const safe = redactPage(page, options.fieldHints?.(tabId) ?? [], seen.top.map((t) => t.text));
+    await options.onScan?.({ ...seen, top: seen.top.map((t, i) => ({ ...t, text: cut(safe.quotes[i] ?? "", 120) })) });
+    return { ...safe.page, text: cut(safe.page.text, MAX_TEXT) };
+  };
   return {
     act: paw.act,
     settle: paw.settle,
-    runTask: paw.runTask,
+    runTask: (tabId, goal, runOptions) => paw.runTask(tabId, goal, {
+      ...runOptions,
+      read: async (readTabId, browser) => {
+        const read = await shieldRead(options, paw, readTabId, browser);
+        await redact(readTabId, read);
+        return read.page;
+      },
+    }),
+    // A pure function of a snapshot that came through this shield: foxloop's browser_task preview (UI10).
+    preview: paw.preview,
     // Pure text formats: foxloop gives them only snapshots that came through this shield (S12).
     pageText: paw.pageText,
     changeText: paw.changeText,
-    async snapshot(tabId: number, browser?: ScriptingApi): Promise<Snapshot> {
-      const done = async (page: Snapshot, seen: ShieldScan): Promise<Snapshot> => {
-        const safe = redactPage(page, options.fieldHints?.(tabId) ?? [], seen.top.map((t) => t.text));
-        await options.onScan?.({ ...seen, top: seen.top.map((t, i) => ({ ...t, text: cut(safe.quotes[i] ?? "", 120) })) });
-        return { ...safe.page, text: cut(safe.page.text, MAX_TEXT) };
-      };
-      // A click on a link starts a navigation; reading before it ends sees the old page or an empty one (S11).
-      for (let waited = 0; options.browser.tabs && waited < LOAD_WAIT_MS; waited += 100) {
-        if ((await options.browser.tabs.get(tabId).catch(() => ({ status: "complete" }))).status === "complete") break;
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-      const page = await paw.snapshot(tabId, browser);
-      let report: ScanReport;
-      try {
-        report = await scan(options, tabId);
-      } catch (error) {
-        const why = error instanceof Error ? error.message : String(error);
-        return done({ ...page, text: WITHHELD }, { url: page.url, findings: 0, top: [], droppedControls: [], withheld: why });
-      }
-      const threshold = options.threshold ?? 0.5;
-      // Ask the page which controls sit inside an element that foxshield found hidden. A word
-      // match is not enough: trap text often names real fields, such as "password".
-      const selectors = report.findings.filter((f) => HIDDEN.has(f.kind) && !f.selector.includes(">>>")).map((f) => f.selector);
-      let hiddenSet = new Set<number>();
-      if (selectors.length) {
-        try {
-          const results = await options.browser.scripting.executeScript({ target: { tabId, frameIds: [0] }, func: hiddenNodes, args: [selectors, page.controls.filter((c) => c.frameId === 0).map((c) => c.node)] });
-          const nodes = Array.isArray(results) ? (results[0] as { result?: unknown } | undefined)?.result : undefined;
-          if (!Array.isArray(nodes)) throw new Error("The page gave no answer.");
-          hiddenSet = new Set(nodes as number[]);
-        } catch (error) {
-          const why = error instanceof Error ? error.message : String(error);
-          return done({ ...page, text: WITHHELD }, { url: page.url, findings: report.findings.length, top: [], droppedControls: [], withheld: why });
-        }
-      }
-      const inHidden = (c: Control) => c.frameId === 0 && hiddenSet.has(c.node);
-      const controls = page.controls.filter((c) => !inHidden(c));
-      const dropped = page.controls.filter(inHidden).map((c) => c.label);
-      return done({ ...page, controls, text: sanitize(report, { threshold }) }, {
-        url: page.url,
-        findings: report.findings.length,
-        top: report.findings.slice(0, 5).map((f) => ({ kind: f.kind, reason: f.reason, score: f.score, text: f.text })),
-        droppedControls: dropped,
-      });
-    },
+    snapshot: async (tabId: number, browser?: ScriptingApi): Promise<Snapshot> => redact(tabId, await shieldRead(options, paw, tabId, browser)),
   };
 }
