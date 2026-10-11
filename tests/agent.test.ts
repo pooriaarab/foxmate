@@ -3,8 +3,22 @@
 import { createMemory, memoryStore } from "foxmemory";
 import type { LoopTool } from "foxloop";
 import { Log, MemoryStore, generateKey } from "foxtrail";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createAgent, type AgentEvent, type RunInput } from "../src/agent.js";
+
+// G34: a stand-in fast helper on the scripted brain. `reply` undefined means no helper.
+const helper = vi.hoisted(() => ({ reply: undefined as string | undefined, seen: [] as string[] }));
+vi.mock("../src/brain.js", async (original) => {
+  const real = await original<typeof import("../src/brain.js")>();
+  return {
+    ...real,
+    createBrain: async (...args: Parameters<typeof real.createBrain>) => {
+      const brain = await real.createBrain(...args);
+      if (helper.reply === undefined) return brain;
+      return { ...brain, check: async (messages: unknown[]) => { helper.seen.push(JSON.stringify(messages)); return { text: helper.reply!, provider: "scout" }; } };
+    },
+  };
+});
 
 const TABS: Record<number, { url: string; cookieStoreId: string; title?: string; status?: string }> = {
   3: { url: "http://evil.test/page", cookieStoreId: "firefox-container-9" },
@@ -348,6 +362,30 @@ describe("agent", () => {
     expect(await no.run({ goal, script: [batch, finish] }, "deny")).toMatchObject({ status: "blocked", reason: "approval-denied" });
     expect(no.events.filter((e) => e.type === "approval-needed").length).toBe(1);
     expect(no.ran).toEqual([]);
+  });
+
+  it("G34: with a helper, a sure 'not done' fails the check; prose or no helper leaves the code check", async () => {
+    try {
+      helper.reply = '{"done": false, "sure": true, "why": "the form is still on the page"}';
+      const no = await setup();
+      const end = await no.run({ script: [{ tool: "fill", args: { text: "x" } }, finish, finish] });
+      expect(end).toMatchObject({ status: "blocked", reason: "check-failed" });
+      expect(end.message).toContain("the form is still on the page");
+      expect(helper.seen.at(-1)).toContain("Buy the mug");
+      expect(no.requests.some((r) => r.includes("the page shows that the goal is reached"))).toBe(true);
+      helper.reply = '{"done": true, "sure": true, "why": "sent"}';
+      expect(await (await setup()).run({ script: [{ tool: "fill", args: { text: "x" } }, finish] })).toMatchObject({ status: "done" });
+      helper.reply = '```json\n{"done": false, "sure": true, "why": "fenced"}\n```';
+      expect(await (await setup()).run({ script: [{ tool: "fill", args: { text: "x" } }, finish, finish] })).toMatchObject({ status: "blocked", reason: "check-failed" });
+      helper.reply = "It looks done.";
+      expect(await (await setup()).run({ script: [{ tool: "fill", args: { text: "x" } }, finish] })).toMatchObject({ status: "done" });
+      helper.seen = [];
+      helper.reply = '{"done": false, "sure": true, "why": "no"}';
+      expect(await (await setup()).run({ script: [{ tool: "click", args: { button: "Buy" } }, finish] })).toMatchObject({ status: "done" });
+      expect(helper.seen).toEqual([]);
+    } finally {
+      helper.reply = undefined;
+    }
   });
 
   it("G24: the title is cut, on one line, with no angle brackets; the address has no query or fragment", async () => {

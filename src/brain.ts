@@ -1,9 +1,10 @@
 // The brain: foxmate's settings in, a foxmind Mind out. foxmate uses only
 // models on this computer or in Firefox: foxmind's `only: ["browser",
 // "local"]` means a cloud provider is never probed or called
-// (docs/failure-modes.md B1-B12).
+// (docs/failure-modes.md B1-B17). A fast helper model, when one runs, takes
+// the done check (foxmind's `check` role); planning stays on the planner.
 import { createMind, llamaServer, ollama, saluki, type Mind, type Provider } from "foxmind";
-import type { MindLike } from "foxloop";
+import type { Message, MindLike } from "foxloop";
 import { PLANNERS, type PlannerId } from "./planners.js";
 import { ScriptError, scriptMind } from "./scripted.js";
 
@@ -15,7 +16,17 @@ export interface BrainSettings {
   /** The address of a model server on this computer. */
   baseURL?: string;
   script?: string;
+  /** The fast helper model for the done check. On by default at HELPER_URL; off when it does not answer (B15). */
+  helper?: { off?: boolean; baseURL?: string };
 }
+
+/** The fast helper's default address: Qwen3.5-4B on a second llama-server. */
+export const HELPER_URL = "http://127.0.0.1:8082/v1";
+const HELPER_PROBE_MS = 1500;
+// llama-server ignores a bare json_object for some models, and Qwen3.5-4B then fences its JSON.
+// A schema makes it write the verdict only (B18).
+const VERDICT = { type: "object", properties: { done: { type: "boolean" }, sure: { type: "boolean" }, why: { type: "string" } }, required: ["done", "sure", "why"] };
+const HELPER_WAIT_MS = 20_000;
 
 export interface BrainDeps {
   /** The goal, for the scripted planner. */
@@ -27,6 +38,11 @@ export interface BrainDeps {
 export interface Brain {
   mind: MindLike & { status?: Mind["status"] };
   planner: PlannerId;
+  /**
+   * The done check on the helper, escalated to the planner when unsure (B16, B17).
+   * Resolves undefined when the run has no helper (B15).
+   */
+  check?: (messages: Message[], signal?: AbortSignal) => Promise<{ text: string; provider: string } | undefined>;
 }
 
 export type BrainErrorCode = "not-local" | "unknown-planner" | "bad-script" | "no-browser-model";
@@ -68,11 +84,32 @@ export async function createBrain(settings: BrainSettings, deps: BrainDeps = {})
   }
   // foxmind decides the tier: a "-cloud" Ollama model or a server that is
   // not on this computer is "cloud", and `only` then leaves no provider.
+  const planner = await provider(id, settings, deps);
+  const helperURL = settings.helper?.baseURL?.trim() || HELPER_URL;
+  const scout = id !== "browser" && !settings.helper?.off
+    ? llamaServer({ name: "scout", baseURL: helperURL, body: { temperature: 0, chat_template_kwargs: { enable_thinking: false }, json_schema: VERDICT } })
+    : undefined;
+  if (scout && scout.tier !== "local") throw new BrainError("not-local", `The fast helper at ${helperURL} does not run on this computer. foxmate uses only models on this computer.`);
+  let mind: Mind;
   try {
-    return { mind: createMind({ providers: [await provider(id, settings, deps)], only: ["browser", "local"] }), planner: id };
+    mind = createMind({
+      providers: [planner, ...(scout ? [scout] : [])],
+      only: ["browser", "local"],
+      ...(scout ? { roles: { plan: { use: [planner.name] }, check: { use: [scout.name, planner.name], escalate: "unsure", timeoutMs: HELPER_WAIT_MS } } } : {}),
+    });
   } catch (error) {
-    if (!(error instanceof TypeError) || !/leaves no provider/.test(error.message)) throw error;
+    if (!(error instanceof TypeError) || !/leaves no provider|cannot cross only/.test(error.message)) throw error;
     const model = settings.model ? `"${settings.model}"` : "This model";
     throw new BrainError("not-local", `${model} at ${settings.baseURL || info.baseURL} does not run on this computer. foxmate uses only models on this computer.`);
   }
+  if (!scout) return { mind, planner: id };
+  // One look at the helper per run, at the first check (B15).
+  let up: Promise<boolean> | undefined;
+  const check = async (messages: Message[], signal?: AbortSignal) => {
+    up ??= scout.probe({ timeoutMs: HELPER_PROBE_MS }).then((p) => p.ok, () => false);
+    if (!(await up)) return undefined;
+    const answer = await mind.chat(messages, { role: "check", maxTokens: 200, ...(signal ? { signal } : {}) });
+    return { text: answer.message.content ?? "", provider: answer.provider };
+  };
+  return { mind, planner: id, check };
 }

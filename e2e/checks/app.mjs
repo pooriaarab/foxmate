@@ -21,6 +21,13 @@ export default async function appCheck({ session, check }) {
   const seen = [await step()];
   await next("welcome");
   seen.push(await step());
+  // UI9: the fast helper row is optional and shows its start command.
+  const helper = await sidebar.evaluate(async () => {
+    const row = document.querySelector('#onboarding [data-server="helper"]');
+    for (let i = 0; i < 50 && row.querySelector(".server-status").textContent === "Looking…"; i++) await new Promise((r) => setTimeout(r, 100));
+    return { optional: row.querySelector("strong").textContent.includes("optional"), command: row.querySelector("code").textContent.includes("--port 8082"), status: /^(Not running \(optional\)|Connected)/.test(row.querySelector(".server-status").textContent) };
+  });
+  check("UI9 the onboarding shows the fast helper as optional, with its start command", { optional: true, command: true, status: true }, helper);
   await next("model", true);
   seen.push(await step());
   await saveShot(sidebar, "onboarding-approvals");
