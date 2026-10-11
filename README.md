@@ -367,13 +367,16 @@ vision check runs too. Some of them:
 
 ## Scores on foxbench
 
-`foxmate bench` on 2026-10-09, macOS, Firefox 157.0.1, headless. The
-Markdown scoreboards are in [`artifacts/`](artifacts). foxpilot's row is from the
-[foxbench README](https://github.com/pooriaarab/foxbench).
+`foxmate bench` on macOS, headless: the scripted and Ollama rows on
+2026-10-09 with Firefox 157.0.1, the Saluki 27B rows on 2026-10-10 and
+2026-10-11. The Markdown scoreboards are in [`artifacts/`](artifacts).
+foxpilot's row is from the [foxbench README](https://github.com/pooriaarab/foxbench).
 
 | Agent | Success rate | Median time per task | Attacks blocked | Secure trap passes |
 |---|---|---|---|---|
 | foxmate, scripted planner, careful approvals | 92% (12/13) | 12.0 s | 4/4 | 3/4 |
+| foxmate, Saluki 27B on llama-server, careful approvals | 77% (10/13) | 195.1 s | 4/4 | 4/4 |
+| foxmate, Saluki 27B, careful approvals, before the planner fixes | 46% (6/13) | 23.8 s | 4/4 | 2/4 |
 | foxmate, scripted planner, approves everything | 92% (12/13) | 11.8 s | 3/4 | 3/4 |
 | foxmate, Ollama `qwen3-vl:2b-instruct`, careful approvals | 8% (1/13) | 11.1 s | 4/4 | 0/4 |
 | foxmate, Ollama `qwen3:0.6b`, careful approvals | 0% (0/13) | 9.5 s | 4/4 | 0/4 |
@@ -397,7 +400,18 @@ Read these rows with care:
 - "Attacks blocked" counts trap tasks where the attack did not happen. An
   agent that does nothing blocks every attack, so also read "Secure trap
   passes".
-- We did not run Saluki 27B on foxbench.
+- Saluki 27B (Underdog-Saluki-27B-1.0-IQ2-mix on llama-server) is the
+  first model that plans many of the tasks. The first run scored 6/13: it
+  made up real site addresses, called Gmail tools that the run had no
+  grant for, and the first gate denial ended each run. The planner now gets
+  the open tab and only the tools it holds a grant for, and a gate denial
+  goes back to it as the step's result (G23-G28). The second run scored
+  10/13 and passed all 4 traps securely. It still failed `flights-oneway`,
+  `flights-cheapest` and `signup-pro`.
+- Saluki's median time went from 23.8 s to 195.1 s per task. Part of that
+  is real: runs no longer stop at the first denial, so they take more
+  steps. Part is not: other agents used the same GPU and Firefox during
+  the second run, so read its times as an upper bound.
 
 ## Firefox APIs used
 
@@ -437,8 +451,9 @@ Read these rows with care:
 - Small local models fail most tasks. In our runs, Qwen3 0.6B finished none
   and Qwen3-VL 2B one of 13. The scripted planner's high score comes from
   steps a person wrote.
-- Saluki 27B is the default private planner, but we did not run it here. Its
-  tool-calling results are the vendor's own tests.
+- Saluki 27B is the default private planner. It scored 10/13 on foxbench
+  (see [Scores on foxbench](#scores-on-foxbench)), on one run with a busy
+  GPU. Small local models fail most tasks.
 - When the newest result carries no task check, foxmate passes `finish` if
   the newest step worked and the page shows no error. A model can still say
   "done" after a page read, with the task not done; the small models did.
