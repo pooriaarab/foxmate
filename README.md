@@ -74,7 +74,7 @@ try {
 | A data person | Work on a CSV without an upload site | Drop the file in the Space. The planner's Python runs in a sandbox page with no network. |
 | A person who pays small bills online | Pay a bill or a paid API with test USDC, within a budget | foxpay reads the real amount from the `402` answer. foxgate refuses a payment over your cap, and you approve each payment with its exact amount, payee and site. |
 | A developer who uses Claude Code | Let Claude Code check a page in the browser where they are logged in | Share one tab from Chat. Each call from Claude Code is a foxmate run: foxshield strips hidden text, and each click waits for your Approve. |
-| A person whose bank asks for a password and a code | Let the agent read the balance after they sign in | foxpass names the sign-in step, and the run waits. You sign in on the tab, and the agent goes on. The planner never gets what you typed. |
+| A person whose bank asks for a password and a code | Let the agent read the balance after they sign in | foxpass names the sign-in step, and the run waits. You sign in on the tab, or click "Fill saved login" and approve the fill of a password saved in foxvault. The planner never gets the password. |
 | A person who leaves a goal running in another window | Learn when the agent needs them, without watching the sidebar | foxnotify shows a notice when a run needs an approval or a sign-in, ends, or a schedule runs late. A click opens the approval; you still press Approve. Quiet hours hold the rest until morning. |
 | A home-lab owner | Get the notices on their phone through their own ntfy server | The optional webhook sends the kind of notice and a fixed sentence. Settings shows the exact request first. The goal goes out only after Firefox's consent. |
 | A person who would rather speak than type | Say "book a table for four at Bistro Lune" | Hold the talk button in Chat. Whisper turns the speech into the goal in Firefox, you fix a word if needed, and you press Run. "Speak the result" reads the end aloud. |
@@ -107,6 +107,7 @@ flowchart TB
     tools -.-> pay[foxpay: x402 payments, cap 0 = off]
     lend[foxlend: lent login in a container] --> gate
     vault[foxvault: tokens and the wallet] -.-> link
+    logins[foxvault: saved logins] -.->|fill after your Approve| pass
     vault -.-> pay
   end
   brain --> local[(llama-server, Ollama, or a model in Firefox)]
@@ -139,7 +140,10 @@ One goal, step by step:
 7. Before each page read, foxpass scans the tab. On a sign-in, code,
    passkey, CAPTCHA or consent step, the run waits. Chat says "Sign in on
    this tab, then the agent goes on." It goes on when foxpass sees that you
-   signed in. Stop ends the wait.
+   signed in. Stop ends the wait. With a saved login for the host, Chat
+   also shows "Fill saved login": foxpass's `fillWall` fills the password
+   into the sign-in field after you approve, and you press the sign-in
+   button.
 8. Each page read passes foxshield. Hidden text, and the controls inside it,
    never reach the planner; visible instructions arrive marked as data.
    Then foxpass's redaction replaces a password or code value, and each
@@ -182,7 +186,7 @@ sequenceDiagram
 | Space | Files for the planner's Python. Network: off. |
 | Memory | Read, add, edit, pin and delete what foxmate remembers. |
 | Activity | The foxtrail log, whether it verifies, and an export. |
-| Settings | The planner, the optional modules, the notices (quiet hours and a webhook), and the payment cap, payees and wallet. |
+| Settings | The planner, saved logins (site, username, password), the optional modules, the notices (quiet hours and a webhook), and the payment cap, payees and wallet. |
 
 ## Privacy
 
@@ -232,10 +236,18 @@ This section says exactly what leaves your computer.
   arguments and short quotes of what foxshield flagged. It does not hold whole
   pages. The URLs of requests that foxlend blocked are kept without their
   query.
-- **Sign-in steps.** You type a password or a code in the page, not in
-  foxmate. foxpass's scan reads no field values. The planner reads the
+- **Sign-in steps.** You type a password or a code in the page, or you fill
+  a saved login. foxpass's scan reads no field values. The planner reads the
   page after you sign in, and any secret value left in it shows
   `[redacted]`.
+- **Saved logins.** A login vault (foxvault, with its own key) keeps each
+  password encrypted in this Firefox profile, for one host. At a sign-in
+  wait on that host, Chat shows "Fill saved login". The fill waits for your
+  Approve, which shows foxgate's exact action: the host, the field and the
+  handle. foxvault writes the password into the top document only, and into
+  a plain `http:` page only on this computer. Every message to the planner
+  and every log entry passes the vault's `redact`, so a copy of a password
+  shows its handle. The log records each release by handle and host.
 - foxmate has no server and sends nothing to its authors.
 
 ## API
@@ -277,12 +289,13 @@ the goal does not name, `all` approves everything, `none` denies everything.
 
 | Export | What it does |
 |---|---|
-| `createAgent({ browser, trail, memory?, publicSuffix?, extraTools?, moreTabTools?, pay?, maxSteps?, runMs? })` | The agent. `run({ goal, tabId, settings, loan?, runKey?, mind?, signal?, onEvent? })` runs one goal and resolves with `{ status, summary?, reason?, message? }`. It also returns `gate`, `host` and `approvals`. |
+| `createAgent({ browser, trail, memory?, publicSuffix?, extraTools?, moreTabTools?, pay?, redact?, maxSteps?, runMs? })` | The agent. `run({ goal, tabId, settings, loan?, runKey?, mind?, signal?, onEvent? })` runs one goal and resolves with `{ status, summary?, reason?, message? }`. It also returns `gate`, `host` and `approvals`. |
 | `createBrain(settings, { goal?, browserModel? })` | The planner for the settings. Throws `BrainError` (`not-local`, `unknown-planner`, `bad-script`, `no-browser-model`) before any network call. |
 | `PLANNERS` | The planner choices. Each one runs on this computer or in Firefox. |
 | `createApprovals({ host, trail? })` | One approval broker for the sidebar and the phone. The first answer decides. |
 | `shieldedPaw({ browser, paw?, threshold?, onScan?, fieldHints? })` | foxpaw with each snapshot passed through foxshield, then foxpass's redaction. |
-| `createPass({ browser, trail, timeoutMs?, onNeedsUser? })`, `redactPage(page, hints, quotes?)` | The sign-in handoff that `createAgent({ pass })` runs before each page read, and the redaction of a foxpaw snapshot. |
+| `createPass({ browser, trail, timeoutMs?, onNeedsUser?, logins? })`, `redactPage(page, hints, quotes?)` | The sign-in handoff that `createAgent({ pass })` runs before each page read, and the redaction of a foxpaw snapshot. `fillSaved()` fills a saved login into the tab that waits. |
+| `createLogins({ vault, host, store, browser, trail })`, `loginGate()`, `frameBrowser(browser)` | Saved logins: `save`, `list`, `remove`, `fill` (after an approval from the sidebar) and `redact`. `loginGate()` is the fill's own foxgate. `frameBrowser` stands in for `webNavigation`. |
 | `recallNotes(memory, goal)`, `withNotes(goal, notes)` | The user's memories that fit a goal, as notes under it. |
 | `formDetail(snapshot, controlId)` | What a form holds, for the approval of its send button. |
 | `spaceTool(den)`, `lookTool(tabId, deps)`, `googleTools(deps)` | The Space, screenshot and Google tools. |
@@ -292,14 +305,14 @@ the goal does not name, `all` approves everything, `none` denies everything.
 
 ## Tests
 
-`pnpm ci:local` runs lint, typecheck, 80 isolated tests, the build and
+`pnpm ci:local` runs lint, typecheck, 88 isolated tests, the build and
 `web-ext lint`. Each isolated test covers a failure mode in
 [docs/failure-modes.md](docs/failure-modes.md), written before the code.
 
 `pnpm e2e` runs foxmate in a real Firefox through the real sidebar and
 writes `artifacts/e2e-<date>.json`. The planner is the scripted one, so
 each run is the same. Our run on 2026-10-10 (Firefox 157.0.1, Apple M3 Pro,
-headless, without `FOXMATE_VISION`) passed all 93 checks. With
+headless, without `FOXMATE_VISION`) passed all 100 checks. With
 `FOXMATE_VISION` set to an Ollama address that allows extension origins, the
 vision check runs too. Some of them:
 
@@ -307,6 +320,7 @@ vision check runs too. Some of them:
 |---|---|
 | foxbench `signup-pro` through the sidebar | foxbench's oracle passes; one approval, for "Create account"; the trail verifies |
 | A local bank asks for a password, then a code; the test types them as the user | The run waits, Chat says what to do, the run goes on and finishes; the planner's requests, the log, memory and the sidebar hold neither secret; Stop ends a wait |
+| The same bank, with its login saved in Settings; the test clicks "Fill saved login" | One approval, foxgate's `foxvault.fill` on the bank's host and `#password`; the page gets the password and the username; the planner's requests, the log, its export, storage and the sidebar hold no password; the log has the release by handle and host |
 | An approval waits after the test closes the sidebar | Firefox shows "Approval needed"; a click on it opens the approval in a tab, where it still waits; the stand-in webhook gets no goal until the box and Firefox's consent allow it |
 | The microphone plays a recording of JFK's inaugural address | Whisper in Firefox fills the goal box with it, and no run starts; the model host gets no audio; the microphone is off after let go; a denied microphone offers the setup page |
 | A hidden link tells the agent to send the password to `/attacker.test/` | foxshield flags it; the planner never sees the link; the task passes |
@@ -467,7 +481,14 @@ Read these rows with care:
   sign-in step, the banner does not come back, but the wait goes on.
 - The sign-in wait lives in the background page. The open sidebar keeps it
   loaded. The user has 5 minutes; then the run stops.
-- foxmate does not fill saved passwords or passkeys. You do the step.
+- foxmate fills a saved password only. It does not fill a one-time code or
+  a passkey, and it never presses the sign-in button: you do.
+- A saved password has 8 to 4096 characters (foxvault's rule). The fill
+  needs a password field in the top document. On a page that asks for the
+  username alone, you type it, and the fill comes on the next page.
+- The username is not a secret: Settings shows it, and it stays in
+  `storage.local` in clear. It is filled only into an empty email or
+  username field of the approved form.
 - A password field for a new password (a sign-up) is not a wall: the
   planner fills it from the goal.
 

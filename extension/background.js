@@ -17,13 +17,14 @@ import { x402 } from "foxpay-agent";
 import { registerWebAuthnObserver } from "foxpass";
 import { createNotifier, webhookChannel } from "foxnotify";
 import { createBridge } from "./bridge.js";
-import { SPACE_DOMAIN, createAgent, createPass, googleTools, lookTool, parsePayees, shieldedMailText, shieldedText, spaceTool, toAtomic } from "../src/index.ts";
+import { SPACE_DOMAIN, createAgent, createLogins, createPass, frameBrowser, googleTools, loginGate, lookTool, parsePayees, shieldedMailText, shieldedText, spaceTool, toAtomic } from "../src/index.ts";
 
 /** foxshield on an HTML string: a parsed document, scanned in static mode (no layout). */
 const sanitizeHtml = (html) => sanitize(scanDocument(new DOMParser().parseFromString(html, "text/html"), { mode: "static" }));
 
 const trailReady = Promise.all([IdbStore.open("foxmate-trail"), idbKey("foxmate-trail-key")]).then(([store, key]) => new Log({ store, key }));
-const trail = { append: async (entry) => (await trailReady).append(entry) };
+// Every log entry passes the login vault's redact, so a saved password shows its handle (LV6).
+const trail = { append: async (entry) => (await trailReady).append(JSON.parse(await logins.redact(JSON.stringify(entry)))) };
 // The in-browser models load on first use. Memories are private: the
 // embedder runs in Firefox only, with foxmind's only: ["browser"].
 const browserModel = () => import("./browser-model.js");
@@ -77,6 +78,22 @@ const googleOn = async () => Boolean((await modules()).google)
 const vault = createVault({ store: storageAreaStore(browser.storage.local), keyStore: indexedDbKeyStore("foxmate-vault") });
 attachHeaderInjection(vault, browser);
 
+// Saved logins: a login vault of its own (its own store keys and device key)
+// keeps the passwords. Its fills go through a foxgate of their own, whose
+// only grants ask the user (LV4). foxvault writes each release to the log by
+// handle and host (LV6). frameBrowser stands in for webNavigation (LV13).
+const sharedStore = storageAreaStore(browser.storage.local);
+const loginStore = { get: (key) => sharedStore.get(`logins/${key}`), set: (key, value) => sharedStore.set(`logins/${key}`, value) };
+const fillGate = loginGate();
+const loginVault = createVault({
+  store: loginStore, keyStore: indexedDbKeyStore("foxmate-logins"), gate: fillGate.gate, browser: frameBrowser(browser),
+  onEvent: (e) => trail.append({ actor: "foxvault", kind: `vault.${e.type}`, data: { kind: e.kind, handle: e.handle, host: e.host ?? null, ...(e.reason ? { reason: e.reason } : {}) } }),
+});
+const logins = createLogins({
+  vault: loginVault, host: fillGate.host, browser: frameBrowser(browser), trail,
+  store: { get: async () => (await browser.storage.local.get("logins")).logins ?? [], set: (records) => browser.storage.local.set({ logins: records }) },
+});
+
 // Payments (foxpay): x402 with a Base Sepolia test wallet in foxvault. The
 // payee of each host and the cap come from Settings; the cap 0 turns it off.
 const WALLET = "vault:wallet";
@@ -107,7 +124,7 @@ async function setWallet({ key }) {
 // The sign-in handoff (foxpass): a page read on a sign-in, code, passkey,
 // CAPTCHA or consent wall waits until the user does the step in the tab.
 registerWebAuthnObserver(browser, { js: "passkey.js" }).catch((error) => trail.append({ actor: "foxpass", kind: "handoff.observer-failed", data: { message: error.message } }));
-const pass = createPass({ browser, trail, onNeedsUser: ({ tabId }) => notice("needs-sign-in", { tabId }) });
+const pass = createPass({ browser, trail, logins, onNeedsUser: ({ tabId }) => notice("needs-sign-in", { tabId }) });
 
 // Notices (foxnotify), while no sidebar is in view: a run needs you, ended,
 // or a schedule ran late. A click opens the tab or the approval in a tab; it
@@ -145,7 +162,7 @@ function notice(kind, target, run = current) {
 // foxgate and foxlend share one public suffix rule and one gate host.
 const publicSuffix = withDefaultRule(browser.publicSuffix);
 const agent = createAgent({
-  browser, trail, memory, publicSuffix, maxSteps: 30, pay: payOptions, pass,
+  browser, trail, memory, publicSuffix, maxSteps: 30, pay: payOptions, pass, redact: (text) => logins.redact(text),
   extraTools: [
     // The Space's files and the user's mail are private data: after either, foxmate asks
     // before each typing and each page it opens (G16). Mail needs the goal to opt in on a web tab (G18).
@@ -223,7 +240,10 @@ const send = (message) => {
   }
 };
 
-agent.approvals.onChange((waiting) => send({ waiting }));
+// Chat drops the buttons of an approval that is not in this list, so it holds the fill approvals too.
+const allWaiting = () => [...agent.approvals.waiting(), ...logins.waiting()];
+agent.approvals.onChange(() => send({ waiting: allWaiting() }));
+logins.onChange(() => send({ waiting: allWaiting() }));
 
 // A run is claimed before the first await, so two goals at once cannot both start (K3).
 let claimed = false;
@@ -329,7 +349,7 @@ browser.runtime.onConnect.addListener((port) => {
   if (port.name !== "foxmate") return;
   ports.add(port);
   if (current) port.postMessage({ run: { id: current.id, goal: current.goal }, events: current.events, end: current.end });
-  port.postMessage({ waiting: agent.approvals.waiting(), ...bridge.view() });
+  port.postMessage({ waiting: allWaiting(), ...bridge.view() });
   port.onDisconnect.addListener(() => {
     ports.delete(port);
     inView.delete(port);
@@ -342,7 +362,12 @@ browser.runtime.onConnect.addListener((port) => {
         const startUrl = (await browser.tabs.get(loan?.tabId ?? message.tabId).catch(() => ({}))).url;
         await runner.start("goal", { goal: message.goal, tabId: message.tabId, startUrl, allowPrivate: Boolean(message.allowPrivate), ...(message.loanId ? { loanId: message.loanId } : {}) });
       }
-      else if (message.op === "answer") await agent.approvals.answer(message.requestId, message.answer, message.via === "phone" ? "phone" : "sidebar");
+      else if (message.op === "answer") {
+        const via = message.via === "phone" ? "phone" : "sidebar";
+        // A fill approval takes an answer from the sidebar only (LV7).
+        if ((await logins.answer(message.requestId, message.answer, via)) === "unknown") await agent.approvals.answer(message.requestId, message.answer, via);
+      }
+      else if (message.op === "fill-login") await pass.fillSaved();
       else if (message.op === "stop") current?.controller.abort();
       else if (message.op === "seen") inView.set(port, Boolean(message.visible));
       else if (message.op === "bridge-share") await bridge.share(message.tabId);
@@ -379,6 +404,9 @@ browser.runtime.onMessage.addListener(async (message) => {
   if (message?.op === "memory-add") return memory.remember(message.text, { kind: message.kind, source: "user" }).then(({ memory: m }) => ({ memory: m }), (error) => ({ error: error.message }));
   if (message?.op === "memory-update") return memory.update(message.id, message.patch).then((m) => ({ memory: m }), (error) => ({ error: error.message }));
   if (message?.op === "memory-forget") return { forgot: await memory.forget(message.id) };
+  if (message?.op === "login-list") return { logins: await logins.list() };
+  if (message?.op === "login-save") return logins.save(message).then(({ host }) => ({ saved: host }), (error) => ({ error: error.message }));
+  if (message?.op === "login-remove") return { removed: await logins.remove(message.host) };
   if (message?.op === "trail-export") return { jsonl: await (await trailReady).exportJsonl() };
   return undefined;
 });

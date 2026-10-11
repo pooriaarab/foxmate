@@ -43,6 +43,24 @@ function approval(event) {
   li.append(...(event.detail ? [detail] : []), pre, row);
 }
 
+// A sign-in wait. With a saved login for the host, the user can ask for a fill; it waits for Approve.
+function handoff(event) {
+  const li = line("Your turn", ` Sign in on this tab, then the agent goes on. ${event.message}`, "ask-note");
+  if (!event.fill) return;
+  const row = document.createElement("div");
+  row.className = "row";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.dataset.fill = "login";
+  button.textContent = "Fill saved login";
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    port.postMessage({ op: "fill-login" });
+  });
+  row.append(button);
+  li.append(row);
+}
+
 function show(event) {
   if (event.type === "start") line("Planner", ` ${event.planner} (${event.planner === "foxbridge" ? "an outside agent over MCP" : "on this computer"})`);
   else if (event.type === "recall" && (event.notes.length || event.error)) line("Memory", event.error ? ` not used: ${event.error}` : ` ${event.notes.join(" · ")}`);
@@ -52,7 +70,9 @@ function show(event) {
   else if (event.type === "tool-result") line(event.ok ? "Result" : "Failed", ` ${event.name}: ${event.summary}${event.detail ? ` (${event.detail})` : ""}`, event.ok ? "ok" : "bad");
   else if (event.type === "check") line(event.ok ? "Check passed" : "Check failed", ` ${event.checks.map((c) => `${c.ok ? "ok" : "not ok"} ${c.part}`).join("; ")}`, event.ok ? "ok" : "bad");
   else if (event.type === "refused") line("Refused", ` ${event.message}`, "bad");
-  else if (event.type === "handoff") line("Your turn", ` Sign in on this tab, then the agent goes on. ${event.message}`, "ask-note");
+  else if (event.type === "handoff") handoff(event);
+  else if (event.type === "login-approval") approval(event);
+  else if (event.type === "login-fill") line(event.status === "filled" ? "Filled" : "Not filled", event.status === "filled" ? ` the saved login on ${event.host}. Press the page's sign-in button.` : ` ${event.status}${event.reason ? ` (${event.reason})` : ""}.`, event.status === "filled" ? "ok" : "bad");
   else if (event.type === "handoff-end") line(event.status === "signed-in" ? "Signed in" : "Sign-in ended", event.status === "signed-in" ? " The agent goes on." : ` ${event.status}. The agent stops.`, event.status === "signed-in" ? "ok" : "bad");
   else if (event.type === "private") line("Private data", ` from ${event.source}. From now on foxmate asks you before it types or opens a page.`, "ask-note");
 }

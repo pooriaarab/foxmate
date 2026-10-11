@@ -14,3 +14,4 @@ export { shieldedMailText, shieldedText, type HtmlSanitizer, type MailPart } fro
 export { fromAtomic, parsePayees, payTool, toAtomic, type PayOptions, type PayRun } from "./pay.js";
 export { BridgeRefusal, bridgeCall, type BridgeCall, type BridgeReply } from "./bridge.js";
 export { HandoffError, createPass, redactPage, type Pass, type PassBrowser, type PassEvent, type PassOptions } from "./pass.js";
+export { createLogins, fillUsername, frameBrowser, isLocalHost, loginGate, loginHost, type FillEnd, type LoginEvent, type LoginRecord, type LoginStore, type LoginVault, type Logins, type LoginsOptions } from "./logins.js";
