@@ -46,7 +46,6 @@
         </div>
         <p id="voice-status" class="muted" role="status"></p>
         <div class="row"><button id="mic-setup" type="button" hidden>Set up the microphone</button></div>
-        <label class="inline"><input id="speak-result" type="checkbox" /> Speak the result</label>
         <p id="talk-hint" class="hint">Hold the button, or Space on it, while you speak. Whisper runs in Firefox, so the audio stays on this computer. The first press downloads a 43 MB model.</p>
       </form>
       <div id="target-menu" class="menu" popover>
@@ -59,142 +58,164 @@
         </div>
       </div>
     </section>
-    <section data-view="today" hidden>
-      <p id="waiting" class="end" hidden></p>
-      <h2>Tasks</h2>
-      <p class="hint">Each goal runs as a foxrunner task. If Firefox unloads the background page, the task runs again from its goal at the next wake. Nothing runs while Firefox is closed.</p>
-      <ul id="tasks" class="memories"></ul>
-      <h2>Schedules</h2>
-      <form id="schedule-form">
-        <label for="schedule-goal">Goal</label><textarea id="schedule-goal" rows="2" required placeholder="Check my calendar and list today's meetings."></textarea>
-        <label for="schedule-url">Start page</label><input id="schedule-url" type="url" required placeholder="https://calendar.example.com/" />
-        <label for="schedule-when">When</label>
-        <div class="row">
-          <select id="schedule-when"><option value="daily">Every day at</option><option value="0 * * * *">Every hour</option><option value="*/15 * * * *">Every 15 minutes</option><option value="* * * * *">Every minute</option></select>
-          <input id="schedule-time" type="time" value="08:00" aria-label="Time" />
-        </div>
-        <label class="inline"><input id="schedule-private" type="checkbox" /> This goal may read my mail and calendar</label>
-        <div class="row"><button type="submit">Add schedule</button></div>
-      </form>
-      <p id="schedule-status" class="muted" role="status"></p>
-      <ul id="schedules" class="memories"></ul>
-    </section>
-    <section data-view="lend" hidden>
-      <p class="hint">Lend one login for one task. foxmate copies that site's cookies into its own container tab. Pages there can reach only the hosts you allow. Revoke takes it all back.</p>
-      <form id="lend-form">
-        <label for="lend-url">Page to lend</label><input id="lend-url" autocomplete="off" />
-        <label for="lend-scope">What foxmate may do there</label>
-        <select id="lend-scope"><option value="read">Read pages</option><option value="fill">Read and fill in forms</option><option value="submit" selected>Read, fill in and send forms (asks you first)</option></select>
-        <label for="lend-ttl">Take it back after</label>
-        <select id="lend-ttl"><option value="900000">15 minutes</option><option value="3600000">1 hour</option><option value="14400000">4 hours</option></select>
-        <label for="lend-allow">Other hosts its pages may reach (optional)</label><input id="lend-allow" autocomplete="off" placeholder="cdn.example.com, *.example.net" />
-        <div class="row"><button id="lend-button" type="submit">Lend this login</button></div>
-      </form>
-      <p id="lend-status" class="muted" role="status"></p>
-      <h2>Lent logins</h2>
-      <ul id="loans" class="memories"></ul>
-      <h2>Blocked requests</h2>
-      <ul id="blocked" class="steps"></ul>
-    </section>
-    <section data-view="space" hidden>
-      <p class="hint">Drop files here for foxmate to work on with Python. The Space runs in a sandbox page in Firefox: no network, no extension APIs. Ask in Chat, for example "Sum the amount column of sales.csv".</p>
-      <label for="space-files">Add files</label><input id="space-files" type="file" multiple />
-      <p id="space-status" class="muted" role="status">Network: off</p>
-      <ul id="space-list" class="memories"></ul>
-    </section>
-    <section data-view="memory" hidden>
-      <p class="hint">foxmate adds the memories that fit a goal to that goal. They stay in this browser, and the model that matches them runs in Firefox.</p>
-      <form id="memory-form">
-        <label for="memory-text">Remember</label>
-        <textarea id="memory-text" rows="2" required placeholder="When I book a table, my party size: 4"></textarea>
-        <div class="row">
-          <select id="memory-kind" aria-label="Kind"><option value="preference">Preference</option><option value="fact">Fact</option><option value="task-note">Task note</option></select>
-          <button type="submit">Add</button>
-        </div>
-      </form>
-      <p id="memory-status" class="muted" role="status"></p>
-      <ul id="memories" class="memories"></ul>
-    </section>
-    <section data-view="activity" hidden>
-      <div class="row"><p id="trail-status" class="muted">Reading the log…</p><button id="trail-export" type="button">Export</button></div>
-      <p class="hint">foxtrail keeps every step of every run in a log that shows any change. It keeps short quotes of what foxshield flagged, not whole pages.</p>
-      <ol id="trail" class="steps"></ol>
-    </section>
-    <section data-view="settings" hidden>
-      <label for="planner">Planner</label>
-      <select id="planner"></select>
-      <p class="hint">foxmate uses only models on this computer or in Firefox. Page text never goes to a cloud model.</p>
-      <p id="planner-hint" class="hint"></p>
-      <div data-for="saluki ollama llama-server">
-        <label for="model">Model name</label><input id="model" autocomplete="off" />
-        <label for="base-url">Server address</label><input id="base-url" autocomplete="off" />
-      </div>
-      <div data-for="scripted"><label for="script">Script (JSON tool calls)</label><textarea id="script" rows="6"></textarea></div>
-      <h2>Optional modules</h2>
-      <p class="hint">Each one is off until you turn it on.</p>
-      <label class="inline"><input id="module-phone" type="checkbox" /> Phone approvals (foxsync)</label>
-      <div id="phone-panel" hidden>
-        <p class="hint">Your phone gets each approval too, over an encrypted peer-to-peer link. The first answer counts. The link lives in this sidebar: keep it open.</p>
-        <div class="row"><button id="phone-pair" type="button">Pair a phone</button></div>
-        <label for="phone-offer">Pairing text for the phone page</label><textarea id="phone-offer" rows="3" readonly></textarea>
-        <label for="phone-answer">The phone's answer</label><textarea id="phone-answer" rows="3"></textarea>
-        <div class="row"><button id="phone-connect" type="button">Connect</button></div>
-        <p id="phone-status" class="muted" role="status">Not paired.</p>
-      </div>
-      <label class="inline"><input id="module-lens" type="checkbox" /> Screenshots for canvas pages (foxlens)</label>
-      <div id="lens-panel" hidden>
-        <p class="hint">The look tool sends a screenshot of the tab to a vision model in Ollama on this computer, never to a cloud model.</p>
-        <label for="lens-model">Vision model</label><input id="lens-model" autocomplete="off" placeholder="qwen3-vl:2b-instruct" />
-        <label for="lens-url">Ollama address</label><input id="lens-url" autocomplete="off" placeholder="http://127.0.0.1:11434/v1" />
-      </div>
-      <label class="inline"><input id="module-google" type="checkbox" /> Gmail and Calendar, read only (foxlink)</label>
-      <div id="google-panel" hidden>
-        <p class="hint">Use your own Google OAuth client id. foxvault keeps the tokens. Mail and events go to the planner as data.</p>
-        <label for="google-client">OAuth client id</label><input id="google-client" autocomplete="off" placeholder="123-abc.apps.googleusercontent.com" />
-        <div class="row"><button id="google-connect" type="button">Connect Google</button></div>
-        <p id="google-status" class="muted" role="status"></p>
-      </div>
-      <h2>Saved logins (foxvault)</h2>
-      <div id="login-panel">
-        <p class="hint">At a sign-in step, Chat can fill a saved login on its site. Each fill waits for your Approve, with the site and the field. foxvault keeps the password encrypted. The planner and the log get only its handle.</p>
-        <form id="login-form">
-          <label for="login-site">Site</label><input id="login-site" autocomplete="off" required placeholder="bank.example.com" />
-          <label for="login-user">Username or email (optional)</label><input id="login-user" autocomplete="off" />
-          <label for="login-pass">Password</label><input id="login-pass" type="password" autocomplete="off" required />
-          <div class="row"><button id="login-save" type="submit">Save login</button></div>
-        </form>
-        <p id="login-status" class="muted" role="status"></p>
-        <ul id="login-list" class="memories"></ul>
-      </div>
-      <h2>Rules (foxgate)</h2>
-      <div id="rules-panel">
-        <p class="hint">A rule is a standing answer for one site. "Always allow" on an approval card skips that step next time, but never after the goal read private data, never for a payment or a saved-login fill, and never on a lent login. "Always ask" and "Never allow" make foxmate stricter.</p>
-        <label for="rule-scope">For the site of the current tab</label>
-        <select id="rule-scope"><option value="submit">Clicks that send or buy (submit)</option><option value="read">Page reads (read)</option></select>
-        <div class="row"><button id="rule-ask" type="button">Always ask</button><button id="rule-deny" type="button">Never allow</button></div>
-        <p id="rules-status" class="muted" role="status"></p>
-        <ul id="rules-list" class="memories"></ul>
-      </div>
-      <h2>Notices (foxnotify)</h2>
-      <div id="notice-panel">
-        <p class="hint">When a goal needs you, ends, or a schedule runs late, and no sidebar is in view, foxmate shows a notice on this computer. A click opens the tab or the approval. It never approves.</p>
-        <label class="inline"><input id="notice-quiet" type="checkbox" /> Quiet hours: only urgent notices show</label>
-        <div class="row"><input id="notice-quiet-start" type="time" value="22:00" aria-label="Quiet hours start" /><input id="notice-quiet-end" type="time" value="07:00" aria-label="Quiet hours end" /></div>
-        <label for="notice-webhook-url">Webhook, for example your own ntfy topic (optional)</label><input id="notice-webhook-url" type="url" autocomplete="off" placeholder="https://ntfy.example.org/my-foxmate" />
-        <label for="notice-preview">What the webhook gets</label><pre id="notice-preview">Type an address to see the request.</pre>
-        <label class="inline"><input id="notice-webhook" type="checkbox" /> Send notices to this webhook</label>
-        <label class="inline"><input id="notice-title" type="checkbox" /> Put the goal in the webhook notice (Firefox asks first)</label>
-      </div>
-      <h2>Payments (foxpay)</h2>
-      <div id="pay-panel">
-        <p class="hint">foxmate can pay a bill on the tab's site with test USDC on Base Sepolia (x402). Each payment waits for your Approve, with the exact amount, payee and site. A cap of 0 turns payments off.</p>
-        <label for="pay-cap">Spending cap for each goal (test USDC)</label><input id="pay-cap" type="number" min="0" step="0.01" value="0" />
-        <label for="pay-payees">Payees: a site and its address on each line</label><textarea id="pay-payees" rows="2" placeholder="bills.example.com 0x2096…"></textarea>
-        <label for="pay-wallet">Wallet key (a Base Sepolia test key)</label>
-        <div class="row"><input id="pay-wallet" type="password" autocomplete="off" /><button id="save-wallet" type="button">Save wallet</button></div>
-        <p id="pay-status" class="hint">foxvault keeps the key encrypted. The planner never gets it.</p>
-      </div>
-    </section>
+        <section data-view="today" class="page" aria-labelledby="today-title" hidden>
+          <header class="page-head"><h1 id="today-title">Today</h1><p>Goals you started, and goals that start on a schedule.</p></header>
+          <p id="waiting" class="callout" hidden></p>
+          <h2>Tasks</h2>
+          <ul id="tasks" class="list"></ul>
+          <p class="hint">If Firefox unloads foxmate, a task runs again from its goal when foxmate wakes. Nothing runs while Firefox is closed.</p>
+          <h2>Schedules</h2>
+          <ul id="schedules" class="list"></ul>
+          <form id="schedule-form" class="card form">
+            <label for="schedule-goal">Goal</label><textarea id="schedule-goal" rows="2" required placeholder="Check my calendar and list today's meetings."></textarea>
+            <label for="schedule-url">Start page</label><input id="schedule-url" type="url" required placeholder="https://calendar.example.com/" />
+            <label for="schedule-when">When</label>
+            <div class="row">
+              <select id="schedule-when"><option value="daily">Every day at</option><option value="0 * * * *">Every hour</option><option value="*/15 * * * *">Every 15 minutes</option><option value="* * * * *">Every minute</option></select>
+              <input id="schedule-time" type="time" value="08:00" aria-label="Time" />
+            </div>
+            <label class="check"><input id="schedule-private" type="checkbox" /> This goal may read my mail and calendar</label>
+            <div class="row"><button type="submit" class="primary">Add schedule</button><span id="schedule-status" class="muted" role="status"></span></div>
+          </form>
+        </section>
+
+        <section data-view="lend" class="page" aria-labelledby="lend-title" hidden>
+          <header class="page-head"><h1 id="lend-title">Lend a login</h1><p>Lend one site to one task. foxmate copies its cookies into a container tab of its own. Revoke takes it all back.</p></header>
+          <form id="lend-form" class="card form">
+            <label for="lend-url">Page to lend</label><input id="lend-url" autocomplete="off" placeholder="https://www.example.com/account" />
+            <label for="lend-scope">What foxmate may do there</label>
+            <select id="lend-scope"><option value="read">Read pages</option><option value="fill">Read and fill in forms</option><option value="submit" selected>Read, fill in and send forms (asks you first)</option></select>
+            <label for="lend-ttl">Take it back after</label>
+            <select id="lend-ttl"><option value="900000">15 minutes</option><option value="3600000">1 hour</option><option value="14400000">4 hours</option></select>
+            <label for="lend-allow">Other hosts its pages may reach (optional)</label><input id="lend-allow" autocomplete="off" placeholder="cdn.example.com, *.example.net" />
+            <div class="row"><button id="lend-button" type="submit" class="primary">Lend this login</button><span id="lend-status" class="muted" role="status"></span></div>
+          </form>
+          <h2>Lent logins</h2>
+          <ul id="loans" class="list"></ul>
+          <h2>Blocked requests</h2>
+          <ul id="blocked" class="list log"></ul>
+        </section>
+
+        <section data-view="space" class="page" aria-labelledby="space-title" hidden>
+          <header class="page-head"><h1 id="space-title">Space</h1><p>Files for foxmate's Python. It runs in a sandbox with no network. Then ask in Chat, for example "Sum the amount column of sales.csv".</p></header>
+          <label for="space-files" class="drop">Add files<input id="space-files" type="file" multiple /></label>
+          <p id="space-status" class="muted" role="status">Network: off</p>
+          <ul id="space-list" class="list"></ul>
+        </section>
+
+        <section data-view="memory" class="page" aria-labelledby="memory-title" hidden>
+          <header class="page-head"><h1 id="memory-title">Memory</h1><p>foxmate adds the memories that fit a goal to that goal. They stay in this browser.</p></header>
+          <form id="memory-form" class="card form">
+            <label for="memory-text">Remember</label>
+            <textarea id="memory-text" rows="2" required placeholder="When I book a table, my party size: 4"></textarea>
+            <div class="row">
+              <select id="memory-kind" aria-label="Kind"><option value="preference">Preference</option><option value="fact">Fact</option><option value="task-note">Task note</option></select>
+              <button type="submit" class="primary">Add</button>
+            </div>
+          </form>
+          <p id="memory-status" class="muted" role="status"></p>
+          <ul id="memories" class="list"></ul>
+        </section>
+
+        <section data-view="activity" class="page" aria-labelledby="activity-title" hidden>
+          <header class="page-head"><h1 id="activity-title">Activity</h1><p>Every step of every run, in a log that shows any change. It keeps short quotes of flagged text, not whole pages.</p></header>
+          <div class="row"><p id="trail-status" class="muted">Reading the log…</p><button id="trail-export" type="button" class="small">Export</button></div>
+          <ol id="trail" class="list log"></ol>
+        </section>
+
+        <section data-view="settings" class="page" aria-labelledby="settings-title" hidden>
+          <header class="page-head"><h1 id="settings-title">Settings</h1></header>
+
+          <h2>Model</h2>
+          <div class="card form">
+            <p class="hint">foxmate uses only models on this computer or in Firefox, so the planner never sends page text away.</p>
+            <label for="planner">Planner</label>
+            <select id="planner"></select>
+            <p id="planner-hint" class="hint"></p>
+            <div data-for="saluki ollama llama-server">
+              <label for="model">Model name</label><input id="model" autocomplete="off" />
+              <label for="base-url">Server address</label><input id="base-url" autocomplete="off" />
+              </div>
+            <div data-for="scripted"><label for="script">Script (JSON tool calls)</label><textarea id="script" rows="6"></textarea></div>
+          </div>
+
+          <h2>Approval rules</h2>
+          <div class="card form" id="rules-panel">
+            <p class="hint">A rule is a standing answer for one site. "Always allow" on an approval skips that step on that site next time. It is never offered for a payment, a saved-login fill, a lent login, or after a goal read private data. "Always ask" and "Never allow" make foxmate stricter.</p>
+            <ul id="rules-list" class="list"></ul>
+            <label for="rule-scope">For the site of the tab foxmate works on</label>
+            <select id="rule-scope"><option value="submit">Clicks that send or buy</option><option value="read">Page reads</option></select>
+            <div class="row"><button id="rule-ask" type="button" class="small">Always ask</button><button id="rule-deny" type="button" class="small">Never allow</button><span id="rules-status" class="muted" role="status"></span></div>
+          </div>
+
+          <h2>Saved logins</h2>
+          <div class="card form" id="login-panel">
+            <p class="hint">Save a login, and foxmate can fill it in when a site asks you to sign in. Each fill waits for your OK, with the site and the field. foxvault keeps the password encrypted. The planner and the log never see it.</p>
+            <ul id="login-list" class="list"></ul>
+            <form id="login-form">
+              <fieldset>
+                <legend class="sr">New saved login</legend>
+                <label for="login-site">Site</label><input id="login-site" autocomplete="off" required placeholder="www.example.com" />
+                <label for="login-user">Username or email (optional)</label><input id="login-user" autocomplete="off" />
+                <label for="login-pass">Password</label><input id="login-pass" type="password" autocomplete="new-password" required />
+                <div class="row"><button id="login-save" type="submit" class="small">Save login</button><span id="login-status" class="muted" role="status"></span></div>
+              </fieldset>
+            </form>
+          </div>
+
+          <h2>Voice</h2>
+          <div class="card">
+            <label class="check"><input id="speak-result" type="checkbox" /> Speak the result</label>
+            <p class="hint">Hold the microphone button in Chat to talk. Speech turns into text in Firefox. The audio stays on this computer.</p>
+          </div>
+
+          <h2>Optional modules</h2>
+          <div class="card">
+            <p class="hint">Each one is off until you turn it on.</p>
+            <label class="check"><input id="module-phone" type="checkbox" /> Phone approvals (foxsync)</label>
+            <div id="phone-panel" class="sub" hidden>
+              <p class="hint">Your phone gets each OK too, over an encrypted link. The first answer counts. Keep this page open.</p>
+              <p class="hint">Give the pairing text to the phone page. Paste its answer below. Then press Connect.</p>
+              <div class="row"><button id="phone-pair" type="button" class="small">Pair a phone</button></div>
+              <label for="phone-offer">Pairing text for the phone page</label><textarea id="phone-offer" rows="3" readonly></textarea>
+              <label for="phone-answer">The phone's answer</label><textarea id="phone-answer" rows="3"></textarea>
+              <div class="row"><button id="phone-connect" type="button" class="small">Connect</button><span id="phone-status" class="muted" role="status">Not paired.</span></div>
+            </div>
+            <label class="check"><input id="module-lens" type="checkbox" /> Screenshots for canvas pages (foxlens)</label>
+            <div id="lens-panel" class="sub" hidden>
+              <p class="hint">The look tool sends a screenshot of the tab to a vision model in Ollama on this computer.</p>
+              <label for="lens-model">Vision model</label><input id="lens-model" autocomplete="off" placeholder="qwen3-vl:2b-instruct" />
+              <label for="lens-url">Ollama address</label><input id="lens-url" autocomplete="off" placeholder="http://127.0.0.1:11434/v1" />
+            </div>
+            <label class="check"><input id="module-google" type="checkbox" /> Gmail and Calendar, read only (foxlink)</label>
+            <div id="google-panel" class="sub" hidden>
+              <p class="hint">Use your own Google OAuth client id. foxvault keeps the tokens. Mail and events go to the planner as data.</p>
+              <label for="google-client">OAuth client id</label><input id="google-client" autocomplete="off" placeholder="123-abc.apps.googleusercontent.com" />
+              <div class="row"><button id="google-connect" type="button" class="small">Connect Google</button><span id="google-status" class="muted" role="status"></span></div>
+            </div>
+          </div>
+
+          <h2>Notices</h2>
+          <div id="notice-panel" class="card form">
+            <p class="hint">When a goal needs you or ends, and foxmate is not in view, you get a notice on this computer. A click opens the approval. It never approves.</p>
+            <label class="check"><input id="notice-quiet" type="checkbox" /> Quiet hours: only urgent notices show</label>
+            <div class="row"><input id="notice-quiet-start" type="time" value="22:00" aria-label="Quiet hours start" /><input id="notice-quiet-end" type="time" value="07:00" aria-label="Quiet hours end" /></div>
+            <label for="notice-webhook-url">Webhook, for example your own ntfy topic (optional)</label><input id="notice-webhook-url" type="url" autocomplete="off" placeholder="https://ntfy.example.org/my-foxmate" />
+            <label for="notice-preview">What the webhook gets</label><pre id="notice-preview">Type an address to see the request.</pre>
+            <label class="check"><input id="notice-webhook" type="checkbox" /> Send notices to this webhook</label>
+            <label class="check"><input id="notice-title" type="checkbox" /> Put the goal in the webhook notice (Firefox asks first)</label>
+          </div>
+
+          <h2>Payments</h2>
+          <div id="pay-panel" class="card form">
+            <p class="hint">foxmate can pay a bill on the tab's site with test USDC on Base Sepolia (x402). Each payment waits for your Approve, with the exact amount, payee and site. A cap of 0 turns payments off.</p>
+            <label for="pay-cap">Spending cap for each goal (test USDC)</label><input id="pay-cap" type="number" min="0" step="0.01" value="0" />
+            <label for="pay-payees">Payees: a site and its address on each line</label><textarea id="pay-payees" rows="2" placeholder="bills.example.com 0x2096…"></textarea>
+            <label for="pay-wallet">Wallet key (a Base Sepolia test key)</label>
+            <div class="row"><input id="pay-wallet" type="password" autocomplete="off" /><button id="save-wallet" type="button" class="small">Save wallet</button></div>
+            <p id="pay-status" class="hint">foxvault keeps the key encrypted. The planner never gets it.</p>
+          </div>
+        </section>
       </main>
     </div>
 
