@@ -2,8 +2,8 @@
 
 foxmate composes the fox primitives. Each primitive has its own failure
 modes and tests. Bugs in foxmate hide in the wiring between them: an
-approval that shows one action and runs another, a private run that reaches
-a cloud model, page text that reaches the planner without foxshield, a lent
+approval that shows one action and runs another, a run that reaches a
+cloud model, page text that reaches the planner without foxshield, a lent
 tab that loses its guard, or a memory that injects text from a web page.
 
 We write each failure mode here first. Then we write its test, then the code.
@@ -12,25 +12,21 @@ failure that an E2E check cannot reach, or reaches only slowly.
 
 ## Brain: which model plans (`src/brain.ts`)
 
-The brain turns the user's settings into a foxmind `Mind`. Private mode must
-never reach a cloud model. The own-key mode must not send page text before
-the user and Firefox both agree. The key must not pass through the brain.
+The brain turns the user's settings into a foxmind `Mind`. foxmate uses only
+models on this computer or in Firefox. It has no cloud planner, so a run must
+never reach a cloud model.
 
 | # | Failure mode | Wanted behaviour | Test |
 |---|---|---|---|
-| B1 | Private mode with a cloud planner picked (for example an old setting) | Refuse with `cloud-in-private`. No network call. | `tests/brain.test.ts` B1 |
-| B2 | Private mode with an Ollama model whose name ends in `-cloud` or `:cloud` (it runs on Ollama's servers) | foxmind counts it as cloud, and `only: ["browser", "local"]` leaves no provider. foxmate refuses with `cloud-model-in-private`. No network call. | `tests/brain.test.ts` B2; E2E |
-| B3 | Private mode with a local server address that is not on this computer, for example `http://192.168.1.5:8080/v1` | Refuse with `cloud-model-in-private`. No network call. | `tests/brain.test.ts` B3 |
-| B4 | Own key without the consent box | Refuse with `no-consent` before any model call. | `tests/brain.test.ts` B4; E2E |
-| B5 | Own key with the box ticked, but Firefox's `websiteContent` data consent not granted | Refuse with `no-consent`. | `tests/brain.test.ts` B5; E2E |
-| B6 | The real key reaches the planner code, the trail or the sidebar | The provider gets only the foxvault handle `vault:model-key`. foxvault puts the real key in the header on the way out. | `tests/brain.test.ts` B6 |
-| B7 | No planner picked | The default is Saluki 27B on llama-server, in private mode. | `tests/brain.test.ts` B7 |
+| B1 | The settings still name a cloud planner that foxmate removed (`openai`, `anthropic`) | Refuse with `unknown-planner`. No network call, and no fallback to another planner. | `tests/brain.test.ts` B1; E2E local |
+| B2 | An Ollama model whose name ends in `-cloud` or `:cloud` (it runs on Ollama's servers) | foxmind counts it as cloud, and `only: ["browser", "local"]` leaves no provider. foxmate refuses with `not-local`. No network call. | `tests/brain.test.ts` B2; E2E local |
+| B3 | A model server address that is not on this computer, for example `http://192.168.1.5:8080/v1` | Refuse with `not-local`. No network call. | `tests/brain.test.ts` B3 |
+| B7 | No planner picked | The default is Saluki 27B on llama-server. | `tests/brain.test.ts` B7 |
 | B8 | A planner name foxmate does not know | Refuse with `unknown-planner`. | `tests/brain.test.ts` B8 |
 | B9 | The scripted planner gets a script that is not a JSON array | Refuse with `bad-script`. | `tests/brain.test.ts` B9 |
 | B10 | The scripted planner copies a link from a page that foxshield removed | `{{lastUrl}}` reads only the newest tool result, so a removed link gives an empty value and no call to it. | `tests/brain.test.ts` B10 |
 | B11 | The scripted planner cannot use a recalled note on its own, so a memory test proves nothing about the plan | `{{notes}}` gives the notes that foxmate added to the goal, joined with commas, and an empty value when there are none. | `tests/brain.test.ts` B11; E2E memory |
 | B12 | A gullible scripted step (it obeys an injection) runs even when foxshield removed the injection, so the bench cannot show what the shield does | A step with `ifText` runs only when the newest tool result holds that text, and one with `ifSeen` only when an earlier result did. | `tests/brain.test.ts` B12; foxbench |
-| B13 | The user ticks the consent box for one provider, then changes the server address to another host, and page text goes there under the old consent | The settings keep the host the user consented to (`consentHost`). The own-key planner needs it to equal the provider's host. | `tests/brain.test.ts` B13 |
 
 ## Shield: page text before the planner (`src/shield.ts`)
 
@@ -90,7 +86,7 @@ answer must reach the one request it names, once.
 | G3 | The planner reaches another host | Grants cover the tab's host only. Another host gets `no-grant`. | `tests/agent.test.ts` G3; E2E trap |
 | G4 | A lent tab gets more than the lent scope | The run's grants stop at the loan's scope. A `read` loan gets no `fill` or `submit` grant. | `tests/agent.test.ts` G4 |
 | G5 | A run starts on a loan, but the tab is not in the loan's container | The run is refused before any model call. | `tests/agent.test.ts` G5 |
-| G6 | The brain refuses (private mode, consent) | The run ends with `refused` and a reason. No tool runs. The trail records it. | `tests/agent.test.ts` G6 |
+| G6 | The brain refuses (a model that is not on this computer) | The run ends with `refused` and a reason. No tool runs. The trail records it. | `tests/agent.test.ts` G6 |
 | G7 | Notes do not reach the planner, or a recall error stops the run | The planner's goal holds the notes. A recall error is an event, and the run goes on. | `tests/agent.test.ts` G7 |
 | G8 | foxshield's findings are not in the trail | Each scan is a `shield.scan` trail entry. | E2E trap |
 | G9 | Two runs at once share the target tab | A second run is refused with `busy`. | `tests/agent.test.ts` G9 |
@@ -227,7 +223,7 @@ button. Whisper runs in the sidebar page.
 | # | Failure mode | Wanted behaviour | Test |
 |---|---|---|---|
 | VO1 | A misheard goal runs at once | The transcript fills the goal box only. The user can edit it, and Run stays the user's click. | E2E voice |
-| VO2 | Audio or its text leaves the computer | foxmate gives foxvoice one provider: Whisper in the sidebar page, with `only: ["browser"]`, in private and own-key mode. The model host gets only requests for model files. | E2E voice |
+| VO2 | Audio or its text leaves the computer | foxmate gives foxvoice one provider: Whisper in the sidebar page, with `only: ["browser"]`. The model host gets only requests for model files. | E2E voice |
 | VO3 | The microphone stays on after the user lets go | foxvoice stops each track when the user lets go. | E2E voice |
 | VO4 | The sidebar cannot get the microphone, because Firefox shows no prompt there | The error shows "Set up the microphone". It opens `mic.html` in a tab, which asks Firefox once. The permission belongs to the extension, so the sidebar gets it too. | E2E voice (Firefox's fake device) |
 | VO5 | The result is spoken when the user did not ask for it | "Speak the result" is off by default. When it is on, foxvoice speaks the end line that Chat shows, with a voice on this computer. | E2E voice |
