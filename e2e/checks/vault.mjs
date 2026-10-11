@@ -28,7 +28,7 @@ export default async function vaultCheck({ session, check, record, runGoal }) {
       return { status: document.getElementById("login-status").textContent, field: document.getElementById("login-pass").value, list: document.getElementById("login-list").textContent };
     }, host, EMAIL, PASSWORD);
     await saveShot(sidebar, "settings-saved-login");
-    check("LV12 Settings saves the login, clears the field and lists no password", { status: `Saved. The password for ${host} is in foxvault.`, field: "", list: `${host} · ${EMAIL} · password savedRemove` }, saved);
+    check("LV12 Settings saves the login, clears the field and lists no password", { status: `Saved. The password for ${host} is in foxvault.`, field: "", list: `${host}${EMAIL} · password savedRemove` }, saved);
     const stored = await sidebar.evaluate(async () => ({ storage: await browser.storage.local.get(null), sidebar: document.body.innerText }));
     check("LV12 storage.local and the sidebar hold no password in clear", { storage: false, sidebar: false }, { storage: leaks(stored.storage), sidebar: leaks(stored.sidebar) });
     await sidebar.evaluate(() => window.foxmate.show("chat"));

@@ -62,7 +62,7 @@ export default async function rulesCheck({ session, check, record, scripted, fin
     }, rule?.id);
     await saveShot(sidebar, "settings-rules");
     await sidebar.evaluate(() => window.foxmate.show("chat"));
-    check("RU5 Settings lists the rule and removes it", { text: `Always allow click on ${SITE} · ${rule?.id}`, status: "Removed.", left: 0 }, { ...listed, left: (await rules(sidebar)).rules.length });
+    check("RU5 Settings lists the rule and removes it", { text: `Always allow click on ${SITE}`, status: "Removed.", left: 0 }, { ...listed, left: (await rules(sidebar)).rules.length });
     await page.goto(url);
     const third = await runGoal(session, { page, goal: "Book a table once more.", settings: book, answer: () => "approve" });
     check("RU5 after Remove the click asks again", { asks: 1, done: true, rule: false }, { asks: asked(third), done: third.done, rule: third.kinds.includes("gate.rule") });
