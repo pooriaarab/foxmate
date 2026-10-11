@@ -12,7 +12,7 @@ import type { Provider } from "foxmind";
 import { createApprovals, ruleOffer, type Approvals, type RuleContext, type RuleOffer } from "./approvals.js";
 import { formDetail } from "./form.js";
 import { BrainError, createBrain, type Brain, type BrainSettings } from "./brain.js";
-import type { Pass, PassEvent } from "./pass.js";
+import { maskCards, type Pass, type PassEvent } from "./pass.js";
 import { payTool, type PayOptions, type PayRun } from "./pay.js";
 import { recallNotes, withNotes } from "./recall.js";
 import { shieldedPaw } from "./shield.js";
@@ -499,7 +499,9 @@ export function createAgent(options: AgentOptions): Agent {
       worked = 0;
       lastOk = false;
       lastTyped = undefined;
-      for await (const event of loop.run(goal, input.signal ? { signal: input.signal } : {})) {
+      for await (const raw of loop.run(goal, input.signal ? { signal: input.signal } : {})) {
+        // The planner's own words at the end may repeat a card number from the goal (G37).
+        const event = raw.type === "done" ? { ...raw, summary: maskCards(raw.summary) } : raw.type === "blocked" && raw.message ? { ...raw, message: maskCards(raw.message) } : raw;
         if (event.type === "approval-needed") {
           approvals.expect(event.requestId);
           // ask() reads foxgate's text when foxloop calls it; read it here too, for the event.
