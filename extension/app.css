@@ -439,6 +439,45 @@ details.raw pre { margin-top: 4px; white-space: pre-wrap; }
 #notice-preview { max-height: 220px; overflow: auto; }
 body.solo .page { height: auto; }
 
+/* Onboarding */
+.onboarding { inset: 0; width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; padding: 0; border: 0; background: var(--bg); color: var(--text); overflow-y: auto; }
+.onboarding::backdrop { background: var(--bg); }
+.ob-frame { width: min(580px, calc(100% - 40px)); margin: max(32px, 8vh) auto 48px; }
+.ob-fox .fox { --size: 80px; }
+.ob-progress { display: flex; gap: 6px; margin: 20px 0 28px; }
+.ob-progress li { width: 28px; height: 3px; border-radius: 2px; background: var(--line-strong); transition: background-color var(--med) var(--ease-out); }
+.ob-progress li[data-on] { background: var(--accent); }
+.onboarding section[data-step] { animation: rise 260ms var(--ease-out) both; }
+.onboarding h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; outline: none; }
+.ob-lede { color: var(--muted); font-size: 16px; margin-top: 8px; max-width: 54ch; }
+.ob-points { margin-top: 24px; }
+.ob-points li { padding: 14px 0; border-top: 1px solid var(--line); color: var(--muted); }
+.ob-points strong { display: block; color: var(--text); font-weight: 600; margin-bottom: 2px; }
+.ob-actions { display: flex; align-items: center; gap: 8px; margin-top: 32px; }
+.server { margin-top: 14px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+.server-head { display: flex; align-items: center; gap: 10px; }
+.server-status { margin-left: auto; color: var(--muted); font-size: 13px; text-align: right; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); flex: none; }
+.server[data-state="ok"] .dot { background: var(--ok); }
+.server[data-state="ok"] .server-status { color: var(--ok); font-weight: 550; }
+.server[data-state="refused"] .dot, .server[data-state="error"] .dot { background: var(--accent); }
+.server[data-state="refused"] .server-status { color: var(--text); }
+.copy { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 6px 6px 6px 12px; background: var(--code); border-radius: 10px; }
+.copy code { flex: 1; background: none; padding: 0; overflow-x: auto; white-space: nowrap; overflow-wrap: normal; }
+.ob-choice { min-height: 1.5em; margin-top: 14px; }
+.steps.demo { margin-top: 20px; padding-left: 0; }
+.steps.demo::before, .steps.demo > li::before { display: none; }
+.ob-extras { margin-top: 20px; }
+.ob-extras li { padding: 14px 0; border-top: 1px solid var(--line); }
+.ob-extra-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.ob-extras .hint { margin: 2px 0 0; }
+.ob-extras .ob-extra-row button { white-space: nowrap; }
+.ob-extras .sub, .ob-login { margin: 12px 0 0; }
+#ob-phone-slot .sub { margin-left: 0; }
+/* In the step, the row above already says what pairing does and has started it. */
+#ob-phone-slot #phone-panel > .hint:first-child, #ob-phone-slot .row:has(> #phone-pair) { display: none; }
+#ob-ideas { justify-content: flex-start; margin-top: 20px; }
+
 /* The fox */
 .fox { --size: 30px; position: relative; display: inline-block; flex: none; width: var(--size); height: var(--size); transition: opacity 400ms var(--ease-out), scale 400ms var(--ease-out); }
 .fox[data-size="xs"] { --size: 30px; }
