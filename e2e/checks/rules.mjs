@@ -23,7 +23,7 @@ export default async function rulesCheck({ session, check, record, scripted, fin
     return async (ask) => {
       if (seen.has(ask.requestId)) return "wait";
       seen.add(ask.requestId);
-      offers.push(await sidebar.evaluate((id) => document.querySelector(`li.ask[data-request-id="${id}"] button[data-answer="always-allow"]`)?.textContent ?? null, ask.requestId));
+      offers.push(await sidebar.evaluate((id) => document.querySelector(`li.ask[data-request-id="${id}"] button[data-answer="always-allow"]`)?.title ?? null, ask.requestId));
       return choice;
     };
   };

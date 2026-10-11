@@ -111,7 +111,7 @@ export default async function notifyCheck({ session, check, record, runGoal }) {
       const ask = [...document.querySelectorAll("li.ask")].findLast((li) => li.querySelector(".row button"));
       return ask && { buttons: [...ask.querySelectorAll("button")].map((b) => b.textContent), waiting: (await browser.runtime.sendMessage({ op: "tasks" })).waiting };
     });
-    check("NT2 the approval still waits for Approve or Deny, and the click did not run", { buttons: ["Approve", "Deny"], waiting: 1, requests: 2 }, { ...waits, requests: planner.bodies.length });
+    check("NT2 the approval still waits for Approve or Deny, and the click did not run", { buttons: ["Deny", "Approve"], waiting: 1, requests: 2 }, { ...waits, requests: planner.bodies.length });
 
     // NT3: with no sidebar in view, a finished run waits in the digest.
     await page.bringToFront();

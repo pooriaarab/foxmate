@@ -61,6 +61,134 @@ function line(kind, text, className = "", raw = "") {
   return li;
 }
 
+const webHost = (url) => {
+  try {
+    const u = new URL(String(url));
+    return /^https?:$/.test(u.protocol) ? u.hostname : "";
+  } catch {
+    return "";
+  }
+};
+const bare = (host) => host.replace(/^www\./, "");
+const SITES = { "space.foxmate": "Space", "www.googleapis.com": "Google" };
+
+/** The site a card names: the host it acts on, or the host that open_site opens. */
+export function siteOf(action) {
+  if (action.tool === "open_site") return bare(webHost(action.args?.url) || "a new site");
+  return SITES[action.domain] ?? bare(action.domain ?? "");
+}
+
+/** One short line: what happens on Approve. The form, the exact action and the JSON sit behind "Details". */
+function lineOf(event) {
+  const { action } = event;
+  const args = action.args ?? {};
+  if (action.tool === "open_site") return "Open this site in a new tab";
+  if (action.tool === "pay") return event.detail || "Pay";
+  if (action.tool === "click" && (event.detail ?? "").startsWith("The form holds")) {
+    const label = args.target?.label?.trim();
+    return label ? `Send the form with "${label.slice(0, 50)}"` : "Send the form";
+  }
+  return plain({ tool: action.tool, args });
+}
+
+/**
+ * The site's icon: the tab's own favIconUrl when it is a data: address,
+ * else a letter in a circle. The page never fetches an icon (UI4).
+ */
+export function siteIcon(site, favIconUrl) {
+  const box = document.createElement("span");
+  box.className = "site-icon";
+  box.setAttribute("aria-hidden", "true");
+  if (typeof favIconUrl === "string" && favIconUrl.startsWith("data:image/")) {
+    const img = document.createElement("img");
+    img.alt = "";
+    img.src = favIconUrl;
+    box.append(img);
+    return box;
+  }
+  const letter = (site.match(/[a-z0-9]/i)?.[0] ?? "?").toUpperCase();
+  let hue = 0;
+  for (const c of site) hue = (hue * 31 + c.charCodeAt(0)) % 360;
+  box.style.setProperty("--hue", String(hue));
+  box.textContent = letter;
+  return box;
+}
+
+/**
+ * An approval card: the site's icon and name, one line of what happens, and
+ * Deny, Always allow and Approve in a row. "Always allow" shows only when
+ * the engine offers a rule (`event.ruleOffer`): never for pay, a fill, a
+ * private run, a lent login or open_site (RU1-RU3, RU8, OS1, UI5). The form
+ * detail and the exact action that foxgate allows sit behind "Details".
+ * `onAnswer(answer)` gets "approve", "deny" or "always-allow". The
+ * onboarding demo uses it too, with no port.
+ */
+export function approvalCard(event, { onAnswer, favIconUrl } = {}) {
+  const li = document.createElement("li");
+  li.className = "ask";
+  li.dataset.requestId = event.requestId;
+  const site = siteOf(event.action);
+  const head = document.createElement("div");
+  head.className = "ask-head";
+  const label = document.createElement("span");
+  label.className = "kind sr";
+  label.textContent = "Needs your OK:";
+  const name = document.createElement("strong");
+  name.className = "site";
+  name.textContent = site;
+  head.append(siteIcon(site, favIconUrl), label, name);
+  const pay = event.action.tool === "pay";
+  const what = document.createElement("p");
+  what.className = pay ? "text detail" : "text";
+  what.textContent = lineOf(event);
+  li.append(head, what);
+
+  const box = document.createElement("details");
+  box.className = "raw";
+  const summary = document.createElement("summary");
+  summary.textContent = "Details";
+  box.append(summary);
+  if (event.detail && !pay) {
+    const detail = document.createElement("p");
+    detail.className = "detail";
+    detail.textContent = event.detail;
+    box.append(detail);
+  }
+  const caption = document.createElement("p");
+  caption.className = "caption";
+  caption.textContent = "The exact action foxgate allows:";
+  const pre = document.createElement("pre");
+  pre.textContent = event.exactText ?? JSON.stringify(event.action, null, 2);
+  box.append(caption, pre);
+  li.append(box);
+
+  const offer = event.ruleOffer;
+  const row = document.createElement("div");
+  row.className = "row";
+  const choices = [["Deny", "deny"], ...(offer ? [["Always allow", "always-allow"]] : []), ["Approve", "approve"]];
+  for (const [text, answer] of choices) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = text;
+    button.dataset.answer = answer;
+    button.className = answer === "approve" ? "primary" : answer === "deny" ? "ghost" : "";
+    if (answer === "always-allow") button.title = `Always allow ${offer.tool} on ${offer.site}`;
+    button.addEventListener("click", () => {
+      onAnswer(answer);
+      if (answer === "always-allow") {
+        // The rule may fail; the buttons come back then (ruleFailed).
+        for (const b of row.querySelectorAll("button")) b.disabled = true;
+        li.dataset.answered = `Approved. foxmate now always allows ${offer.tool} on ${offer.site}.`;
+        return;
+      }
+      settle(li, answer === "approve" ? "Approved." : "Denied.");
+    });
+    row.append(button);
+  }
+  li.append(row);
+  return li;
+}
+
 /** An approval that was answered here, elsewhere, or that ended: no more buttons. */
 export function settle(li, text) {
   const row = li.querySelector(".row");
@@ -72,38 +200,30 @@ export function settle(li, text) {
   li.classList.add("settled");
 }
 
+// The tab the run works on, for the icon of its cards.
+let runTab;
+
+async function favIconFor(action) {
+  if (!runTab || action.tool === "open_site") return undefined;
+  const tab = await browser.tabs.get(runTab).catch(() => undefined);
+  return tab && hostOf(tab) === action.domain ? tab.favIconUrl : undefined;
+}
+
 function approval(event) {
-  const li = line("Approve?", ` ${event.action.tool} on ${event.action.domain}`, "ask");
-  li.dataset.requestId = event.requestId;
-  const detail = document.createElement("p");
-  detail.className = "detail";
-  detail.textContent = event.detail ?? "";
-  const pre = document.createElement("pre");
-  pre.textContent = event.exactText ?? JSON.stringify(event.action, null, 1);
-  const row = document.createElement("div");
-  row.className = "row";
-  // "Always allow" shows only when foxmate offers a rule: never for pay, a fill, a private run or a lent login (RU1-RU3, RU8).
-  const offer = event.ruleOffer;
-  const choices = [["Approve", "approve"], ["Deny", "deny"], ...(offer ? [[`Always allow ${offer.tool} on ${offer.site}`, "always-allow"]] : [])];
-  for (const [label, answer] of choices) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = label;
-    button.dataset.answer = answer;
-    button.addEventListener("click", () => {
+  const li = approvalCard(event, {
+    onAnswer: (answer) => {
       if (answer === "always-allow") rules.approveAlways(port, event);
       else port.postMessage({ op: "answer", requestId: event.requestId, answer });
-      if (answer === "always-allow") {
-        // The rule may fail; the buttons come back then (ruleFailed).
-        for (const b of row.querySelectorAll("button")) b.disabled = true;
-        li.dataset.answered = `Approved, and always allowed ${offer.tool} on ${offer.site}.`;
-        return;
-      }
-      row.replaceWith(document.createTextNode(answer === "approve" ? "Approved." : "Denied."));
-    });
-    row.append(button);
-  }
-  li.append(...(event.detail ? [detail] : []), pre, row);
+      state("working");
+    },
+  });
+  steps?.append(li);
+  li.scrollIntoView({ block: "nearest" });
+  state("needs-approval");
+  // The tab's own icon, when it has one in data: form; else the letter stays.
+  void favIconFor(event.action).then((url) => {
+    if (url?.startsWith("data:image/")) li.querySelector(".site-icon")?.replaceWith(siteIcon(siteOf(event.action), url));
+  });
 }
 
 // A sign-in wait. With a saved login for the host, the user can ask for a fill; the fill waits for its own approval.
@@ -159,6 +279,7 @@ function show(event) {
     state(ok ? "working" : "idle");
   } else if (event.type === "rule") line("Rule", ` ${event.tool ?? ""} on ${event.domain ?? ""}: ${event.note}`, event.decision === "deny" ? "bad" : "meta");
   else if (event.type === "opened") {
+    runTab = event.tabId;
     runHost = event.host;
     line("Opened", ` ${event.host} in a new tab.`, "ok");
   } else if (event.type === "private") line("Private data", ` from ${event.source}. From now on foxmate asks you before it types or opens a page.`, "ask-note");
@@ -240,6 +361,7 @@ export const chat = {
   },
   start(tabId, goal, loanId) {
     $("goal").value = goal;
+    runTab = tabId;
     runHost = "";
     if (tabId !== undefined) browser.tabs.get(tabId).then((tab) => { runHost = hostOf(tab); }, () => undefined);
     // Mail and calendar ask in the run, once each (G18): the composer has no switch for them.

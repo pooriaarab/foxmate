@@ -172,6 +172,9 @@ tab, the active tab is the app itself.
 |---|---|---|---|
 | UI2 | A goal from the full page runs on the foxmate page itself, the active tab | The target is the tab the user picked, else the active web tab of the window, else the web tab used last. Only http and https tabs count. The composer chip names it. | E2E app UI2 |
 | UI3 | Each toolbar click opens one more app tab, each with its own port and phone link | The toolbar button brings the open app tab to the front, and opens a tab only when none is open. | E2E app UI3 |
+| UI4 | The approval card loads the site's icon from the web with the user's cookies, so the site learns that foxmate looked | The card uses the tab's `favIconUrl` only when it is a `data:` address. Any other icon is a letter in a circle. The page fetches nothing. | E2E app UI4 |
+| UI5 | "Always allow" shows on a card where the engine offers no rule (pay, a saved-login fill, a private run, a lent login, a host with no registrable site, `open_site`, a mail read) | The button exists only when the event has a `ruleOffer`. | E2E rules RU1; E2E app UI5 |
+| UI8 | A goal with no web page open stops at "Open a web page first" | The goal starts with no tab. The run asks before it opens a site (OS1-OS8). | E2E open |
 
 ## Sidebar link: the background page lifecycle
 
