@@ -8,11 +8,15 @@ import { launch, poll } from "create-foxkit/e2e";
 /** The built extension that ships in the npm package. */
 export const EXTENSION = join(dirname(dirname(fileURLToPath(import.meta.url))), "dist-ext");
 
-/** Starts Firefox with dist-ext/ and opens the app page in a tab. */
-export async function startFox({ extension = EXTENSION, headless = true, prefs, firefox } = {}) {
+/**
+ * Starts Firefox with dist-ext/ and opens the app page in a tab. The first
+ * run shows the onboarding; `onboarding: false` (the default) marks it done.
+ */
+export async function startFox({ extension = EXTENSION, headless = true, prefs, firefox, onboarding = false } = {}) {
   const fox = await launch({ extension, headless, ...(prefs ? { prefs } : {}), ...(firefox ? { firefox } : {}) });
   const sidebar = await fox.openExtensionPage("app.html");
   await poll(sidebar, () => Boolean(window.foxmate));
+  if (!onboarding) await sidebar.evaluate(() => browser.storage.local.set({ onboarding: { done: true } }));
   return { fox, sidebar };
 }
 
