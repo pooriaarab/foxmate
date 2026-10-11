@@ -129,6 +129,26 @@ changes only the approval step of a grant that the run already has.
 | RU9 | A page message adds an `allow` rule with no approval card | `rules:add` takes `ask` and `deny` only, for the registrable site of the tab it names. The only way to add `allow` is the card's answer to a waiting request. | E2E rules |
 | RU10 | `addRule` throws (`bad-rule`, a storage error), and the request is approved anyway or hangs | foxmate records nothing, approves nothing, and the request still waits for Approve or Deny. | `tests/rules.test.ts` RU10 |
 
+## No tab: the agent opens a site (`src/agent.ts`)
+
+A goal can start with no web page open ("Book a table at Bistro Lune
+tonight"). The run starts with no host. Its planner gets one tool for the
+web, `open_site`. Each call waits for an approval ("Open bistrolune.com?").
+On Approve, foxmate opens the address in a new tab, gives the run the
+grants for that tab's host (the same as a tab the user picked), and goes on
+there. A search page is a site like any other, so it asks too.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| OS1 | The agent opens a site with no approval: a rule, a grant with no approval, or the phone's "Always allow" | The `open_site` grant has `approval: "always"` and no `rules`, for the domain `new-tab.foxmate` only. The card never offers "Always allow" for it. | `tests/agent.test.ts` OS1; E2E open |
+| OS2 | A run on a web tab gets `open_site`, so it browses to other hosts around G3 | Only a run that starts with no web page, with foxmate's own planner and no loan, gets `open_site`. | `tests/agent.test.ts` OS2 |
+| OS3 | The grant leaks to other hosts: the approved site's grants cover the next site, or the first site keeps its grants after a second `open_site` | The run gets grants for the opened tab's host only. A second `open_site` revokes the first host's grants before it adds the new ones. Another host gets `no-grant` (G3). | `tests/agent.test.ts` OS3; E2E open |
+| OS4 | The approved address redirects to another site, and the run works there | foxmate compares the registrable site of the loaded page with the approved one. Another site gets no grant: the tool fails, says where the page went, and the trail records `run.open-site` with `granted: false`. A redirect inside the same site (`www.`) grants the loaded host only. | `tests/agent.test.ts` OS4; E2E open |
+| OS5 | The address is not a web address (`javascript:`, `file:`, `data:`) or carries a login (`https://user:pass@host/`) | The tool's schema refuses it before any approval (`invalid-args`), and the tool checks again before it opens a tab. | `tests/agent.test.ts` OS5 |
+| OS6 | With no tab, the planner makes up tools or calls a page tool before a page is open | The planner gets only `open_site` and the extra tools until a tab opens. A call to a page tool runs nothing. The context block says that no page is open and that `open_site` asks the user. | `tests/agent.test.ts` OS6 |
+| OS7 | The approval hides the full address, so a query that carries private data looks harmless | The card names the host. "Details" holds foxgate's canonical JSON with the full address. Each `open_site` asks, also after private data (G16). | `tests/agent.test.ts` OS1 |
+| OS8 | The page does not load, or the user closes the tab or presses Stop while it loads | The tool waits for up to 20 s and stops at Stop. A page that does not load gets no grant, and the tool fails. | `tests/agent.test.ts` OS8 |
+
 ## Space: Python on a dropped file (`src/space.ts`)
 
 The planner can run Python on files the user drops into the Space. foxden
