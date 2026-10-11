@@ -161,8 +161,9 @@ function notice(kind, target, run = current) {
 
 // foxgate and foxlend share one public suffix rule and one gate host.
 const publicSuffix = withDefaultRule(browser.publicSuffix);
+// The user's standing rules (foxgate) live in storage.local, so they last across restarts (RU4).
 const agent = createAgent({
-  browser, trail, memory, publicSuffix, maxSteps: 30, pay: payOptions, pass, redact: (text) => logins.redact(text),
+  browser, trail, memory, publicSuffix, ruleStore: storageAreaStore(browser.storage.local), maxSteps: 30, pay: payOptions, pass, redact: (text) => logins.redact(text),
   extraTools: [
     // The Space's files and the user's mail are private data: after either, foxmate asks
     // before each typing and each page it opens (G16). Mail needs the goal to opt in on a web tab (G18).
@@ -224,6 +225,21 @@ async function lend({ domain, url, scope, ttlMs, allow }) {
   await trail.append({ actor: "user", kind: "lend.start", data: { loanId: loan.id, domain: loan.domain, scope, ttlMs, allow: loan.patterns, copied: loan.copied } });
   send({ loansChanged: true });
   return loan;
+}
+
+/**
+ * Settings adds "Always ask" or "Never allow" for the registrable site of a
+ * tab. An allow rule comes only from an approval card's answer (RU9).
+ */
+async function addRule({ tabId, scope, effect }) {
+  if (effect !== "ask" && effect !== "deny") throw new Error("Settings adds only Always ask or Never allow rules.");
+  const host = hostOf((await browser.tabs.get(tabId)).url);
+  const site = host && publicSuffix.getDomain(host);
+  if (!site) throw new Error("This tab has no site that a rule can name.");
+  const rule = await agent.host.addRule({ site, scope, effect });
+  await trail.append({ actor: "user", kind: "rule.add", data: { ruleId: rule.id, site: rule.site, scope: rule.scope, effect: rule.effect, via: "settings" } });
+  send({ rulesChanged: true });
+  return rule;
 }
 
 const ports = new Set();
@@ -364,8 +380,10 @@ browser.runtime.onConnect.addListener((port) => {
       }
       else if (message.op === "answer") {
         const via = message.via === "phone" ? "phone" : "sidebar";
-        // A fill approval takes an answer from the sidebar only (LV7).
-        if ((await logins.answer(message.requestId, message.answer, via)) === "unknown") await agent.approvals.answer(message.requestId, message.answer, via);
+        // A fill approval takes an answer from the sidebar only (LV7). "Always allow" decides nothing on a fill (RU2).
+        let result = await logins.answer(message.requestId, message.answer, via);
+        if (result === "unknown") result = await agent.approvals.answer(message.requestId, message.answer, via);
+        if (result === "no-rule") port.postMessage({ ruleFailed: message.requestId, error: "foxmate could not add that rule. Approve or Deny this step." });
       }
       else if (message.op === "fill-login") await pass.fillSaved();
       else if (message.op === "stop") current?.controller.abort();
@@ -407,6 +425,14 @@ browser.runtime.onMessage.addListener(async (message) => {
   if (message?.op === "login-list") return { logins: await logins.list() };
   if (message?.op === "login-save") return logins.save(message).then(({ host }) => ({ saved: host }), (error) => ({ error: error.message }));
   if (message?.op === "login-remove") return { removed: await logins.remove(message.host) };
+  if (message?.op === "rules:list") return { rules: await agent.host.rules() };
+  if (message?.op === "rules:add") return addRule(message).then((rule) => ({ rule }), (error) => ({ error: error.message }));
+  if (message?.op === "rules:remove") {
+    const removed = await agent.host.removeRule(message.id);
+    if (removed) await trail.append({ actor: "user", kind: "rule.remove", data: { ruleId: message.id, via: "settings" } });
+    send({ rulesChanged: true });
+    return { removed };
+  }
   if (message?.op === "trail-export") return { jsonl: await (await trailReady).exportJsonl() };
   return undefined;
 });
