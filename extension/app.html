@@ -26,38 +26,58 @@
       </nav>
 
       <main>
-    <section data-view="chat">
-      <ol id="conversation" aria-live="polite"></ol>
-      <form id="goal-form">
-        <label for="goal">Goal</label>
-        <textarea id="goal" rows="3" required placeholder="Sign me up for the Pro plan with my work email."></textarea>
-        <div class="row">
-          <button id="target" type="button" class="target" popovertarget="target-menu" aria-expanded="false">
-            <span class="target-dot" aria-hidden="true"></span>
-            <span class="target-text"><span class="target-label">Working on</span> <span id="target-name">No tab yet</span></span>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
-          </button>
-        </div>
-        <div class="row">
-          <button id="run" type="submit">Run</button>
-          <button id="stop" type="button" disabled>Stop</button>
-          <button id="talk" type="button" aria-describedby="talk-hint">Hold to talk</button>
-          <span id="status" role="status"></span>
-        </div>
-        <p id="voice-status" class="muted" role="status"></p>
-        <div class="row"><button id="mic-setup" type="button" hidden>Set up the microphone</button></div>
-        <p id="talk-hint" class="hint">Hold the button, or Space on it, while you speak. Whisper runs in Firefox, so the audio stays on this computer. The first press downloads a 43 MB model.</p>
-      </form>
-      <div id="target-menu" class="menu" popover>
-        <p class="menu-title">foxmate works on</p>
-        <ul id="target-list" class="menu-list"></ul>
-        <div id="bridge-panel" class="menu-section">
-          <label class="switch"><input id="bridge-share" type="checkbox" /> Share this tab with Claude Code</label>
-          <p class="hint">Claude Code reads the tab and sends it to its own model. You approve each change here. Set it up once: <code>foxbridge install --extension-id foxmate@pooriaarab</code></p>
-          <div class="row"><span id="bridge-status" class="muted" role="status">Not shared.</span><button id="bridge-stop" type="button" class="small" disabled>Stop now</button></div>
-        </div>
-      </div>
-    </section>
+        <section data-view="chat" class="chat" aria-label="Chat">
+          <div id="thread" class="thread">
+            <div id="empty" class="empty">
+              <h1>What can I do for you?</h1>
+              <p>I work on your tabs, with your logins. I ask before I send anything.</p>
+              <ul id="suggestions" class="suggestions" aria-label="Ideas to start">
+                <li><button type="button">Book a table for 4 at Bistro Lune tonight</button></li>
+                <li><button type="button">Read my bank balance after I sign in</button></li>
+                <li><button type="button">Answer the newest email with a short thank-you</button></li>
+                <li><button type="button">Sum the amount column of sales.csv</button></li>
+              </ul>
+            </div>
+            <ol id="conversation" aria-live="polite"></ol>
+          </div>
+
+          <div class="dock">
+            <div id="presence" class="presence" data-state="idle">
+              <span id="status" role="status"></span>
+            </div>
+            <form id="goal-form" class="composer">
+              <label for="goal" class="sr">What should foxmate do?</label>
+              <textarea id="goal" rows="1" required placeholder="Tell foxmate what to do"></textarea>
+              <div class="composer-row">
+                <button id="target" type="button" class="target" popovertarget="target-menu" aria-expanded="false">
+                  <span class="target-dot" aria-hidden="true"></span>
+                  <span class="target-text"><span class="target-label">Working on</span> <span id="target-name">No tab yet</span></span>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+                </button>
+                <span class="grow"></span>
+                <button id="talk" type="button" class="icon-button" aria-label="Hold to talk" aria-describedby="talk-hint"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg></button>
+                <button id="stop" type="button" class="icon-button" aria-label="Stop" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><rect class="solid" x="7" y="7" width="10" height="10" rx="2" /></svg></button>
+                <button id="run" type="submit" class="send" aria-label="Run"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg></button>
+              </div>
+            </form>
+            <div class="dock-foot">
+              <p id="voice-status" role="status"></p>
+              <button id="mic-setup" type="button" class="link" hidden>Set up the microphone</button>
+            </div>
+            <p id="talk-hint" class="sr">Hold the button, or Space on it, while you speak. Whisper runs in Firefox, so the audio stays on this computer. The first press downloads a 43 MB model.</p>
+          </div>
+
+          <div id="target-menu" class="menu" popover>
+            <p class="menu-title">foxmate works on</p>
+            <ul id="target-list" class="menu-list"></ul>
+            <div id="bridge-panel" class="menu-section">
+              <label class="switch"><input id="bridge-share" type="checkbox" /> Share this tab with Claude Code</label>
+              <p class="hint">Claude Code reads the tab and sends it to its own model. You approve each change here. Set it up once: <code>foxbridge install --extension-id foxmate@pooriaarab</code></p>
+              <div class="row"><span id="bridge-status" class="muted" role="status">Not shared.</span><button id="bridge-stop" type="button" class="small" disabled>Stop now</button></div>
+            </div>
+          </div>
+        </section>
+
         <section data-view="today" class="page" aria-labelledby="today-title" hidden>
           <header class="page-head"><h1 id="today-title">Today</h1><p>Goals you started, and goals that start on a schedule.</p></header>
           <p id="waiting" class="callout" hidden></p>
