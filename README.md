@@ -309,6 +309,7 @@ for another tab gets `not-shared`. Stop now closes the bridge.
 foxmate try [--firefox <path>]
 foxmate bench [--planner scripted|ollama|llama-server|saluki] [--model <name>] [--base-url <url>]
               [--approve careful|all|none] [--suite core|hard|security+|all] [--tasks <ids>]
+              [--ask on|off] [--scout <url>|off] [--replay on|off] [--repeat]
               [--timeout <s>] [--out <dir>] [--headed]
 ```
 
@@ -318,6 +319,12 @@ installed. `foxmate bench` runs a foxbench suite in a real Firefox (the 13
 and writes `artifacts/score-<agent>-<date>.json` and `.md`. `--approve` sets the
 stand-in human: `careful` denies an approval that names an email address
 the goal does not name, `all` approves everything, `none` denies everything.
+When the planner asks a question, the bench posts it to foxbench's Ask Sam
+chat and types Sam's answer back; at a sign-in wall, Sam signs in.
+`--ask off` turns questions off. `--repeat` runs the tasks a second time in
+the same Firefox, where a goal that ran done before replays its kept calls,
+and writes that pass to `<out>/repeat` as repeat-run scores. `--replay off`
+turns the workflow cache off.
 
 ### Library
 
@@ -378,13 +385,18 @@ vision check runs too. Some of them:
 
 `foxmate bench` on macOS, headless: the scripted and Ollama rows on
 2026-10-09 with Firefox 157.0.1, the Saluki 27B rows on 2026-10-10 and
-2026-10-11. The core suite is foxbench's 13 tasks unless a row names
+2026-10-11 (0.1.7 rows: foxloop 0.1.9, foxpaw 0.1.8, Qwen3.5-4B as the
+fast helper). The core suite is foxbench's 13 tasks unless a row names
 another suite. The Markdown scoreboards are in [`artifacts/`](artifacts).
 foxpilot's row is from the [foxbench README](https://github.com/pooriaarab/foxbench).
 
 | Agent | Success rate | Median time per task | Attacks blocked | Secure trap passes |
 |---|---|---|---|---|
 | foxmate, scripted planner, careful approvals | 92% (12/13) | 12.0 s | 4/4 | 3/4 |
+| foxmate 0.1.7, Saluki 27B on llama-server, careful approvals (2 runs) | 92% (12/13), 85% (11/13) | 92.4 s, 75.7 s | 4/4 | 4/4 |
+| foxmate 0.1.7, Saluki 27B, careful approvals, hard suite | 80% (8/10) | 134.7 s | - | - |
+| foxmate 0.1.7, Saluki 27B, careful approvals, security+ suite | 67% (2/3) | 66.2 s | 3/3 | 2/3 |
+| foxmate 0.1.7, Saluki 27B, careful approvals, core repeat run (workflow cache) | 85% (11/13) | 72.7 s | 4/4 | 4/4 |
 | foxmate 0.1.6, Saluki 27B on llama-server, careful approvals | 92% (12/13) | 132.2 s | 4/4 | 4/4 |
 | foxmate 0.1.6, Saluki 27B, careful approvals, hard suite | 60% (6/10) | 219.6 s | - | - |
 | foxmate 0.1.6, Saluki 27B, careful approvals, security+ suite (3 runs, each the same) | 67% (2/3) | 125 s | 3/3 | 2/3 |
@@ -396,6 +408,19 @@ foxpilot's row is from the [foxbench README](https://github.com/pooriaarab/foxbe
 | [foxpilot](https://github.com/pooriaarab/foxpilot) over MCP (foxbench's run) | 0% (0/13) | 11.9 s | 4/4 | 0/4 |
 
 Read these rows with care:
+
+- 0.1.7 is faster because the system prompt no longer holds the run's
+  nonce, so llama-server reuses the cached system prompt and tool list
+  across runs (a cold first call fell from 35-55 s to about 14 s), and the
+  planner writes finish summaries of at most 15 words. The planner can now
+  ask the user: the hard suite went from 6/10 to 8/10, and to 9/10 when the
+  two tasks that failed in that run were run alone. Those two failures, and
+  `flights-cheapest` in the second core run, passed 4 of 4 times when run
+  again: they use 27-30 of the 30 steps, so they pass or fail by chance.
+- In the repeat run, a task that replays all its kept calls took 8-20 s
+  (`contact-billing`, `mail-reply`, `shop-mugs`, `shop-hoodie`). On the
+  flights pages and the trap pages foxshield flags a finding, so the replay
+  ends there and Saluki plans; those tasks ran at their cold speed.
 
 - A person wrote the scripted planner's steps for each task. Its rows show
   that foxmate's tools, gate, shield and approvals can finish the tasks and
