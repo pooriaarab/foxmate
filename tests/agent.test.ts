@@ -124,8 +124,16 @@ async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { 
 }
 
 const finish = { tool: "finish", args: { summary: "Done." } };
+/** The setup for AQ1-AQ5, and the tool names of each planner request. */
+async function questions() {
+  helper.tools = [];
+  const made = await setup();
+  return { ...made, helperTools: () => helper.tools };
+}
 type Sent = { role: string; content: string | null; tool_call_id?: string };
 const sent = (request: string | undefined) => JSON.parse(request ?? "[]") as Sent[];
+/** The system message of a request to the planner (AQ6). */
+const systemOf = (request: string | undefined) => sent(request)[0]?.content ?? "";
 /** The newest tab note in a request to the planner (G23, G31). */
 const NOTE = "The open tab and this run:";
 const tabNote = (request: string | undefined) => {
@@ -492,7 +500,7 @@ describe("agent", () => {
     expect(asked[0] && "exactText" in asked[0] && String(asked[0].exactText)).toContain("https://www.bistro.test/book?party=4");
     expect(asked[0] && "ruleOffer" in asked[0] && asked[0].ruleOffer).toBeFalsy();
     expect(ruled.opened).toEqual(["https://www.bistro.test/book?party=4"]);
-    expect(ruled.domainsSeen[0]).toEqual(["new-tab.foxmate", "space.foxmate", "www.bistro.test", "www.googleapis.com"]);
+    expect(ruled.domainsSeen[0]).toEqual(["new-tab.foxmate", "space.foxmate", "user.foxmate", "www.bistro.test", "www.googleapis.com"]);
     const denied = await setup();
     const no = await denied.run({ noTab: true, script: [openSite("https://www.bistro.test/"), finish] }, "deny");
     expect(no).toMatchObject({ status: "blocked", reason: "approval-denied" });
@@ -559,5 +567,86 @@ describe("agent", () => {
     await run({ noTab: true, script: [openSite("https://slow.test/"), { tool: "snapshot", args: {} }, finish, finish] });
     expect(events.find((e) => e.type === "tool-result" && e.name === "open_site")).toMatchObject({ ok: false });
     expect(domainsSeen).toEqual([]);
+  });
+
+  it("AQ1, AQ5: the planner asks the user, the answer comes back, and the trail has both", async () => {
+    const { agent, requests, trail, helperTools } = await questions();
+    const events: AgentEvent[] = [];
+    const end = await agent.run({
+      goal: "Buy the hoodie", tabId: 1, settings: { planner: "scripted", script: JSON.stringify([{ tool: "ask_user", args: { question: "Which size?" } }, finish]) },
+      onEvent: (event) => {
+        events.push(event);
+        if (event.type === "question") setTimeout(() => void agent.reply(event.id, "Size L, please."), 5);
+      },
+    });
+    expect(end.status).toBe("done");
+    expect(helperTools()[0]).toContain("ask_user");
+    expect(events.find((e) => e.type === "question")).toMatchObject({ question: "Which size?" });
+    expect(requests[1]).toContain("The user answered: Size L, please.");
+    const kinds = (await trail.entries()).map((e) => ({ kind: e.kind, data: e.data as Record<string, unknown> }));
+    expect(kinds.find((e) => e.kind === "run.question")?.data).toMatchObject({ question: "Which size?" });
+    expect(kinds.find((e) => e.kind === "run.answer")?.data).toMatchObject({ answer: "Size L, please." });
+  });
+
+  it("AQ2: a question that waits ends with the run; a late or second reply changes nothing", async () => {
+    const { agent } = await questions();
+    const controller = new AbortController();
+    let id = "";
+    const end = await agent.run({
+      goal: "Buy the hoodie", tabId: 1, signal: controller.signal, settings: { planner: "scripted", script: JSON.stringify([{ tool: "ask_user", args: { question: "Which size?" } }, finish]) },
+      onEvent: (event) => {
+        if (event.type === "question") {
+          id = event.id;
+          setTimeout(() => controller.abort(), 5);
+        }
+      },
+    });
+    expect(end.status).toBe("aborted");
+    expect(id).not.toBe("");
+    expect(agent.reply(id, "L")).toBe(false);
+    expect(agent.reply("nope", "L")).toBe(false);
+    let first = false;
+    let second = true;
+    await agent.run({
+      goal: "Buy the hoodie", tabId: 1, settings: { planner: "scripted", script: JSON.stringify([{ tool: "ask_user", args: { question: "Which size?" } }, finish]) },
+      onEvent: (event) => {
+        if (event.type === "question") {
+          first = agent.reply(event.id, "L");
+          second = agent.reply(event.id, "M");
+        }
+      },
+    });
+    expect([first, second]).toEqual([true, false]);
+  });
+
+  it("AQ3: a question for a password, a card number or a code is refused before the user sees it", async () => {
+    for (const question of ["What is your password for the shop?", "Please give me your card number", "What is the CVC?", "Tell me the one-time code you got", "What's the security code?"]) {
+      const { agent, requests } = await questions();
+      const events: AgentEvent[] = [];
+      await agent.run({ goal: "Buy", tabId: 1, settings: { planner: "scripted", script: JSON.stringify([{ tool: "ask_user", args: { question } }, finish, finish]) }, onEvent: (e) => { events.push(e); } });
+      expect(events.some((e) => e.type === "question")).toBe(false);
+      expect(requests[1]).toContain("ask_user: failed");
+    }
+  });
+
+  it("AQ4: an outside agent, or a user who turned questions off, gets no ask_user", async () => {
+    const off = await questions();
+    await off.agent.run({ goal: "Buy", tabId: 1, settings: { planner: "scripted", ask: false, script: JSON.stringify([{ tool: "ask_user", args: { question: "Which size?" } }, finish, finish]) } });
+    expect(off.helperTools()[0]).not.toContain("ask_user");
+    expect(off.requests[1]).toContain('There is no tool \\"ask_user\\"');
+    const bridge = await questions();
+    const seen: string[][] = [];
+    await bridge.agent.run({ goal: "Buy", tabId: 1, settings: {}, mind: { chat: async (_m, o) => { seen.push(o.tools.map((t) => t.function.name)); return { message: { role: "assistant", content: "done" } }; } } });
+    expect(seen[0]).not.toContain("ask_user");
+  });
+
+  it("AQ6: the system message says when to ask; with questions off it does not", async () => {
+    const on = await questions();
+    await on.run({ script: [finish, finish] });
+    expect(systemOf(on.requests[0])).toMatch(/call ask_user/);
+    expect(systemOf(on.requests[0])).toMatch(/Do not guess/);
+    const off = await questions();
+    await off.run({ settings: { planner: "scripted", ask: false, script: JSON.stringify([finish, finish]) } });
+    expect(systemOf(off.requests[0])).not.toContain("ask_user");
   });
 });

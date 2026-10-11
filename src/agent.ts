@@ -3,7 +3,7 @@
 // through foxgate, page text passes foxshield, approvals come from a human,
 // and foxtrail records each step (docs/failure-modes.md G1-G10).
 import { createFoxgate, type Gate, type Host, type PublicSuffix, type Scope, type Store } from "foxgate";
-import { FINISH, browserTools, createLoop, toolSpecs, type CheckResult, type LoopEvent, type LoopTool, type Message, type MindLike, type ToolContext, type ToolOutput } from "foxloop";
+import { ASK_USER, FINISH, askUserTool, browserTools, createLoop, toolSpecs, type CheckResult, type LoopEvent, type LoopTool, type Message, type MindLike, type ToolContext, type ToolOutput } from "foxloop";
 import { GATE_CURRENCY, PAY_TOOL, createFoxpay, payTools, type Foxpay } from "foxpay-agent";
 import type { FoxMemory } from "foxmemory";
 import * as foxpaw from "foxpaw";
@@ -67,6 +67,8 @@ export type AgentEvent =
   | { type: "refused"; reason: string; message: string }
   | { type: "private"; source: string }
   | { type: "opened"; tabId: number; host: string }
+  | { type: "question"; step: number; id: string; question: string }
+  | { type: "answer"; step: number; id: string; answered: boolean }
   | PassEvent;
 
 export interface RunEnd {
@@ -120,6 +122,8 @@ export interface Agent {
   approvals: Approvals;
   readonly busy: boolean;
   run(input: RunInput): Promise<RunEnd>;
+  /** The user's answer to an open question of the current run. False when no question has this id (AQ2). */
+  reply(id: string, text: string | undefined): boolean;
 }
 
 const SCOPES: Scope[] = ["read", "fill", "submit"];
@@ -130,6 +134,10 @@ const RETRY = new Set(["no-grant", "unknown-tool", "wrong-scope", "bad-action"])
 /** The gate domain of `open_site`. Its one grant always asks a human (OS1). */
 export const OPEN_DOMAIN = "new-tab.foxmate";
 export const OPEN_TOOL = "open_site";
+/** The gate domain of `ask_user`: a question goes to the user, not to a site (AQ1). */
+export const USER_DOMAIN = "user.foxmate";
+// A question for a secret is refused before the user sees it (AQ3).
+const SECRET_QUESTION = /pass ?(?:word|code|phrase)|\bpin\b|card ?(?:number|no\b)|\bcv[cv]2?\b|security code|one[- ]time|\botp\b|2fa|verification code|login code/i;
 
 /** The host of an http or https address, or undefined. */
 function webHost(url: string | undefined): string | undefined {
@@ -175,11 +183,13 @@ const helperPrompt = (nonce: string) => [
 ].join("\n");
 
 /** The fixed rules at the end of the system message to foxmate's own planner. The same for the whole run (G23, G31). */
-export function plannerRules({ canOpen = false }: { canOpen?: boolean } = {}): string {
+export function plannerRules({ canOpen = false, canAsk = false }: { canOpen?: boolean; canAsk?: boolean } = {}): string {
   return [
     "",
     "Work on the open page: read it with the tools, and use what it shows. Do not make up web addresses. Use open_url only for an address on a site that the tab note names.",
     ...(canOpen ? [`To go to another site, call ${OPEN_TOOL} with its address. The user approves each one first. Then foxmate opens it in a new tab, and you work there.`] : []),
+    // AQ6: a planner with ask_user still guesses unless the rules say when to ask.
+    ...(canAsk ? [`Before you act, call ${ASK_USER} when the goal leaves out a choice that the page needs (for example a size or a color), when the page shows a cost over a limit that the goal sets (read the total before you pay or send), or when a page needs the user to sign in. Do not guess such a choice. Do not ask about what the goal already gives.`] : []),
   ].join("\n");
 }
 
@@ -234,11 +244,46 @@ export function createAgent(options: AgentOptions): Agent {
     describe: (args) => `open ${webHost(String(args.url)) ?? "a site"} in a new tab`,
     run: async (args, ctx) => (openRun ? openRun(siteAddress(args.url), ctx.signal) : { ok: false, summary: "No run." }),
   };
+  // The open questions of the current run: id -> resolve (AQ1, AQ2).
+  const questions = new Map<string, (text: string | undefined) => void>();
+  const asker = askUserTool({
+    domain: USER_DOMAIN,
+    ask: async (question, ctx) => {
+      const id = crypto.randomUUID();
+      await trail.append({ actor: "foxmate", kind: "run.question", data: { id, question } });
+      const answer = await new Promise<string | undefined>((resolve) => {
+        if (ctx.signal.aborted) return resolve(undefined);
+        questions.set(id, resolve);
+        ctx.signal.addEventListener("abort", () => resolve(undefined), { once: true });
+        runEmit({ type: "question", step: ctx.step, id, question });
+      });
+      questions.delete(id);
+      const text = answer?.trim() || undefined;
+      await trail.append({ actor: "user", kind: "run.answer", data: { id, answer: text ?? null } });
+      runEmit({ type: "answer", step: ctx.step, id, answered: Boolean(text) });
+      return text;
+    },
+  });
+  // A question for a secret is refused before the user sees it, and the planner reads why (AQ3).
+  const askUser: LoopTool = {
+    ...asker,
+    prepare: (args) => {
+      if (SECRET_QUESTION.test(String(args.question))) throw new Error("foxmate never asks the user for a password, a card number or a code. Do not ask for one.");
+      return args;
+    },
+  };
+  const reply = (id: string, text: string | undefined): boolean => {
+    const resolve = questions.get(id);
+    if (!resolve) return false;
+    questions.delete(id);
+    resolve(text);
+    return true;
+  };
   const tools = [...tabTools, ...extra.map((e) => e.tool), ...(paying ? [paying] : []), openSite];
   // Each decision that a user rule made goes to the trail with its ruleId first; a failed write denies (RU6).
   const VERB = { allow: "allowed", ask: "asked", deny: "denied" } as const;
   const { gate, host } = createFoxgate({
-    tools: { ...toolSpecs(tools), ...(options.pay ? payTools() : {}) },
+    tools: { ...toolSpecs([...tools, askUser]), ...(options.pay ? payTools() : {}) },
     ...(options.publicSuffix ? { publicSuffix: options.publicSuffix } : {}),
     ...(options.ruleStore ? { ruleStore: options.ruleStore } : {}),
     onDecision: async ({ kind, action, decision }) => {
@@ -297,6 +342,7 @@ export function createAgent(options: AgentOptions): Agent {
     const grants: string[] = [];
     try {
       const tab: TabInfo = input.tabId === undefined ? {} : await browser.tabs.get(input.tabId);
+      const own = !input.mind;
       // A tab with no web page gets no tab grants. The extra tools, such as the Space, still work.
       let domain = webHost(tab.url);
       if (input.loan && tab.cookieStoreId !== input.loan.cookieStoreId) return await refuse("loan-mismatch", "The tab is not in the lent container.");
@@ -411,7 +457,6 @@ export function createAgent(options: AgentOptions): Agent {
         if (domain) grants.push((await host.addGrant({ scope: "read", domains: [domain], tools: ["pay"], expiresAt })).id);
         if (domain && !off) grants.push((await host.addGrant({ scope: "pay", domains: [domain], tools: [PAY_TOOL], spendCap: { value: cap, currency: GATE_CURRENCY.USDC ?? "XTS" }, approval: "always", expiresAt })).id);
       }
-      const own = !input.mind;
       // The Google tools (optIn): a schedule that opted in gets them with no ask. Else the first call of
       // each one in a run waits for a human, and a loan or an outside agent gets none (G18, G30).
       const asking = new Map<string, string>();
@@ -424,6 +469,9 @@ export function createAgent(options: AgentOptions): Agent {
       }
       // open_site: one grant that always asks, and no rules (OS1).
       if (opens) grants.push((await host.addGrant({ scope: "read", domains: [OPEN_DOMAIN], tools: [OPEN_TOOL], approval: "always", expiresAt })).id);
+      // ask_user: foxmate's own planner, not on a loan, unless the user turned questions off (AQ4).
+      const asks = own && !loan && input.settings.ask !== false;
+      if (asks) grants.push((await host.addGrant({ scope: "read", domains: [USER_DOMAIN], tools: [ASK_USER], expiresAt })).id);
       // foxmate's own planner gets the tab and the run's sites in its system message (G23), only the
       // tools that hold a grant plus finish (G25, G36), and gate denials of a step outside the grants as a result (G26-G28).
       // An outside agent over foxbridge keeps every tool and every denial as a stop (G29).
@@ -431,13 +479,13 @@ export function createAgent(options: AgentOptions): Agent {
       // only once a tab is open (OS6).
       const pageTools = tabTools.filter((t) => scopes.includes(t.scope));
       const offered = own
-        ? [...(domain || opens ? pageTools : []), ...granted.map((e) => e.tool), ...(paying && domain ? [paying] : []), ...(opens ? [openSite] : [])]
+        ? [...(domain || opens ? pageTools : []), ...granted.map((e) => e.tool), ...(paying && domain ? [paying] : []), ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])]
         : tools;
-      const visible = new Set([...(domain ? pageTools : []), ...granted.map((e) => e.tool), ...(paying && domain ? [paying] : []), ...(opens ? [openSite] : [])].map((t) => t.name));
+      const visible = new Set([...(domain ? pageTools : []), ...granted.map((e) => e.tool), ...(paying && domain ? [paying] : []), ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])].map((t) => t.name));
       // The system and goal messages stay as they are, and each request starts with the one before it,
       // so a model can reuse its prompt cache. A tab note goes at the end of the newest message only when the
       // tab, its title or the sites change. `notes` maps a foxloop history index to the note after it (G31).
-      const rules = plannerRules({ canOpen: opens });
+      const rules = plannerRules({ canOpen: opens, canAsk: asks });
       const notes = new Map<number, string>();
       let lastNote = "";
       const withContext = async (messages: Message[]): Promise<Message[]> => {
@@ -535,11 +583,14 @@ export function createAgent(options: AgentOptions): Agent {
       runEmit = noEvent;
       runSignal = undefined;
       approvals.cancelAll();
+      // A question that still waits ends with the run (AQ2).
+      for (const resolve of questions.values()) resolve(undefined);
+      questions.clear();
       for (const id of grants) await host.revokeGrant(id).catch(() => undefined);
       busy = false;
       await trail.append({ actor: "foxmate", kind: "run.end", data: {} }).catch(() => undefined);
     }
   }
 
-  return { gate, host, approvals, get busy() { return busy; }, run };
+  return { gate, host, approvals, get busy() { return busy; }, run, reply };
 }

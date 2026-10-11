@@ -4,7 +4,8 @@
 // plain words; the raw tool call sits behind "Details". The fox follows the
 // run state. The E2E driver reads this DOM: #conversation > li, .goal,
 // .steps li (the label first), li.ask with pre, .detail and
-// .row button[data-answer], and .end.
+// .row button[data-answer], li.question with textarea and
+// button[data-reply], and .end.
 import { logins, rules } from "./engine.js";
 import { runState, setRunState } from "./fox.js";
 import { details, fieldsOf, plain, sendsTo } from "./plain.js";
@@ -263,6 +264,53 @@ function handoff(event) {
   state("needs-approval", `Sign in on ${event.host}, then foxmate goes on.`);
 }
 
+// The planner's question: a text box, Send and Skip. The answer goes back as the tool result (AQ1).
+function question(event) {
+  const li = document.createElement("li");
+  li.className = "question";
+  li.dataset.questionId = event.id;
+  const head = document.createElement("div");
+  head.className = "ask-head";
+  const label = document.createElement("strong");
+  label.className = "site";
+  label.textContent = "foxmate asks you";
+  head.append(label);
+  const what = document.createElement("p");
+  what.className = "text";
+  what.textContent = event.question;
+  const box = document.createElement("textarea");
+  box.rows = 2;
+  box.setAttribute("aria-label", "Your answer");
+  const row = document.createElement("div");
+  row.className = "row";
+  const answer = (text) => {
+    port.postMessage({ op: "reply", id: event.id, ...(text ? { text } : {}) });
+    box.remove();
+    settle(li, text ? `You answered: ${text}` : "Skipped.");
+    state("thinking");
+  };
+  for (const [text, kind] of [["Skip", "skip"], ["Send", "send"]]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = text;
+    button.dataset.reply = kind;
+    button.className = kind === "send" ? "primary" : "ghost";
+    button.addEventListener("click", () => answer(kind === "send" ? box.value.trim() : ""));
+    row.append(button);
+  }
+  box.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && box.value.trim()) {
+      e.preventDefault();
+      answer(box.value.trim());
+    }
+  });
+  li.append(head, what, box, row);
+  steps?.append(li);
+  li.scrollIntoView({ block: "nearest" });
+  box.focus();
+  state("needs-approval", "foxmate asks you a question");
+}
+
 const DECISION = { allow: "Allowed", deny: "Blocked", ask: "Asks you" };
 const raw = (name, args) => `${name}(${typeof args === "string" ? args : JSON.stringify(args ?? {})})`;
 
@@ -290,6 +338,13 @@ function show(event) {
   } else if (event.type === "check") line(event.ok ? "Check passed" : "Check failed", ` ${event.checks.map((c) => `${c.ok ? "ok" : "not ok"} ${c.part}`).join("; ")}`, event.ok ? "ok" : "bad");
   else if (event.type === "refused") line("Refused", ` ${event.message}`, "bad");
   else if (event.type === "handoff") handoff(event);
+  else if (event.type === "question") question(event);
+  else if (event.type === "answer") {
+    // Answered on another page, or the run ended: no more box (AQ2).
+    const li = document.querySelector(`li.question[data-question-id="${CSS.escape(event.id)}"]`);
+    li?.querySelector("textarea")?.remove();
+    if (li) settle(li, event.answered ? "Answered." : "No answer.");
+  }
   else if (event.type === "login-fill") line(event.status === "filled" ? "Filled" : "Not filled", event.status === "filled" ? ` the saved login on ${event.host}. Press the page's sign-in button.` : ` ${event.status}${event.reason ? ` (${event.reason})` : ""}.`, event.status === "filled" ? "ok" : "bad");
   else if (event.type === "handoff-end") {
     const ok = event.status === "signed-in";
@@ -324,6 +379,11 @@ function newRun(goal) {
 }
 
 function end(result) {
+  // A question that still waits ends with the run (AQ2).
+  for (const li of document.querySelectorAll("#conversation li.question:not(.settled)")) {
+    li.querySelector("textarea")?.remove();
+    settle(li, "Ended.");
+  }
   const text = { done: `Done: ${result.summary ?? ""}`, blocked: `Blocked (${result.reason}): ${result.message ?? ""}`, refused: `Refused (${result.reason}): ${result.message ?? ""}`, aborted: "Stopped.", restarted: "foxmate restarted. The task runs again from its goal." }[result.status] ?? result.status;
   const p = document.createElement("p");
   p.className = `end ${result.status === "done" ? "done" : "bad"}`;

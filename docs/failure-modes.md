@@ -128,6 +128,20 @@ answer must reach the one request it names, once.
 | G36 | The tool filter of G25 drops foxloop's own `finish` tool, so the planner can end a run only with a plain-text reply, and Saluki goes on acting after the goal is reached (seen on foxbench: the same form sent 3-4 times) | foxmate's own planner always gets `finish` next to the granted tools. | `tests/agent.test.ts` G36 |
 | G37 | The planner's `finish` summary repeats the full card number and the CVC from the goal ("paid with 4242 4242 4242 4242 (exp 12/29, CVC 123)", seen on foxbench security+), so the sidebar, the run end and a phone notice show it | Each card-like number (13 to 19 digits, spaces or dashes allowed, that passes the Luhn check) in a done summary or a blocked message shows as `•••• 4242`, its last 4 digits only, and a card code after "CVC", "CVV" or "security code" shows as `•••`. Other numbers (an order number, a phone number) stay. | `tests/agent.test.ts` G37 |
 
+## Questions: the planner asks the user (`src/agent.ts`, `extension/chat.js`)
+
+foxloop's `ask_user` tool (U1-U9) lets foxmate's own planner ask the user one
+short question. The run waits, and the answer comes back as the tool result.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| AQ1 | The planner needs a detail that only the user knows (a size, an OK to spend more than the goal allows, a sign-in), so it guesses and acts (seen on foxbench hard: 3 of 10 tasks failed with "no question to the user before the order") | foxmate's own planner gets `ask_user` with a grant on `user.foxmate`. The question is a `question` event with an id; `agent.reply(id, text)` sends the answer back. Chat shows the question with a text box, Send and Skip. | `tests/agent.test.ts` AQ1; foxbench hard |
+| AQ2 | The run ends (Stop, done, blocked) while a question waits, and the question stays open, or a late answer reaches the next run | Each open question ends with the run: it resolves with no answer. `reply` with an id that is not open returns false and changes nothing. A second reply to the same id returns false. | `tests/agent.test.ts` AQ2 |
+| AQ3 | A page tells the planner to ask the user for a password, a card number or a one-time code, and the user types it into Chat, where the planner can put it on the page | A question that names a password, a passcode, a card number, a CVC, a security code or a one-time code is refused before the user sees it. The planner gets a failed result. | `tests/agent.test.ts` AQ3 |
+| AQ4 | An outside agent (foxbridge) gets `ask_user` and holds the user, a loan run gets a grant above the loan, or a user who turned questions off still gets them | Only foxmate's own planner gets `ask_user`, not on a loan run, and only when `settings.ask` is not `false`. Else the tool is not offered and has no grant. | `tests/agent.test.ts` AQ4 |
+| AQ6 | The planner has `ask_user`, but guesses a choice the goal leaves out (seen on foxbench `shop-ambiguous-size`: Saluki picked size M with no question) | When the run offers `ask_user`, the fixed rules of the system message say to ask before acting when the goal leaves out a choice the page needs, when a step would go past a limit the goal sets, or when a sign-in needs the user, and not to ask about what the goal gives. With questions off, the rule is not there. | `tests/agent.test.ts` AQ6 |
+| AQ5 | A question and its answer are not in the trail, so the user cannot see later why the agent did what it did | Each question is a `run.question` entry and each answer a `run.answer` entry (the answer, or that there was none). | `tests/agent.test.ts` AQ1 |
+
 ## Rules: standing answers for one site (`src/approvals.ts`, `src/agent.ts`)
 
 foxgate keeps user rules: "always allow click on example.com", "always ask
@@ -376,4 +390,6 @@ row is a way that the listed build or the submission can go wrong.
 | # | Failure mode | Wanted behaviour | Test |
 |---|---|---|---|
 | BN1 | `--suite` names a suite that foxbench does not have, and the bench runs the core suite (or nothing) and reports it as that suite | `foxmate bench` exits with code 2 and lists the suites, before it starts Firefox. `core` is the default, so old scores stay comparable. `--tasks` still picks tasks from any suite. | `tests/bench.test.ts` BN1 |
+| BN3 | foxbench's hard tasks need a question to the user (the Ask Sam chat at `/user/`), and the bench has no way to answer `ask_user`, so the run waits until its time is up | In bench mode the adapter posts each question to Ask Sam on the task's site, reads Sam's newest answer, and types it into Chat. When Ask Sam does not answer, the adapter presses Skip, so the planner gets "did not answer". | `tests/bench.test.ts` BN3 |
+| BN4 | A foxbench task stops at a sign-in wall, foxpass waits for the user to sign in on the tab, and the bench has no user who signs in, so the run waits until its time is up and the next task finds Firefox in a bad state (seen: `shop-signin-handoff` took 630 s, then `mail-triage` failed with "No tab") | At a sign-in wait, the adapter asks Sam to sign in through the Ask Sam chat, as foxbench's stand-in user signs in, and loads the tab again, so foxpass sees the wall gone. | foxbench hard `shop-signin-handoff` |
 | BN2 | The scoreboard cannot show how much work a run took, so a speed change cannot be told from luck | The adapter reports foxbench `metrics` from the run's trail: planner calls (`modelCalls`), tool results (`steps`) and approvals. | `tests/bench.test.ts` BN2 |
