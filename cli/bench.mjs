@@ -21,6 +21,12 @@ export function policy(name, goal) {
   return (ask) => ((`${ask.detail} ${ask.text}`.match(EMAIL) ?? []).every(named) ? "approve" : "deny");
 }
 
+/** foxbench metrics from one run: planner calls, tool results and approvals (BN2). */
+export function runMetrics(run) {
+  const count = (kind) => run.kinds.filter((k) => k === kind).length;
+  return { modelCalls: count("loop.plan"), steps: count("loop.tool-result"), approvals: run.approvals.length };
+}
+
 /** The foxbench adapter. `planner` is foxmate's settings without the script. */
 export function foxmateAdapter(session, { planner, approve = "careful", timeoutMs = 600_000, name } = {}) {
   let tab;
@@ -33,7 +39,7 @@ export function foxmateAdapter(session, { planner, approve = "careful", timeoutM
       try {
         const run = await runGoal(session, { page: tab, goal, settings, answer: policy(approve, goal), timeoutMs });
         const approvals = run.approvals.map((a) => `${a.answer}: ${a.detail || a.text}`.slice(0, 160));
-        return { done: run.done, log: [run.status, ...approvals].join("\n") };
+        return { done: run.done, log: [run.status, ...approvals].join("\n"), metrics: runMetrics(run) };
       } finally {
         await tab.close().catch(() => undefined);
       }
