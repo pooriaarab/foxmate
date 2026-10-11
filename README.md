@@ -212,7 +212,7 @@ back. It honors "reduce motion".
 
 | View | What it does |
 |---|---|
-| Chat | A goal box for the target tab, ideas to start, and each run as a conversation: the planner, each plan, gate decision, approval card (the site, one line of what happens, and Deny, Always allow and Approve; the form and the exact action sit behind Details), result and the final check. "Your turn" at a sign-in step. With no web page open, a goal still runs: it asks before it opens each site in a new tab. A mail or calendar read asks once per run. The microphone button fills the goal box from speech. The target menu shares the tab with Claude Code. |
+| Chat | A goal box for the target tab, ideas to start, and each run as a conversation: the planner, each plan, gate decision, approval card (the site, one line of what happens, where a form fill sends, and Deny, Always allow and Approve; the form's fields and the exact action sit behind Details), result and the final check. "Your turn" at a sign-in step. With no web page open, a goal still runs: it asks before it opens each site in a new tab. A mail or calendar read asks once per run. The microphone button fills the goal box from speech. The target menu shares the tab with Claude Code. |
 | Today | The goal tasks (running, waiting for you, finished), and schedules such as "every day at 08:00, open my calendar page and list today's meetings". |
 | Lend | Lend the target tab's site with a scope, a time limit and an allow list. Run a goal in the lent tab, revoke it, and see the blocked requests. |
 | Space | Files for the planner's Python. Network: off. |

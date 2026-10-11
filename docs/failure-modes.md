@@ -196,6 +196,8 @@ tab, the active tab is the app itself.
 | UI7 | The onboarding's saved-login form keeps the password in the page, or saves it in clear | The form uses the Settings path (`login-save`). The field clears at the save (LV12). | E2E app UI7 |
 | UI8 | A goal with no web page open stops at "Open a web page first" | The goal starts with no tab. The run asks before it opens a site (OS1-OS8). | E2E open |
 | UI9 | The onboarding hides the fast helper, or makes it look required, so a user without a second model server thinks foxmate cannot run | The model step shows the helper as a row marked optional, with its start command and whether it answers. Continue depends only on the planner. | E2E app UI9 |
+| UI10 | The approval card for a form fill shows the site and "Fill in and send the form". A look-alike form, or a form that posts to another path or site, gets a yes for data the user never saw leave | Under the one line, the card says "Sends to <host><path>", from foxloop's preview of the form (`action.args.form`, foxloop G16). Details lists each field that gets a value, with sensitive values masked as foxpaw gives them. When foxpaw found no destination, the card says that nothing will be sent. The card stays one icon, one name and one line, with the destination as a short second line. | Isolated `tests/card.test.ts`; screenshot |
+| UI11 | A phone approval for a form fill shows the tool and the site, and the destination only inside the JSON | The phone's title names the destination ("sends to <host><path>"), and its detail lists the fields after the exact action. | Isolated `tests/card.test.ts`; E2E phone F2 |
 
 ## Sidebar link: the background page lifecycle
 
