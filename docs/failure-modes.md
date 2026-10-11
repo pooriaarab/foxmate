@@ -356,3 +356,10 @@ row is a way that the listed build or the submission can go wrong.
 |---|---|---|
 | AR-U1 | A `local_hosts` reason for a host permission also clears a test content script on the same pattern | Each reason names its use (`host_permission`, `content_script`, `web_accessible_resource`, `externally_connectable`); a use without its own reason stops the check |
 | AR-U2 | `local_hosts` keeps a reason for a use that the release build does not have | The check stops and names the pattern and the use |
+
+## Bench command (`cli/foxmate.mjs`, `cli/bench.mjs`)
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| BN1 | `--suite` names a suite that foxbench does not have, and the bench runs the core suite (or nothing) and reports it as that suite | `foxmate bench` exits with code 2 and lists the suites, before it starts Firefox. `core` is the default, so old scores stay comparable. `--tasks` still picks tasks from any suite. | `tests/bench.test.ts` BN1 |
+| BN2 | The scoreboard cannot show how much work a run took, so a speed change cannot be told from luck | The adapter reports foxbench `metrics` from the run's trail: planner calls (`modelCalls`), tool results (`steps`) and approvals. | `tests/bench.test.ts` BN2 |
