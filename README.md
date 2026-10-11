@@ -134,9 +134,9 @@ One goal, step by step:
 6. Once the run holds private data (your mail or calendar, a Space file, or
    memory notes in the goal), foxgate also asks you before each typing and
    each page that foxmate opens, for the rest of the run. Those are the ways
-   a page could make the planner carry the data out. Mail and calendar tools
-   work on a web tab only when you tick "This goal may read my mail and
-   calendar".
+   a page could make the planner carry the data out. The first mail read
+   and the first calendar read of a run each ask you. A schedule that you
+   set to read mail asks nothing.
 7. Before each page read, foxpass scans the tab. On a sign-in, code,
    passkey, CAPTCHA or consent step, the run waits. Chat says "Sign in on
    this tab, then the agent goes on." It goes on when foxpass sees that you

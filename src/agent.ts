@@ -361,8 +361,16 @@ export function createAgent(options: AgentOptions): Agent {
         if (domain && !off) grants.push((await host.addGrant({ scope: "pay", domains: [domain], tools: [PAY_TOOL], spendCap: { value: cap, currency: GATE_CURRENCY.USDC ?? "XTS" }, approval: "always", expiresAt })).id);
       }
       const own = !input.mind;
-      const granted = extra.filter((e) => scopes.includes(e.tool.scope) && (!e.optIn || input.allowPrivate || !domain));
-      for (const { tool, domain: on } of granted) grants.push((await host.addGrant({ scope: tool.scope, domains: [on], tools: [tool.name], expiresAt })).id);
+      // The Google tools (optIn): a schedule that opted in gets them with no ask. Else the first call of
+      // each one in a run waits for a human, and a loan or an outside agent gets none (G18, G30).
+      const asking = new Map<string, string>();
+      const granted = extra.filter((e) => scopes.includes(e.tool.scope) && (!e.optIn || input.allowPrivate || (own && !loan)));
+      for (const { tool, domain: on, optIn } of granted) {
+        const ask = optIn && !input.allowPrivate;
+        const { id } = await host.addGrant({ scope: tool.scope, domains: [on], tools: [tool.name], expiresAt, ...(ask ? { approval: "always" as const } : {}) });
+        grants.push(id);
+        if (ask) asking.set(tool.name, id);
+      }
       // open_site: one grant that always asks, and no rules (OS1).
       if (opens) grants.push((await host.addGrant({ scope: "read", domains: [OPEN_DOMAIN], tools: [OPEN_TOOL], approval: "always", expiresAt })).id);
       // foxmate's own planner gets the tab and the run's sites in its system message (G23), only the
@@ -433,6 +441,14 @@ export function createAgent(options: AgentOptions): Agent {
         if (event.type === "tool-result") lastOk = event.ok;
         if (event.type === "tool-result" && event.ok) worked += 1;
         if (event.type === "tool-result" && event.ok && privateTools.has(event.name)) await goPrivate(event.name);
+        // The human approved this Google tool once: the rest of this run reads with no ask (G30).
+        const askId = event.type === "tool-result" ? asking.get(event.name) : undefined;
+        if (askId && event.type === "tool-result") {
+          asking.delete(event.name);
+          const spec = extra.find((e) => e.tool.name === event.name)!;
+          await host.revokeGrant(askId).catch(() => undefined);
+          grants.push((await host.addGrant({ scope: spec.tool.scope, domains: [spec.domain], tools: [spec.tool.name], expiresAt })).id);
+        }
         if (event.type === "done") end = { status: "done", summary: event.summary };
         if (event.type === "blocked") end = { status: "blocked", reason: event.reason, message: event.message };
       }

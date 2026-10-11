@@ -166,8 +166,9 @@ const agent = createAgent({
   browser, trail, memory, publicSuffix, ruleStore: storageAreaStore(browser.storage.local), maxSteps: 30, pay: payOptions, pass, redact: (text) => logins.redact(text),
   extraTools: [
     // The Space's files and the user's mail are private data: after either, foxmate asks
-    // before each typing and each page it opens (G16). Mail needs the goal to opt in on a web tab (G18).
+    // before each typing and each page it opens (G16).
     { tool: spaceTool(space), domain: SPACE_DOMAIN, private: true },
+    // Mail and calendar ask once per run, unless a schedule opted in (G18, G30).
     ...googleTools({
       enabled: googleOn,
       // Each body passes foxshield first; a mail says which part the planner got (MS1-MS5).
@@ -381,7 +382,8 @@ browser.runtime.onConnect.addListener((port) => {
         // A goal with no tab starts with no host; the run asks before it opens a site (OS1-OS8).
         const tabId = loan?.tabId ?? message.tabId;
         const startUrl = tabId === undefined ? undefined : (await browser.tabs.get(tabId).catch(() => ({}))).url;
-        await runner.start("goal", { goal: message.goal, ...(message.tabId === undefined ? {} : { tabId: message.tabId }), startUrl, allowPrivate: Boolean(message.allowPrivate), ...(message.loanId ? { loanId: message.loanId } : {}) });
+        // Chat sends no allowPrivate: a mail or calendar read asks in the run (G18). Only a schedule opts in.
+        await runner.start("goal", { goal: message.goal, ...(message.tabId === undefined ? {} : { tabId: message.tabId }), startUrl, ...(message.loanId ? { loanId: message.loanId } : {}) });
       }
       else if (message.op === "answer") {
         const via = message.via === "phone" ? "phone" : "sidebar";
