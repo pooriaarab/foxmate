@@ -12,59 +12,59 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0(yauzl@3.4.0)
       foxbench:
-        specifier: ^0.1.0
-        version: 0.1.0(zod@4.6.5)
+        specifier: ^0.1.2
+        version: 0.1.2(zod@4.6.5)
       foxden:
-        specifier: npm:foxden-sandbox@^0.1.0
-        version: foxden-sandbox@0.1.0
+        specifier: npm:foxden-sandbox@^0.1.2
+        version: foxden-sandbox@0.1.2
       foxgate:
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.1.3
+        version: 0.1.3
       foxlend:
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.1.2
+        version: 0.1.2
       foxlens:
-        specifier: ^0.1.0
-        version: 0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1))
+        specifier: ^0.1.2
+        version: 0.1.2(@huggingface/transformers@4.3.1(@types/node@24.19.1))
       foxlink:
-        specifier: npm:foxlink-oauth@^0.1.0
-        version: foxlink-oauth@0.1.0
+        specifier: npm:foxlink-oauth@^0.1.2
+        version: foxlink-oauth@0.1.2
       foxloop:
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.1.2
+        version: 0.1.2
       foxmemory:
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.1.2
+        version: 0.1.2
       foxmind:
-        specifier: ^0.1.0
-        version: 0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1))
+        specifier: ^0.1.2
+        version: 0.1.2(@huggingface/transformers@4.3.1(@types/node@24.19.1))
       foxnotify:
         specifier: ^0.1.0
-        version: 0.1.0(foxsync@0.1.0)
+        version: 0.1.0(foxsync@0.1.2)
       foxpass:
         specifier: ^0.1.0
         version: 0.1.0
       foxpaw:
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.1.2
+        version: 0.1.2
       foxpay-agent:
         specifier: ^0.1.2
         version: 0.1.2
       foxrunner:
-        specifier: ^0.1.0
-        version: 0.1.0(yauzl@3.4.0)
+        specifier: ^0.1.2
+        version: 0.1.2(yauzl@3.4.0)
       foxshield:
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.1.2
+        version: 0.1.2
       foxsync:
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.1.2
+        version: 0.1.2
       foxtrail:
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.1.2
+        version: 0.1.2
       foxvault:
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.1.2
+        version: 0.1.2
       foxvoice:
         specifier: ^0.1.0
         version: 0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1))
@@ -1610,8 +1610,8 @@ packages:
     resolution: {integrity: sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==}
     engines: {node: '>= 0.6'}
 
-  foxbench@0.1.0:
-    resolution: {integrity: sha512-jSvXvKAbrB5s5dkQ5HYalvg4cmHFh9teMFn4oYuQp3J/XOKDFXLBqReYlHk+NCzQQ/1tBXl9M6sRrbgPvN7+jw==}
+  foxbench@0.1.2:
+    resolution: {integrity: sha512-fvXKHpaJ+WV+kLc6g/faKzGHB8ZWkeByLFh2N4umhE26DRB10wLYGJ7Biq8lt9G7fqvNJpLx13JTVR1N3Z9NmQ==}
     engines: {node: '>=24'}
     hasBin: true
 
@@ -1620,44 +1620,34 @@ packages:
     engines: {node: '>=24'}
     hasBin: true
 
-  foxden-sandbox@0.1.0:
-    resolution: {integrity: sha512-YhrFMPelIlNdxjOp3FMR6xQm0rV+dBz6whnr/eYGwGL2oYWH9Xm1SDStHsOTUkebW1giLe8XiHM2VIc2xx1eqg==}
+  foxden-sandbox@0.1.2:
+    resolution: {integrity: sha512-6ohzYym7ZMrmNrGQAy6CRjYquTAwd3SkcqQ4T2JMrNV4SQdF8tpnzbAOYlx8ASLGHozkrU6aAXvnZ/k3X9IxDA==}
     engines: {node: '>=24'}
 
-  foxgate@0.1.0:
-    resolution: {integrity: sha512-2LcqcDZ5z9nVCHgG/k22qY688Njy53d6e38+mYVY6VpU70iAKQunIK23NUu8lQif3TSrSCaj3XVHpB+lRhOFzQ==}
+  foxgate@0.1.3:
+    resolution: {integrity: sha512-iKKCJK1dZDDLRDKFEWZUDNaEvIKqO47smG1E7GEwtl7yApYjdH9gOMVz6DplBYtGgTGXuwCWu7cru+1WFWmUwg==}
     engines: {node: '>=24'}
 
-  foxlend@0.1.0:
-    resolution: {integrity: sha512-6OzCd7dThP8s0/9wKzmaxheoZ/J9SmlQbhMZy+xQLew1IuvAaw7AxFZC5tugZ+kqk3PttVzkNdHHaC1IRDBgUQ==}
+  foxlend@0.1.2:
+    resolution: {integrity: sha512-2ub9b/sMm7pUv1hUaOkaNd84b+ADz53umnMl7OaxMufK7PSZ4W0ZF3rc6rGX2qyZAvSSgg5DxSfrFfJsQGjxFQ==}
     engines: {node: '>=24'}
 
-  foxlens@0.1.0:
-    resolution: {integrity: sha512-DcY2HcnQUduLdDC0edIAOdH1W4qbnKfloxggwqI8R16C/RUkKqrI80nB40om+yn4Z1sw/nIr4LZuTPArIt2A+Q==}
+  foxlens@0.1.2:
+    resolution: {integrity: sha512-99Qeiqdgkykt0wLsxLXEJ5MI/C/v5pBqoCYZ81PWv/2IkqmUeF5maeih87quljYf5gh6DoAdZwO6LzwoAzEKaQ==}
     engines: {node: '>=24'}
 
-  foxlink-oauth@0.1.0:
-    resolution: {integrity: sha512-v0b3MlcnsHSRp4InDaAUAcmteB2GgOx5RDwsHJA3WivPUiKGuSMPLCTabJPXhelCIrNBAwYJ5lTSqMtN4g9DMw==}
+  foxlink-oauth@0.1.2:
+    resolution: {integrity: sha512-V9sxhOEmk9ls4E65W208ILr5NJbl23pu1/r0vipCgNaAaZ6DzbXYd5SMoK607XaSKWDv1Gr8OR6pyjnejzU69Q==}
     engines: {node: '>=24'}
 
-  foxloop@0.1.0:
-    resolution: {integrity: sha512-NHBOlGoJhRYjAzEpQKUA2PUHK+ZvTKfi0Gf64O36k/ujZWKhdWQuNjVOM4w16HB6QHT9rJz2u4urpyzyBjtD7Q==}
+  foxloop@0.1.2:
+    resolution: {integrity: sha512-EXTVI96J/6tPkFHg4y/USF5NTHGDiTiebBGCAJ7JTCTXRcvc/K1uRPH0gB/VHktyw0VzvFUNVSNuXJj7HVHUjQ==}
     engines: {node: '>=24'}
 
-  foxmemory@0.1.0:
-    resolution: {integrity: sha512-eXVxtb5ST1g2q3cAvVlD0wn59q25mcpThgjRgfeURdcGkm2CbHun+C+HIwi3kDQqt3A5+7IuVvnAlEZOO/smow==}
+  foxmemory@0.1.2:
+    resolution: {integrity: sha512-ZYRzO3O+S85X5lKAF9G+8un0Ug7txPq+UzT0HLmvoxEaOzCg8fwhLGXtBwlpnxjRq/KsvcJiDeELuhUvAU/zeg==}
     engines: {node: '>=24'}
     hasBin: true
-
-  foxmind@0.1.0:
-    resolution: {integrity: sha512-4M6Zu4TT9T5DLCqG9oAb4TUyPU2cwVq4awlUXcrmYl4N6rfP2DnIMYSs4xvniVvuXpNsCVUVEP3G4AhiKXu65w==}
-    engines: {node: '>=24'}
-    hasBin: true
-    peerDependencies:
-      '@huggingface/transformers': ^4.3.1
-    peerDependenciesMeta:
-      '@huggingface/transformers':
-        optional: true
 
   foxmind@0.1.2:
     resolution: {integrity: sha512-grq9qrFaFXIuZwfqyamzyHS0O5ybeVi+BnpRICWHy4kDLqIInBPjM4oHUx1OSO4r5TTntcQ83Io4OrY7Oc/grg==}
@@ -1682,35 +1672,35 @@ packages:
     resolution: {integrity: sha512-aW/UeTirWctpce45g31OJo3q9e3CDnNm/wrOpSvA2F6mJlDzDpCdWdNw4262G6q7w+F6CTiBMG70Keg8yj+c5g==}
     engines: {node: '>=24'}
 
-  foxpaw@0.1.0:
-    resolution: {integrity: sha512-kYYNAOjK60ExTND4JNGkScfXAvY3Uq0KrYuqRfP2gbbjmgX6FMhwrnFRDVWrZWR81gMZKolcdGxxSKvN3guUbw==}
+  foxpaw@0.1.2:
+    resolution: {integrity: sha512-ezAo69RFM6vExgEGsaO37RJ8IY6oY18gUzjQEJwXIeynawQDHdXvHz0zy4csq3amSw++Sk/9adBg1EJLXJWzgA==}
     engines: {node: '>=24'}
 
   foxpay-agent@0.1.2:
     resolution: {integrity: sha512-IJMGkJnfct8ERkB6FuzMoTw+44maKYwlgs+O5XIyWvxF8lT8bnYj4/jY9+pBb1eFbO4UoBJKXFq8Doa8v79SyQ==}
     engines: {node: '>=24'}
 
-  foxrunner@0.1.0:
-    resolution: {integrity: sha512-v9QkrY/TMR/lF/izpF9TuUSLnrjdVZedtLGO9bG5YCDYmbw8mpXNkIeQs8+CUtyF2PHV/8hwshjDL8oNc3ADKQ==}
+  foxrunner@0.1.2:
+    resolution: {integrity: sha512-HYaDzC3sZXmiqFcMvYoYOpkE690fb+fuWbbYZn1EkKG/pYJ5D8zokEqBH5tfjjr9wvueEuSreeescOzyl+T/nA==}
     engines: {node: '>=24'}
     hasBin: true
 
-  foxshield@0.1.0:
-    resolution: {integrity: sha512-cY+7Cr/MNseteH3i/8Fi2KaFpHPH6Q3NZsNSBu9LteSH7C0PDR+sFRRWks0xN+Y4MipIFvXpmwi8oAWfN4YbEQ==}
+  foxshield@0.1.2:
+    resolution: {integrity: sha512-m94XS1VC/z5ccI/7UbfM0y/mGptcSAgJ1JhnxUV2zjb9gw8DsedA88vbjyGbbsVr3MvGMfcspydmeHkYeehrlA==}
     engines: {node: '>=24'}
     hasBin: true
 
-  foxsync@0.1.0:
-    resolution: {integrity: sha512-eLPe4Wm2ENaCwXFLGVVTEC/bG5vCmKy7YsOrrLm1wCFMz48csjSKesheb4d2CLOlHk5UeADdOF6F9ntxmK3PKQ==}
+  foxsync@0.1.2:
+    resolution: {integrity: sha512-i5PFmbyxki+PggjTrZgKQmGDNaxTk/CP0oLEg4Jz6A/h3aq8WevIDZ+Qg7yVwvb+x3T9vaCsoLz0PLqRL4G6LQ==}
     engines: {node: '>=24'}
 
-  foxtrail@0.1.0:
-    resolution: {integrity: sha512-jz2YusCAzyDYgZu9RH+5K14LNkdiayy4ySMLrNiUCmdKVvryYwuMs/4HI6IGfxTedDnwjtSl38sy0SP97BiN7Q==}
+  foxtrail@0.1.2:
+    resolution: {integrity: sha512-ThaG//AvvF1j2a03+oHOmYqpAk/qyNn9oTQ3ApH2MpBK5XwdAIRc/A5QNeU8fLm1kBBbgIFqNnzcVN2SxhToIg==}
     engines: {node: '>=24'}
     hasBin: true
 
-  foxvault@0.1.0:
-    resolution: {integrity: sha512-Hmf21lCYgEgOtSVo3tr3NyCDOqqcXxm88ksEJD55SCc9/pKa3uTu1eVZuYmEXAkMyq3A3MG9KPnQbHetWx9ebQ==}
+  foxvault@0.1.2:
+    resolution: {integrity: sha512-X8OjpwPk/Q866MX9gE31k0FSdC3KQSMwEVhDpdaItNUhwKdzGBJvhxViPP8HPr9i99tqHDmInTzd+ezo0ABlEQ==}
     engines: {node: '>=24'}
 
   foxvoice@0.1.0:
@@ -4188,7 +4178,7 @@ snapshots:
 
   forwarded@0.2.0: {}
 
-  foxbench@0.1.0(zod@4.6.5):
+  foxbench@0.1.2(zod@4.6.5):
     dependencies:
       '@modelcontextprotocol/sdk': 1.32.1(zod@4.6.5)
     transitivePeerDependencies:
@@ -4204,61 +4194,57 @@ snapshots:
       - '@cfworker/json-schema'
       - supports-color
 
-  foxden-sandbox@0.1.0:
+  foxden-sandbox@0.1.2:
     dependencies:
       pyodide: 314.0.7
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  foxgate@0.1.0: {}
+  foxgate@0.1.3: {}
 
-  foxlend@0.1.0:
+  foxlend@0.1.2:
     dependencies:
-      foxgate: 0.1.0
+      foxgate: 0.1.3
 
-  foxlens@0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1)):
+  foxlens@0.1.2(@huggingface/transformers@4.3.1(@types/node@24.19.1)):
     dependencies:
-      foxmind: 0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1))
+      foxmind: 0.1.2(@huggingface/transformers@4.3.1(@types/node@24.19.1))
     transitivePeerDependencies:
       - '@huggingface/transformers'
 
-  foxlink-oauth@0.1.0:
+  foxlink-oauth@0.1.2:
     dependencies:
-      foxgate: 0.1.0
-      foxvault: 0.1.0
+      foxgate: 0.1.3
+      foxvault: 0.1.2
 
-  foxloop@0.1.0:
+  foxloop@0.1.2:
     dependencies:
-      foxgate: 0.1.0
-      foxpaw: 0.1.0
+      foxgate: 0.1.3
+      foxpaw: 0.1.2
 
-  foxmemory@0.1.0: {}
-
-  foxmind@0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1)):
-    optionalDependencies:
-      '@huggingface/transformers': 4.3.1(@types/node@24.19.1)
+  foxmemory@0.1.2: {}
 
   foxmind@0.1.2(@huggingface/transformers@4.3.1(@types/node@24.19.1)):
     optionalDependencies:
       '@huggingface/transformers': 4.3.1(@types/node@24.19.1)
 
-  foxnotify@0.1.0(foxsync@0.1.0):
+  foxnotify@0.1.0(foxsync@0.1.2):
     optionalDependencies:
-      foxsync: 0.1.0
+      foxsync: 0.1.2
 
   foxpass@0.1.0: {}
 
-  foxpaw@0.1.0: {}
+  foxpaw@0.1.2: {}
 
   foxpay-agent@0.1.2:
     dependencies:
       '@noble/curves': 2.4.0
       '@noble/hashes': 2.4.0
-      foxgate: 0.1.0
-      foxvault: 0.1.0
+      foxgate: 0.1.3
+      foxvault: 0.1.2
 
-  foxrunner@0.1.0(yauzl@3.4.0):
+  foxrunner@0.1.2(yauzl@3.4.0):
     dependencies:
       puppeteer-core: 25.12.0(yauzl@3.4.0)
     transitivePeerDependencies:
@@ -4267,19 +4253,19 @@ snapshots:
       - utf-8-validate
       - yauzl
 
-  foxshield@0.1.0:
+  foxshield@0.1.2:
     dependencies:
       linkedom: 0.18.13
     transitivePeerDependencies:
       - canvas
 
-  foxsync@0.1.0: {}
+  foxsync@0.1.2: {}
 
-  foxtrail@0.1.0: {}
+  foxtrail@0.1.2: {}
 
-  foxvault@0.1.0:
+  foxvault@0.1.2:
     dependencies:
-      foxgate: 0.1.0
+      foxgate: 0.1.3
 
   foxvoice@0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1)):
     dependencies:
