@@ -288,6 +288,8 @@ async function runClaimed({ goal, tabId, loanId, taskId, signal, allowPrivate, m
   current = run;
   send({ run: { id: run.id, goal } });
   const onEvent = (event) => {
+    // A run with no tab opened one (open_site): its notices name that tab.
+    if (event.type === "opened") run.tabId = event.tabId;
     run.events.push(event);
     tap?.(event);
     send({ runId: run.id, event });
@@ -342,7 +344,8 @@ runner.define("goal", [{
     // A replay or a retry runs only where the goal started (Q1).
     const started = hostOf(input.startUrl ?? input.url);
     const runTab = input.loanId ? (await lender.listLoans()).find((l) => l.id === input.loanId)?.tabId : tabId;
-    const now = hostOf((await browser.tabs.get(runTab ?? -1).catch(() => ({}))).url);
+    // A goal with no tab has no tab here; tabs.get throws at once on a bad id, so do not call it.
+    const now = runTab === undefined ? undefined : hostOf((await browser.tabs.get(runTab).catch(() => ({}))).url);
     if (started && now !== started) {
       notice("task-stuck", undefined, { taskId: ctx.taskId, goal: input.goal });
       return { ...(await refusedRun("tab-moved", `The tab is on ${now ?? "no web page"}, not on ${started} where this goal started. foxmate did not run it.`)), attempt: ctx.attempt };
@@ -375,8 +378,10 @@ browser.runtime.onConnect.addListener((port) => {
       if (message.op === "run") {
         if (busy()) throw new Error("A run is in progress. Stop it first.");
         const loan = message.loanId ? (await lender.listLoans()).find((l) => l.id === message.loanId) : undefined;
-        const startUrl = (await browser.tabs.get(loan?.tabId ?? message.tabId).catch(() => ({}))).url;
-        await runner.start("goal", { goal: message.goal, tabId: message.tabId, startUrl, allowPrivate: Boolean(message.allowPrivate), ...(message.loanId ? { loanId: message.loanId } : {}) });
+        // A goal with no tab starts with no host; the run asks before it opens a site (OS1-OS8).
+        const tabId = loan?.tabId ?? message.tabId;
+        const startUrl = tabId === undefined ? undefined : (await browser.tabs.get(tabId).catch(() => ({}))).url;
+        await runner.start("goal", { goal: message.goal, ...(message.tabId === undefined ? {} : { tabId: message.tabId }), startUrl, allowPrivate: Boolean(message.allowPrivate), ...(message.loanId ? { loanId: message.loanId } : {}) });
       }
       else if (message.op === "answer") {
         const via = message.via === "phone" ? "phone" : "sidebar";

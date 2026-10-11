@@ -6,7 +6,7 @@ import { Log, MemoryStore, generateKey } from "foxtrail";
 import { describe, expect, it } from "vitest";
 import { createAgent, type AgentEvent, type RunInput } from "../src/agent.js";
 
-const TABS: Record<number, { url: string; cookieStoreId: string; title?: string }> = {
+const TABS: Record<number, { url: string; cookieStoreId: string; title?: string; status?: string }> = {
   3: { url: "http://evil.test/page", cookieStoreId: "firefox-container-9" },
   4: { url: "http://bank.test/inbox", cookieStoreId: "firefox-container-5" },
   1: { url: "http://shop.test/cart", cookieStoreId: "firefox-default", title: "Your cart" },
@@ -16,17 +16,22 @@ const TABS: Record<number, { url: string; cookieStoreId: string; title?: string 
 
 const host = (tabId: () => number) => async () => new URL(TABS[tabId()]?.url ?? "").hostname;
 
-async function setup(options: { recall?: () => Promise<never> } = {}) {
+async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { getDomain(host: string): string | null }; redirect?: Record<string, string>; loading?: boolean } = {}) {
   // Every request to the planner, as text: the redact hook sees each one before it goes out.
   const requests: string[] = [];
   const ran: { tool: string; args: Record<string, unknown>; domain?: string }[] = [];
   const grantsSeen: string[][] = [];
+  // The hosts of the run's grants at each page read, and the tabs that open_site opened.
+  const domainsSeen: string[][] = [];
+  const opened: string[] = [];
+  let nextTab = 100;
   let agentRef: ReturnType<typeof createAgent> | undefined;
   const makeTools = (tabId: () => number): LoopTool[] => [
     {
       name: "snapshot", description: "Read the page.", parameters: { type: "object", properties: {} }, scope: "read", domain: host(tabId),
       run: async () => {
         grantsSeen.push((await agentRef!.host.grants()).map((g) => g.scope));
+        domainsSeen.push([...new Set((await agentRef!.host.grants()).flatMap((g) => g.domains))].toSorted());
         return { ok: true, summary: "Read the page.", untrusted: "A page." };
       },
     },
@@ -55,7 +60,21 @@ async function setup(options: { recall?: () => Promise<never> } = {}) {
   await memory.remember("Party size: 4 people at every table.", { kind: "preference" });
   let problem: string | undefined;
   const agent = createAgent({
-    browser: { tabs: { get: async (id: number) => ({ id, ...TABS[id] }) } },
+    browser: {
+      tabs: {
+        get: async (id: number) => {
+          if (!TABS[id]) throw new Error(`no tab ${id}`);
+          return { id, ...TABS[id] };
+        },
+        create: async ({ url }: { url: string }) => {
+          const id = nextTab++;
+          opened.push(url);
+          TABS[id] = { url: options.redirect?.[url] ?? url, cookieStoreId: "firefox-default", status: options.loading ? "loading" : "complete" };
+          return { id, ...TABS[id] };
+        },
+      },
+    },
+    openMs: 300,
     trail,
     memory: options.recall ? { recall: options.recall } : memory,
     makeTools,
@@ -74,20 +93,22 @@ async function setup(options: { recall?: () => Promise<never> } = {}) {
       requests.push(text);
       return text;
     },
+    ...(options.publicSuffix ? { publicSuffix: options.publicSuffix } : {}),
   });
   agentRef = agent;
   const events: AgentEvent[] = [];
-  const run = (input: Partial<RunInput> & { script?: unknown[] }, answer: "approve" | "deny" = "approve") => agent.run({
-    goal: "Buy the mug", tabId: 1, settings: { planner: "scripted", script: JSON.stringify(input.script ?? []) }, ...input,
+  const run = (input: Partial<RunInput> & { script?: unknown[]; noTab?: boolean }, answer: "approve" | "deny" = "approve") => agent.run({
+    goal: "Buy the mug", ...(input.noTab ? {} : { tabId: 1 }), settings: { planner: "scripted", script: JSON.stringify(input.script ?? []) }, ...input,
     onEvent: (event) => {
       events.push(event);
       if (event.type === "approval-needed") void agent.approvals.answer(event.requestId, answer, "sidebar");
     },
   });
-  return { agent, run, ran, events, trail, grantsSeen, requests, setProblem: (p?: string) => { problem = p; } };
+  return { agent, run, ran, events, trail, grantsSeen, domainsSeen, opened, requests, setProblem: (p?: string) => { problem = p; } };
 }
 
 const finish = { tool: "finish", args: { summary: "Done." } };
+const openSite = (url: string) => ({ tool: "open_site", args: { url } });
 
 describe("agent", () => {
   it("G1: the approval shows the exact action, and only that action runs", async () => {
@@ -285,5 +306,84 @@ describe("agent", () => {
     const loan = await setup();
     await loan.run({ tabId: 2, script: [{ tool: "click", args: { button: "Send" } }, finish] });
     expect(loan.requests[1]).toContain('There is no tool \\"click\\"');
+  });
+
+  it("OS1: with no tab, open_site asks every time, shows the full address, and a rule cannot skip it", async () => {
+    const ruled = await setup({ publicSuffix: { getDomain: (h) => h.split(".").slice(-2).join(".") } });
+    await ruled.agent.host.addRule({ site: "new-tab.foxmate", scope: "read", effect: "allow" }).catch(() => undefined);
+    const end = await ruled.run({ noTab: true, script: [openSite("https://www.bistro.test/book?party=4"), { tool: "snapshot", args: {} }, finish] });
+    expect(end.status).toBe("done");
+    const asked = ruled.events.filter((e) => e.type === "approval-needed");
+    expect(asked.length).toBe(1);
+    expect(asked[0]).toMatchObject({ action: { tool: "open_site", domain: "new-tab.foxmate", scope: "read" } });
+    expect(asked[0] && "exactText" in asked[0] && String(asked[0].exactText)).toContain("https://www.bistro.test/book?party=4");
+    expect(asked[0] && "ruleOffer" in asked[0] && asked[0].ruleOffer).toBeFalsy();
+    expect(ruled.opened).toEqual(["https://www.bistro.test/book?party=4"]);
+    expect(ruled.domainsSeen[0]).toEqual(["new-tab.foxmate", "space.foxmate", "www.bistro.test", "www.googleapis.com"]);
+    const denied = await setup();
+    const no = await denied.run({ noTab: true, script: [openSite("https://www.bistro.test/"), finish] }, "deny");
+    expect(no).toMatchObject({ status: "blocked", reason: "approval-denied" });
+    expect(denied.opened).toEqual([]);
+  });
+
+  it("OS2: a run on a web tab, or on a loan, gets no open_site", async () => {
+    const web = await setup();
+    await web.run({ script: [openSite("https://www.bistro.test/"), finish] });
+    expect(web.requests[1]).toContain('There is no tool \\"open_site\\"');
+    expect(web.opened).toEqual([]);
+    const lent = await setup();
+    await lent.run({ tabId: 2, script: [openSite("https://www.bistro.test/"), finish] });
+    expect(lent.opened).toEqual([]);
+  });
+
+  it("OS3: a second site moves the grants; the first host gets no grant after that", async () => {
+    const { run, domainsSeen } = await setup();
+    const end = await run({ noTab: true, script: [openSite("https://a.test/"), { tool: "snapshot", args: {} }, openSite("https://b.test/"), { tool: "snapshot", args: {} }, finish] });
+    expect(end.status).toBe("done");
+    expect(domainsSeen[0]).toContain("a.test");
+    expect(domainsSeen[1]).toContain("b.test");
+    expect(domainsSeen[1]).not.toContain("a.test");
+  });
+
+  it("OS4: a redirect to another site gets no grant; one inside the site grants the loaded host only", async () => {
+    const away = await setup({ redirect: { "https://bistro.test/": "https://evil.test/win" }, publicSuffix: { getDomain: (h) => h.split(".").slice(-2).join(".") } });
+    await away.run({ noTab: true, script: [openSite("https://bistro.test/"), { tool: "snapshot", args: {} }, finish, finish] });
+    expect(away.events.find((e) => e.type === "tool-result" && e.name === "open_site")).toMatchObject({ ok: false });
+    expect(away.domainsSeen).toEqual([]);
+    const entry = (await away.trail.entries()).find((e) => e.kind === "run.open-site");
+    expect(entry?.data).toMatchObject({ host: "bistro.test", loaded: "evil.test", granted: false });
+    const www = await setup({ redirect: { "https://bistro.test/": "https://www.bistro.test/" }, publicSuffix: { getDomain: (h) => h.split(".").slice(-2).join(".") } });
+    const end = await www.run({ noTab: true, script: [openSite("https://bistro.test/"), { tool: "snapshot", args: {} }, finish] });
+    expect(end.status).toBe("done");
+    expect(www.domainsSeen[0]).toContain("www.bistro.test");
+    expect(www.domainsSeen[0]).not.toContain("bistro.test");
+  });
+
+  it("OS5: an address that is not a plain web address is refused before any approval", async () => {
+    for (const url of ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,hi", "https://user:pass@bistro.test/"]) {
+      const { run, events, opened } = await setup();
+      await run({ noTab: true, script: [openSite(url), finish, finish] });
+      expect(events.some((e) => e.type === "approval-needed")).toBe(false);
+      expect(events.find((e) => e.type === "tool-result")).toMatchObject({ name: "open_site", ok: false, reason: "invalid-args" });
+      expect(opened).toEqual([]);
+    }
+  });
+
+  it("OS6: with no tab, a page tool runs nothing, and the planner is told to open a site first", async () => {
+    const { run, ran, grantsSeen, requests } = await setup();
+    const end = await run({ noTab: true, script: [{ tool: "snapshot", args: {} }, { tool: "click", args: { button: "Buy" } }, { tool: "made_up", args: {} }, finish] });
+    expect(end.status).toBe("blocked");
+    expect(ran).toEqual([]);
+    expect(grantsSeen).toEqual([]);
+    const system = (JSON.parse(requests[0] ?? "[]") as { content: string }[])[0]?.content ?? "";
+    expect(system).toMatch(/no web page/);
+    expect(system).toMatch(/open_site/);
+  });
+
+  it("OS8: a page that does not load gets no grant", async () => {
+    const { run, events, domainsSeen } = await setup({ loading: true });
+    await run({ noTab: true, script: [openSite("https://slow.test/"), { tool: "snapshot", args: {} }, finish, finish] });
+    expect(events.find((e) => e.type === "tool-result" && e.name === "open_site")).toMatchObject({ ok: false });
+    expect(domainsSeen).toEqual([]);
   });
 });
