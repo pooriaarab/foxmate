@@ -3,7 +3,7 @@
 // through foxgate, page text passes foxshield, approvals come from a human,
 // and foxtrail records each step (docs/failure-modes.md G1-G10).
 import { createFoxgate, type Gate, type Host, type PublicSuffix, type Scope, type Store } from "foxgate";
-import { browserTools, createLoop, toolSpecs, type CheckResult, type LoopEvent, type LoopTool, type Message, type MindLike, type ToolContext, type ToolOutput } from "foxloop";
+import { FINISH, browserTools, createLoop, toolSpecs, type CheckResult, type LoopEvent, type LoopTool, type Message, type MindLike, type ToolContext, type ToolOutput } from "foxloop";
 import { GATE_CURRENCY, PAY_TOOL, createFoxpay, payTools, type Foxpay } from "foxpay-agent";
 import type { FoxMemory } from "foxmemory";
 import * as foxpaw from "foxpaw";
@@ -425,7 +425,7 @@ export function createAgent(options: AgentOptions): Agent {
       // open_site: one grant that always asks, and no rules (OS1).
       if (opens) grants.push((await host.addGrant({ scope: "read", domains: [OPEN_DOMAIN], tools: [OPEN_TOOL], approval: "always", expiresAt })).id);
       // foxmate's own planner gets the tab and the run's sites in its system message (G23), only the
-      // tools that hold a grant (G25), and gate denials of a step outside the grants as a result (G26-G28).
+      // tools that hold a grant plus finish (G25, G36), and gate denials of a step outside the grants as a result (G26-G28).
       // An outside agent over foxbridge keeps every tool and every denial as a stop (G29).
       // A run that may open a site holds the tab tools from the start, but the planner sees them
       // only once a tab is open (OS6).
@@ -435,7 +435,7 @@ export function createAgent(options: AgentOptions): Agent {
         : tools;
       const visible = new Set([...(domain ? pageTools : []), ...granted.map((e) => e.tool), ...(paying && domain ? [paying] : []), ...(opens ? [openSite] : [])].map((t) => t.name));
       // The system and goal messages stay as they are, and each request starts with the one before it,
-      // so a model can reuse its prompt cache. A tab note goes after the newest message only when the
+      // so a model can reuse its prompt cache. A tab note goes at the end of the newest message only when the
       // tab, its title or the sites change. `notes` maps a foxloop history index to the note after it (G31).
       const rules = plannerRules({ canOpen: opens });
       const notes = new Map<number, string>();
@@ -449,14 +449,16 @@ export function createAgent(options: AgentOptions): Agent {
         return messages.flatMap((m, i) => {
           const framed = i === 0 && m.role === "system" ? { ...m, content: `${m.content ?? ""}\n${rules}` } : m;
           const after = notes.get(i);
-          return after === undefined ? [framed] : [framed, { role: "user" as const, content: after }];
+          if (after === undefined) return [framed];
+          // A user message after a tool result reads as a new turn, so the note ends the tool result (G35).
+          return m.role === "tool" ? [{ ...framed, content: `${framed.content ?? ""}\n\n${after}` }] : [framed, { role: "user" as const, content: after }];
         });
       };
       const redact = options.redact;
       const plannerMind: MindLike = {
         chat: async (messages, chatOptions) => {
           const framed = await withContext(messages);
-          const shown = own ? { ...chatOptions, tools: chatOptions.tools.filter((d) => visible.has(d.function.name)) } : chatOptions;
+          const shown = own ? { ...chatOptions, tools: chatOptions.tools.filter((d) => d.function.name === FINISH || visible.has(d.function.name)) } : chatOptions;
           return brain.mind.chat(redact ? (JSON.parse(await redact(JSON.stringify(framed))) as Message[]) : framed, shown);
         },
       };
