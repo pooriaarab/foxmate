@@ -19,6 +19,8 @@ foxmate bench [options]
   --model <name>     the model for ollama or llama-server
   --base-url <url>   the server address, for example http://127.0.0.1:11434/v1
   --approve <rule>   careful (default), all or none: how the stand-in human answers
+  --ask <on|off>     on (default): the planner may ask the user, and Ask Sam answers
+  --scout <url|off>  the fast helper model (default http://127.0.0.1:8082/v1), or off
   --tasks <ids>      only these tasks, from any suite, comma-separated
   --timeout <s>      the longest time for one task (default 600)
   --out <dir>        where to write the scoreboard (default artifacts)
@@ -29,7 +31,7 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     planner: { type: "string", default: "scripted" }, model: { type: "string" }, "base-url": { type: "string" },
-    approve: { type: "string", default: "careful" }, suite: { type: "string", default: "core" }, tasks: { type: "string" }, timeout: { type: "string", default: "600" },
+    approve: { type: "string", default: "careful" }, ask: { type: "string", default: "on" }, scout: { type: "string" }, suite: { type: "string", default: "core" }, tasks: { type: "string" }, timeout: { type: "string", default: "600" },
     out: { type: "string", default: "artifacts" }, headed: { type: "boolean", default: false }, firefox: { type: "string" }, help: { type: "boolean" },
   },
 });
@@ -63,7 +65,12 @@ if (values.help || !command) {
     console.error(`--tasks names a task that foxbench does not have. Run "npx foxbench list".`);
     process.exit(2);
   }
-  const planner = { planner: values.planner, ...(values.model ? { model: values.model } : {}), ...(values["base-url"] ? { baseURL: values["base-url"] } : {}) };
+  if (!["on", "off"].includes(values.ask)) {
+    console.error("--ask must be on or off.");
+    process.exit(2);
+  }
+  const scout = values.scout === undefined ? {} : { helper: values.scout === "off" ? { off: true } : { baseURL: values.scout } };
+  const planner = { planner: values.planner, ...(values.model ? { model: values.model } : {}), ...(values["base-url"] ? { baseURL: values["base-url"] } : {}), ...(values.ask === "off" ? { ask: false } : {}), ...scout };
   const session = await startFox({ headless: !values.headed, ...(values.firefox ? { firefox: values.firefox } : {}) });
   try {
     const adapter = foxmateAdapter(session, { planner, approve: values.approve, timeoutMs: Number(values.timeout) * 1000 });

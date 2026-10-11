@@ -16,6 +16,8 @@ export interface BrainSettings {
   /** The address of a model server on this computer. */
   baseURL?: string;
   script?: string;
+  /** False: the planner gets no ask_user tool (AQ4). Default: on. */
+  ask?: boolean;
   /** The fast helper model for the done check. On by default at HELPER_URL; off when it does not answer (B15). */
   helper?: { off?: boolean; baseURL?: string };
 }
