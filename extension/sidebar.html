@@ -136,6 +136,18 @@
         <div class="row"><button id="google-connect" type="button">Connect Google</button></div>
         <p id="google-status" class="muted" role="status"></p>
       </div>
+      <h2>Saved logins (foxvault)</h2>
+      <div id="login-panel">
+        <p class="hint">At a sign-in step, Chat can fill a saved login on its site. Each fill waits for your Approve, with the site and the field. foxvault keeps the password encrypted. The planner and the log get only its handle.</p>
+        <form id="login-form">
+          <label for="login-site">Site</label><input id="login-site" autocomplete="off" required placeholder="bank.example.com" />
+          <label for="login-user">Username or email (optional)</label><input id="login-user" autocomplete="off" />
+          <label for="login-pass">Password</label><input id="login-pass" type="password" autocomplete="off" required />
+          <div class="row"><button id="login-save" type="submit">Save login</button></div>
+        </form>
+        <p id="login-status" class="muted" role="status"></p>
+        <ul id="login-list" class="memories"></ul>
+      </div>
       <h2>Notices (foxnotify)</h2>
       <div id="notice-panel">
         <p class="hint">When a goal needs you, ends, or a schedule runs late, and no sidebar is in view, foxmate shows a notice on this computer. A click opens the tab or the approval. It never approves.</p>
