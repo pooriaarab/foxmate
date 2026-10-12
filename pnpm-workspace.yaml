@@ -8,10 +8,10 @@ allowBuilds:
 # Fox packages younger than pnpm's one-day minimum release age.
 minimumReleaseAgeExclude:
   - foxgate@0.1.3
-  - foxloop@0.1.6 || 0.1.8 || 0.1.9 || 0.1.10
+  - foxloop@0.1.6 || 0.1.8 || 0.1.9 || 0.1.10 || 0.1.11
   - foxnotify@0.1.0
   - foxpass@0.1.0
   - foxvoice@0.1.0
   - foxmind@0.1.3
-  - foxpaw@0.1.6 || 0.1.7 || 0.1.8 || 0.1.9 || 0.1.10
+  - foxpaw@0.1.6 || 0.1.7 || 0.1.8 || 0.1.9 || 0.1.10 || 0.1.11
   - foxbench@0.1.3
