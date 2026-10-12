@@ -72,6 +72,9 @@ export type AgentEvent =
   | { type: "answer"; step: number; id: string; answered: boolean }
   | PassEvent;
 
+/** A tab tool that may sit out a run: `offered` is asked at the start of each run (G46). */
+export type OfferedTool = LoopTool & { offered?: () => Promise<boolean> };
+
 export interface RunEnd {
   status: "done" | "blocked" | "aborted" | "refused";
   summary?: string;
@@ -91,7 +94,7 @@ export interface AgentOptions {
   /** The active loan whose container holds this cookie store, if any. A run on that tab is a loan run (G12). */
   loanFor?: (cookieStoreId: string) => Promise<Loan | undefined>;
   /** More tools on the run's tab, for example a screenshot tool. The tab's grants cover them. */
-  moreTabTools?: (tabId: () => number) => LoopTool[];
+  moreTabTools?: (tabId: () => number) => OfferedTool[];
   /**
    * More tools, for example the Space. Each one names its own domain.
    * `private`: its good result is private data (G16). `optIn`: granted on a
@@ -573,7 +576,10 @@ export function createAgent(options: AgentOptions): Agent {
       // An outside agent over foxbridge keeps every tool and every denial as a stop (G29).
       // A run that may open a site holds the tab tools from the start, but the planner sees them
       // only once a tab is open (OS6).
-      const pageTools = tabTools.filter((t) => scopes.includes(t.scope));
+      // A tool that is off for this run (look with screenshots off) is not offered (G46).
+      const off = new Set<string>();
+      for (const t of tabTools as OfferedTool[]) if (t.offered && !(await t.offered().catch(() => false))) off.add(t.name);
+      const pageTools = tabTools.filter((t) => scopes.includes(t.scope) && !off.has(t.name));
       const offered = own
         ? [...(domain || opens ? pageTools : []), ...granted.map((e) => e.tool), ...(paying && domain ? [paying] : []), ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])]
         : tools;

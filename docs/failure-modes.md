@@ -171,6 +171,7 @@ answer must reach the one request it names, once.
 | G43 | Masking breaks the run: the masked value reaches a field, the planner, the gate or an approval answer | The planner, the tools and foxgate get the whole value. An approval keeps its `requestId` (no string under a key that ends in `id` or `Id` is masked), so an answer still finds its request. | `tests/agent.test.ts` G40 |
 | G44 | The goal allows a range of days ("any departure day from October 20 to October 22"), and the planner searches only the first day and books its cheapest (foxbench `flights-nonstop-window` failed in every run of rounds 2 and 3) | When the goal names a range of days, the rules add one line: search each day of the range, check that the results show the day searched (on foxbench flights a second search from "Change search" keeps the first day, because the page keeps the old date in a hidden field), compare, then choose. Other goals get no such line, so their system message stays the same and the prompt cache holds (G31). | `tests/agent.test.ts` G44 |
 | G45 | foxloop's `fill` carries a card number as a field value, under a control id key ("0:14"), or in its result's `data.filled`, so Details or the trail show it in full, though a single `act` is masked (G40) | maskSecrets masks every string of an event and a trail entry whose key does not end in `id`/`Id`: a control id key is not such a key, so each field value is masked, and so is `value` in `data.filled`. | `tests/agent.test.ts` G45 |
+| G46 | Screenshots are off, but the planner is offered `look`. Each call fails ("Screenshots are off"), and with two other failures the run ends `repeated-failure` (11 calls in the MiniWoB run) | A tab tool can say whether it is offered; `look` is offered only when screenshots are on, checked at the start of each run. | `tests/agent.test.ts` G46 |
 
 ## Questions: the planner asks the user (`src/agent.ts`, `extension/chat.js`)
 
@@ -241,6 +242,7 @@ runs it in a sandbox page with no network and no extension APIs.
 | D3 | A Python error passes the check, so the run says done | `run_python` returns a check that passes only when Python raised no error. | E2E space |
 | D4 | The Space tool works outside its sandbox domain, or a page host grant covers it | It has its own grant, for the domain `space.foxmate` and the tool `run_python` only. | E2E space |
 | D5 | A goal about a file needs a web page in the tab | A run on a tab with no web page gets no tab grants, but the Space tool still works. | E2E space |
+| D6 | The planner uses `run_python` to fetch the web page (`urllib.request.urlopen(<tab address>)`). The sandbox has no network, so the call fails or prints nothing, and the planner tries again until the run ends (66 of 349 planner calls in the external benchmarks) | `run_python` refuses code that opens a network connection (urllib, http.client, requests, socket, pyodide's fetch) before it runs, with one line: Python has no network; read the page with `snapshot`, or open an address with `open_url`. The tool's description says it cannot read web pages. | `tests/space.test.ts` D6 |
 
 ## The app page (`extension/app.html`, `target.js`, `onboarding.js`)
 
