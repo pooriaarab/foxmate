@@ -61,13 +61,35 @@ export function goalPasswords(goal: string | undefined): string[] {
 }
 export const goalGivesPassword = (goal: string | undefined) => goalPasswords(goal).length > 0;
 
-/** Every string in `value` with each password masked as "•••" (HP16). */
-export function maskPasswords<T>(value: T, passwords: readonly string[]): T {
-  const hidden = passwords.filter((p) => p.length >= 2);
-  if (!hidden.length) return value;
+/** The goal with each password it names (the HP14 match) masked as "•••" (HP16). */
+const maskGoal = (goal: string) => goal.replace(GOAL_PASSWORD, (m, p: string) => m.replace(p, "•••")).replace(BARE_PASSWORD, (m, p: string) => m.replace(p.replace(/[,.;:)]+$/, ""), "•••"));
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Every string in `value` with each password masked as "•••" (HP16). A password of 4 or more characters is masked as a
+ * whole word, in any case, also URL-encoded; a shorter one only where a string is that password, where it stands in
+ * double quotes, and in the goal.
+ */
+export function maskPasswords<T>(value: T, passwords: readonly string[], goal?: string): T {
+  const long = [...new Set(passwords.filter((p) => p.length >= 4).flatMap((p) => [p, encodeURIComponent(p)]))];
+  const short = new Set(passwords.filter((p) => p.length > 0 && p.length < 4));
+  if (!long.length && !short.size) return value;
+  const words = long.length ? new RegExp(`(?<![\\p{L}\\p{N}])(?:${long.map(escape).join("|")})(?![\\p{L}\\p{N}])`, "giu") : undefined;
+  const text = (t: string) => {
+    if (short.has(t)) return "•••";
+    let own = goal !== undefined && t === goal ? maskGoal(t) : t;
+    // A short one also where it stands in quotes, as in a call's raw arguments: {"text":"fE4"}.
+    for (const p of short) own = own.split(`"${p}"`).join('"•••"');
+    return words ? own.replace(words, "•••") : own;
+  };
   const walk = (v: unknown): unknown => {
-    if (typeof v === "string") return hidden.reduce((text, p) => text.split(p).join("•••"), v);
+    if (typeof v === "string") return text(v);
     if (Array.isArray(v)) return v.map(walk);
+    if (v instanceof Error) {
+      const copy = new Error(text(v.message));
+      copy.name = v.name;
+      return copy;
+    }
     if (v && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]));
     return v;
   };
@@ -88,7 +110,7 @@ export function createPass(options: PassOptions) {
   let waiting: { tabId: number; emit: (event: PassEvent) => void } | undefined;
 
   /** Waits for the user when the tab shows a wall. Throws HandoffError when the user does not finish. */
-  async function beforeRead(tabId: number, run: { signal?: AbortSignal; emit: (event: PassEvent) => void; goal?: string }): Promise<void> {
+  async function beforeRead(tabId: number, run: { signal?: AbortSignal; emit: (event: PassEvent) => void; goal?: string; host?: string }): Promise<void> {
     let scan;
     try {
       scan = await scanTab(browser, tabId);
@@ -98,7 +120,9 @@ export function createPass(options: PassOptions) {
     }
     hints.set(tabId, scan.scan.fields);
     const all = scan.walls.filter((w) => !signUp(w, scan.scan.fields));
-    const walls = goalGivesPassword(run.goal) ? all.filter((w) => !ANSWERED.has(w.kind)) : all;
+    // Only on the run's own site: a password from the goal never goes to another host (HP18).
+    const own = (host: string) => run.host !== undefined && (host === run.host || host.endsWith(`.${run.host}`));
+    const walls = goalGivesPassword(run.goal) ? all.filter((w) => !(ANSWERED.has(w.kind) && own(w.host))) : all;
     // The log keeps the kinds only, never the goal's password (HP6, HP14).
     if (walls.length < all.length) await log("handoff.skipped", { reason: "goal-password", kinds: all.filter((w) => !walls.includes(w)).map((w) => w.kind) });
     const [wall] = walls;
@@ -143,7 +167,11 @@ export function redactPage(page: Snapshot, hints: FieldInfo[], quotes: string[] 
     return { type: c.type, name: c.name, label: c.label, placeholder: c.placeholder, value: c.value, secret: c.secret, autocomplete: hint?.autocomplete ?? "", inputMode: hint?.inputMode ?? "", maxLength: hint?.maxLength ?? -1 };
   });
   const safe = redactSnapshot({ text: page.text, title: page.title, quotes, fields });
-  const controls = page.controls.map((c, i) => ({ ...c, value: String(safe.fields?.[i]?.value ?? c.value) }));
+  // A control whose value foxpass replaced is marked, so foxloop's send check knows it cannot read it (HP17).
+  const controls = page.controls.map((c, i) => {
+    const value = String(safe.fields?.[i]?.value ?? c.value);
+    return value !== c.value ? ({ ...c, value, redacted: true } as Snapshot["controls"][number]) : { ...c, value };
+  });
   return { page: { ...page, title: safe.title, text: safe.text, controls }, quotes: safe.quotes };
 }
 

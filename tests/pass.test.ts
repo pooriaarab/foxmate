@@ -1,4 +1,4 @@
-// Tests for docs/failure-modes.md HP5, HP7 and HP14. The redaction is foxpass's
+// Tests for docs/failure-modes.md HP5, HP7, HP14, HP17 and HP18. The redaction is foxpass's
 // own; only the tab and foxpaw's snapshot are stubs.
 import type { FieldInfo } from "foxpass";
 import type { Control, Snapshot } from "foxpaw";
@@ -71,7 +71,7 @@ describe("pass", () => {
     const log: { kind: string; data: unknown }[] = [];
     const pass = createPass({ browser: loginTab(), trail: { append: async (e) => { log.push(e as never); } }, timeoutMs: 1000 });
     const events: unknown[] = [];
-    await expect(pass.beforeRead(1, { emit: (e) => events.push(e), goal: 'Enter the username "sam" and the password "Iq" and press login.' })).resolves.toBeUndefined();
+    await expect(pass.beforeRead(1, { emit: (e) => events.push(e), goal: 'Enter the username "sam" and the password "Iq" and press login.', host: "127.0.0.1" })).resolves.toBeUndefined();
     expect(events).toEqual([]);
     expect(log.map((e) => e.kind)).toEqual(["handoff.skipped"]);
     expect(JSON.stringify(log)).not.toContain("Iq");
@@ -81,8 +81,28 @@ describe("pass", () => {
     for (const [otp, goal] of [[false, "Sign in and read my messages."], [true, 'Log in with the password "Iq".']] as const) {
       const pass = createPass({ browser: loginTab(otp), trail: { append: async () => {} }, timeoutMs: 1000 });
       const events: { type: string }[] = [];
-      await expect(pass.beforeRead(1, { emit: (e) => events.push(e), goal })).rejects.toBeInstanceOf(HandoffError);
+      await expect(pass.beforeRead(1, { emit: (e) => events.push(e), goal, host: "127.0.0.1" })).rejects.toBeInstanceOf(HandoffError);
       expect(events.map((e) => e.type)).toEqual(["handoff", "handoff-end"]);
     }
+  });
+
+  it("HP17: redactPage marks each control whose value it replaced", () => {
+    const page: Snapshot = {
+      url: "http://bank.test/verify", title: "Verify", headings: [], frames: [], captcha: false, more: false, text: "",
+      controls: [control("0:1", "Verification", { name: "vc", value: "739204" }), control("0:2", "Search", { name: "q", value: "loans" }), control("0:3", "Code", { name: "c", value: "" })],
+    };
+    const hints = [field({ name: "vc", label: "Verification", autocomplete: "one-time-code" }), field({ name: "c", label: "Code", autocomplete: "one-time-code" })];
+    const { page: safe } = redactPage(page, hints);
+    expect(safe.controls.map((c) => (c as { redacted?: boolean }).redacted ?? false)).toEqual([true, false, false]);
+  });
+
+  it("HP18: a password from the goal answers a wall only on the run's own site", async () => {
+    const goal = 'Log in with the password "Iq".';
+    const away = createPass({ browser: loginTab(), trail: { append: async () => {} }, timeoutMs: 1000 });
+    await expect(away.beforeRead(1, { emit: () => {}, goal, host: "other.test" })).rejects.toBeInstanceOf(HandoffError);
+    const sub = createPass({ browser: loginTab(), trail: { append: async () => {} }, timeoutMs: 1000 });
+    await expect(sub.beforeRead(1, { emit: () => {}, goal })).rejects.toBeInstanceOf(HandoffError);
+    const own = createPass({ browser: loginTab(), trail: { append: async () => {} }, timeoutMs: 1000 });
+    await expect(own.beforeRead(1, { emit: () => {}, goal, host: "127.0.0.1" })).resolves.toBeUndefined();
   });
 });

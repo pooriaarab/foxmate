@@ -261,7 +261,7 @@ export function createAgent(options: AgentOptions): Agent {
   // The trail keeps no card number, code or account number at rest; nothing reads it back for a run (G41).
   // The passwords the current run's goal names: masked in the trail and the events, never in the run (HP16).
   let runPasswords: string[] = [];
-  const trail: Trail = { append: (entry) => options.trail.append(maskSecrets(maskPasswords(entry, runPasswords))) };
+  const trail: Trail = { append: (entry) => options.trail.append(maskSecrets(maskPasswords(entry, runPasswords, runGoal))) };
   let target = 0;
   let busy = false;
   // The newest snapshot the planner got, and the control it typed into last, for the form detail of an approval.
@@ -278,6 +278,8 @@ export function createAgent(options: AgentOptions): Agent {
   let handedOff = false;
   // The current run's goal: a password it names answers a password wall (HP14).
   let runGoal: string | undefined;
+  // The tab's host at the run's start: a password from the goal answers a wall only there (HP18).
+  let runHost: string | undefined;
   // A sign-in wait of the current run ended with no sign-in: the run ends after that tool (HP15).
   let signInEnded: string | undefined;
   const passEmit = (event: PassEvent) => {
@@ -293,7 +295,7 @@ export function createAgent(options: AgentOptions): Agent {
     },
     ...(options.pass ? { fieldHints: options.pass.hints } : {}),
     // Each read, also those inside a form fill, waits for a sign-in first (HP1, HP10).
-    ...(options.pass ? { beforeRead: (tabId: number) => options.pass!.beforeRead(tabId, { emit: passEmit, ...(runGoal ? { goal: runGoal } : {}), ...(runSignal ? { signal: runSignal } : {}) }) } : {}),
+    ...(options.pass ? { beforeRead: (tabId: number) => options.pass!.beforeRead(tabId, { emit: passEmit, ...(runGoal ? { goal: runGoal } : {}), ...(runHost ? { host: runHost } : {}), ...(runSignal ? { signal: runSignal } : {}) }) } : {}),
   });
   const paw = {
     ...shielded,
@@ -437,7 +439,7 @@ export function createAgent(options: AgentOptions): Agent {
 
   async function run(input: RunInput): Promise<RunEnd> {
     // What a page shows masks card numbers and codes; the planner and the tools get the whole value (G40, G43).
-    const emit = (event: AgentEvent) => input.onEvent?.(maskSecrets(maskPasswords(event, runPasswords)));
+    const emit = (event: AgentEvent) => input.onEvent?.(maskSecrets(maskPasswords(event, runPasswords, input.goal)));
     const refuse = async (reason: string, message: string): Promise<RunEnd> => {
       emit({ type: "refused", reason, message });
       await trail.append({ actor: "foxmate", kind: "run.refused", data: { reason, message } });
@@ -456,6 +458,7 @@ export function createAgent(options: AgentOptions): Agent {
       const own = !input.mind;
       // A tab with no web page gets no tab grants. The extra tools, such as the Space, still work.
       let domain = webHost(tab.url);
+      runHost = domain ?? undefined;
       if (input.loan && tab.cookieStoreId !== input.loan.cookieStoreId) return await refuse("loan-mismatch", "The tab is not in the lent container.");
       // A goal from Chat on a lent tab names no loan, but it is a loan run all the same.
       const loan = input.loan ?? (tab.cookieStoreId ? await options.loanFor?.(tab.cookieStoreId) : undefined);
@@ -626,7 +629,8 @@ export function createAgent(options: AgentOptions): Agent {
       // The workflow cache, for foxmate's own planner on a web tab with no loan (WF6, WF8). The key
       // is the tab's origin and the goal with its memory notes, so a new note finds no kept run (WF9, WF11).
       const origin = domain ? new URL(tab.url!).origin : undefined;
-      const caching = own && !loan && Boolean(origin) && Boolean(options.workflows) && input.settings.replay !== false;
+      // A goal that gives a password is never kept: it is the key, the kept goal and maybe a typed step (WF26).
+      const caching = own && !loan && Boolean(origin) && Boolean(options.workflows) && input.settings.replay !== false && !runPasswords.length;
       const exact = caching ? await options.workflows!.get(workflowKey(origin!, goal)).catch(() => undefined) : undefined;
       // No run of this exact goal: a kept run of a goal with the same shape replays with this goal's values (WF12).
       const shaped = caching && !exact?.steps.length ? await options.workflows!.get(shapeKey(origin!, goal)).catch(() => undefined) : undefined;
@@ -773,6 +777,7 @@ export function createAgent(options: AgentOptions): Agent {
       runEmit = noEvent;
       runSignal = undefined;
       runGoal = undefined;
+      runHost = undefined;
       approvals.cancelAll();
       // A question that still waits ends with the run (AQ2).
       for (const resolve of questions.values()) resolve(undefined);
