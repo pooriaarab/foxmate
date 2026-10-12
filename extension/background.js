@@ -17,7 +17,7 @@ import { x402 } from "foxpay-agent";
 import { registerWebAuthnObserver } from "foxpass";
 import { createNotifier, webhookChannel } from "foxnotify";
 import { createBridge } from "./bridge.js";
-import { SPACE_DOMAIN, createAgent, createLogins, createPass, frameBrowser, googleTools, loginGate, lookTool, parsePayees, shieldedMailText, shieldedText, spaceTool, toAtomic } from "../src/index.ts";
+import { SPACE_DOMAIN, createAgent, createLogins, createPass, frameBrowser, googleTools, loginGate, lookTool, maskCards, maskSecrets, parsePayees, shieldedMailText, shieldedText, spaceTool, toAtomic } from "../src/index.ts";
 
 /** foxshield on an HTML string: a parsed document, scanned in static mode (no layout). */
 const sanitizeHtml = (html) => sanitize(scanDocument(new DOMParser().parseFromString(html, "text/html"), { mode: "static" }));
@@ -156,7 +156,7 @@ browser.storage.onChanged.addListener((changes, area) => {
 const inView = new Map();
 function notice(kind, target, run = current) {
   if ([...inView.values()].some(Boolean) || !run) return;
-  notifier.notify({ kind, taskId: run.taskId ?? run.id, title: run.goal, ...(target ? { target } : {}) })
+  notifier.notify({ kind, taskId: run.taskId ?? run.id, title: maskCards(run.goal), ...(target ? { target } : {}) })
     .catch((error) => trail.append({ actor: "foxnotify", kind: "notice.failed", data: { kind, message: error.message } }).catch(() => undefined));
 }
 
@@ -298,10 +298,11 @@ async function runClaimed({ goal, tabId, loanId, taskId, signal, allowPrivate, m
   const loan = loanId ? (await lender.listLoans()).find((l) => l.id === loanId && l.state === "active") : undefined;
   if (loanId && !loan) return { status: "refused", reason: "no-loan", message: "That loan is not active." };
   if (loan) tabId = loan.tabId;
-  const run = { id: crypto.randomUUID(), taskId, goal, tabId, events: [], controller: new AbortController() };
+  // run.goal is what Chat and a notice show: masked (G39). agent.run gets the whole goal.
+  const run = { id: crypto.randomUUID(), taskId, goal: maskCards(goal), tabId, events: [], controller: new AbortController() };
   signal?.addEventListener("abort", () => run.controller.abort(), { once: true });
   current = run;
-  send({ run: { id: run.id, goal } });
+  send({ run: { id: run.id, goal: run.goal } });
   const onEvent = (event) => {
     // A run with no tab opened one (open_site): its notices name that tab.
     if (event.type === "opened") run.tabId = event.tabId;
@@ -436,9 +437,11 @@ browser.runtime.onConnect.addListener((port) => {
 browser.runtime.onMessage.addListener(async (message) => {
   if (message?.op === "trail") {
     const log = await trailReady;
-    return { entries: await log.entries(), verify: await log.verify() };
+    // Entries from before G41 hold the whole value; Activity shows them masked. verify reads the log as kept.
+    return { entries: (await log.entries()).map((e) => ({ ...e, data: maskSecrets(e.data) })), verify: await log.verify() };
   }
-  if (message?.op === "tasks") return { tasks: (await runner.list()).filter((t) => t.name === "goal").slice(0, 20), schedules: await runner.schedules(), waiting: agent.approvals.waiting().length };
+  // foxrunner keeps the whole goal to run the task again; Today shows it masked (G39).
+  if (message?.op === "tasks") return { tasks: maskSecrets((await runner.list()).filter((t) => t.name === "goal").slice(0, 20)), schedules: maskSecrets(await runner.schedules()), waiting: agent.approvals.waiting().length };
   if (message?.op === "schedule") return runner.schedule("goal", { cron: message.cron, input: { goal: message.goal, url: message.url, allowPrivate: Boolean(message.allowPrivate) }, id: `goal-${crypto.randomUUID()}` }).then((schedule) => ({ schedule }), (error) => ({ error: error.message }));
   if (message?.op === "unschedule") return runner.unschedule(message.id).then(() => ({ ok: true }));
   if (message?.op === "cancel-task") return runner.cancel(message.id).then(() => ({ ok: true }));
