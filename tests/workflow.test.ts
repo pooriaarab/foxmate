@@ -3,7 +3,7 @@
 import type { Message } from "foxloop";
 import type { Control, Snapshot } from "foxpaw";
 import { describe, expect, it } from "vitest";
-import { generalStep, goalShape, replayCall, shapeFits, shapeKey, toStep, workflowKey, type WorkflowStep } from "../src/workflow.js";
+import { fillSteps, generalStep, goalShape, replayCall, shapeFits, shapeKey, toStep, workflowKey, type WorkflowStep } from "../src/workflow.js";
 
 const control = (id: string, role: string, label: string, more: Partial<Control> = {}): Control => ({
   id, frameId: 0, node: Number(id.split(":")[1]), role, tag: "button", type: "", label, name: "", placeholder: "", section: "", value: "",
@@ -158,5 +158,23 @@ describe("workflow shapes: one-pass rewrite (WF18-WF21)", () => {
     // A value named twice must be there twice.
     const twice: WorkflowStep = { name: "click", args: {}, control: { role: "link", label: "Rome to Rome", submit: false, must: ["Rome", "Rome"] } };
     expect(replayCall(twice, page(control("0:5", "link", "Rome round trip")), ok, false)).toMatch(/no control/);
+  });
+});
+
+describe("fill (WF22, WF23)", () => {
+  const form = page(control("0:1", "textbox", "Name"), control("0:2", "combobox", "From"), control("0:3", "textbox", "Password", { secret: true }));
+
+  it("WF22: a fill is kept as one act step per field that ran, by role and label", () => {
+    expect(fillSteps([{ controlId: "0:1", op: "type", value: "Sam" }, { controlId: "0:2", op: "select", value: "Toronto (YYZ)" }], form)).toEqual([
+      { name: "act", args: { op: "type", value: "Sam" }, control: { role: "textbox", label: "Name", submit: false } },
+      { name: "act", args: { op: "select", value: "Toronto (YYZ)" }, control: { role: "combobox", label: "From", submit: false } },
+    ]);
+    expect(fillSteps([], form)).toEqual([]);
+  });
+
+  it("WF22, WF23: a field not on the page, or a secret field, keeps nothing", () => {
+    expect(fillSteps([{ controlId: "0:1", op: "type", value: "Sam" }, { controlId: "0:9", op: "type", value: "x" }], form)).toBeUndefined();
+    expect(fillSteps([{ controlId: "0:3", op: "type", value: "hunter2" }], form)).toBeNull();
+    expect(fillSteps([{ controlId: "0:1", op: "type", value: "Sam" }], undefined)).toBeUndefined();
   });
 });

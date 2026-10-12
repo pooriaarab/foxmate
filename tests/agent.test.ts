@@ -4,7 +4,8 @@ import { createMemory, memoryStore } from "foxmemory";
 import type { LoopTool } from "foxloop";
 import { Log, MemoryStore, generateKey } from "foxtrail";
 import { describe, expect, it, vi } from "vitest";
-import { createAgent, type AgentEvent, type RunInput } from "../src/agent.js";
+import { allowsDays, createAgent, plannerRules, unnamedChoice, type AgentEvent, type RunInput } from "../src/agent.js";
+import type { Control, Snapshot } from "foxpaw";
 import type { Workflow, WorkflowStore } from "../src/workflow.js";
 
 // G34: a stand-in fast helper on the scripted brain. `reply` undefined means no helper.
@@ -55,7 +56,12 @@ async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { 
     },
     {
       name: "fill", description: "Type text.", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] }, scope: "fill", domain: host(tabId),
-      run: async (args, ctx) => { ran.push({ tool: "fill", args, domain: ctx.domain }); return { ok: true, summary: "Typed." }; },
+      run: async (args, ctx) => {
+        ran.push({ tool: "fill", args, domain: ctx.domain });
+        // A fill that throws part way: foxloop's result has no data.filled (WF24).
+        if (args.text === "throw") throw new Error("the tab closed");
+        return { ok: true, summary: "Typed." };
+      },
     },
     {
       name: "click", description: "Click a button.", parameters: { type: "object", properties: { button: { type: "string" } }, required: ["button"] }, scope: "submit", domain: host(tabId),
@@ -720,6 +726,16 @@ describe("agent", () => {
     expect(second.events.filter((e) => e.type === "approval-needed").length).toBe(1);
   });
 
+  it("WF24: a fill that throws, with no fields in its result, stops the workflow record", async () => {
+    const kept = new Map<string, Workflow>();
+    const workflows: WorkflowStore = { get: async (k) => kept.get(k), set: async (k, w) => { kept.set(k, w); } };
+    const first = await setup({ workflows });
+    const end = await first.run({ script: [shopPage(1), { tool: "fill", args: { text: "throw" } }, { tool: "click", args: { button: "Pay" } }, finish] });
+    expect(end.status).toBe("done");
+    expect(first.ran.map((r) => r.tool)).toEqual(["open_url", "fill", "click"]);
+    expect(kept.size).toBe(0);
+  });
+
   it("WF2, WF7: a run that did not end done keeps nothing", async () => {
     const kept = new Map<string, Workflow>();
     const workflows: WorkflowStore = { get: async (k) => kept.get(k), set: async (k, w) => { kept.set(k, w); } };
@@ -757,5 +773,45 @@ describe("agent", () => {
     const made = await setup({ workflows });
     expect((await made.run({ goal: "Book a table", script: [shopPage(1), finish] })).status).toBe("done");
     expect(kept.size).toBe(0);
+  });
+});
+
+const choice = (id: string, label: string, more: Partial<Control> = {}): Control => ({
+  id, frameId: 0, node: 1, role: "combobox", tag: "select", type: "", label, name: "", placeholder: "", section: "", value: "",
+  disabled: false, readOnly: false, required: false, offscreen: false, submit: false, dialog: false, autocomplete: false, picker: false, secret: false, guard: "g", ...more,
+});
+describe("AQ7, AQ8, G44: choices and day ranges", () => {
+
+  const sizes = [{ value: "M", label: "M", selected: true }, { value: "L", label: "L", selected: false }, { value: "XL", label: "Extra large", selected: false }];
+  const shop: Snapshot = { url: "http://shop.test/", title: "", text: "", headings: [], frames: [], captcha: false, more: false,
+    controls: [choice("0:8", "Size", { options: sizes, value: "M" }), choice("0:9", "Colour", { options: [{ value: "navy", label: "Navy", selected: false }] }), choice("0:10", "Country", { options: [{ value: "CA", label: "Canada", selected: false }] })] };
+
+  it("AQ7: a size or color that the goal does not name waits for ask_user", () => {
+    expect(unnamedChoice(shop, "Buy me one Merino Hoodie in Navy.", [{ id: "0:8", op: "select", value: "L" }])).toMatch(/does not give the Size\. Call ask_user first/);
+    expect(unnamedChoice(shop, "Buy one hoodie.", [{ id: "0:9", op: "select", value: "navy" }])).toMatch(/Colour/);
+  });
+
+  it("AQ7, AQ8: a value the goal names, its option label, the value now, or another control passes", () => {
+    expect(unnamedChoice(shop, "Buy one hoodie in size L.", [{ id: "0:8", op: "select", value: "L" }])).toBeUndefined();
+    expect(unnamedChoice(shop, "Buy one hoodie, extra large.", [{ id: "0:8", op: "select", value: "XL" }])).toBeUndefined();
+    expect(unnamedChoice(shop, "Buy me one Merino Hoodie in Navy.", [{ id: "0:9", op: "select", value: "navy" }])).toBeUndefined();
+    expect(unnamedChoice(shop, "Buy one hoodie.", [{ id: "0:8", op: "select", value: "M" }])).toBeUndefined();
+    expect(unnamedChoice(shop, "Buy one hoodie.", [{ id: "0:10", op: "select", value: "CA" }])).toBeUndefined();
+    const table = { ...shop, controls: [choice("0:11", "Party size", { options: [{ value: "3", label: "3", selected: false }] })] };
+    expect(unnamedChoice(table, "Book a table for Kim Park.", [{ id: "0:11", op: "select", value: "3" }])).toBeUndefined();
+    expect(unnamedChoice({ ...shop, controls: [choice("0:12", "Choose a colour", { options: [{ value: "red", label: "Red", selected: false }] })] }, "Buy a kite.", [{ id: "0:12", op: "select", value: "red" }])).toMatch(/Choose a colour/);
+    // Typing the value into the select is the same choice.
+    expect(unnamedChoice(shop, "Buy one hoodie.", [{ id: "0:8", op: "type", value: "L" }])).toMatch(/Size/);
+    expect(unnamedChoice(shop, "Buy one hoodie.", [{ id: "0:8", op: "check" }])).toBeUndefined();
+    // "L" is not a whole word of "Leeds".
+    expect(unnamedChoice(shop, "Ship to Leeds.", [{ id: "0:8", op: "select", value: "L" }])).toMatch(/Size/);
+  });
+
+  it("G44: only a goal with a range of days gets the line to check each day", () => {
+    expect(allowsDays("Any departure day from October 20 to October 22, 2026 is fine.")).toBe(true);
+    expect(allowsDays("Leave between May 3 and 5.")).toBe(true);
+    expect(allowsDays("Book a flight from Toronto (YYZ) to London on October 20, 2026.")).toBe(false);
+    expect(plannerRules({ days: true })).toMatch(/Search each day of the range/);
+    expect(plannerRules({})).not.toMatch(/each day/);
   });
 });

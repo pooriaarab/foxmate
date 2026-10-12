@@ -15,7 +15,7 @@ import { BrainError, createBrain, type Brain, type BrainSettings } from "./brain
 import { maskCards, maskSecrets, type Pass, type PassEvent } from "./pass.js";
 import { payTool, type PayOptions, type PayRun } from "./pay.js";
 import { recallNotes, withNotes } from "./recall.js";
-import { generalStep, replayCall, shapeFits, shapeKey, toStep, workflowKey, type WorkflowStep, type WorkflowStore } from "./workflow.js";
+import { fillSteps, generalStep, replayCall, shapeFits, shapeKey, toStep, workflowKey, type WorkflowStep, type WorkflowStore } from "./workflow.js";
 import { shieldedPaw } from "./shield.js";
 
 export interface Trail {
@@ -186,12 +186,19 @@ const helperPrompt = (nonce: string) => [
 ].join("\n");
 
 /** The fixed rules at the end of the system message to foxmate's own planner. The same for the whole run (G23, G31). */
-export function plannerRules({ canOpen = false, canAsk = false }: { canOpen?: boolean; canAsk?: boolean } = {}): string {
+const MONTHS = "January|February|March|April|May|June|July|August|September|October|November|December";
+/** A goal that allows a range of days: "from October 20 to October 22", "between May 3 and 5" (G44). */
+const DAY_RANGE = new RegExp(String.raw`\b(?:from|between)\s+(?:${MONTHS})\s+\d{1,2}(?:,\s*\d{4})?\s+(?:to|and|through|until)\s+(?:(?:${MONTHS})\s+)?\d{1,2}\b`, "i");
+export const allowsDays = (goal: string) => DAY_RANGE.test(goal);
+
+export function plannerRules({ canOpen = false, canAsk = false, days = false }: { canOpen?: boolean; canAsk?: boolean; days?: boolean } = {}): string {
   return [
     "",
     "Work on the open page: read it with the tools, and use what it shows. Do not make up web addresses. Use open_url only for an address on a site that the tab note names.",
     ...(canOpen ? [`To go to another site, call ${OPEN_TOOL} with its address. The user approves each one first. Then foxmate opens it in a new tab, and you work there.`] : []),
     // AQ6: a planner with ask_user still guesses unless the rules say when to ask.
+    // G44: only a goal with a range of days gets this line, so other runs keep their cached prefix.
+    ...(days ? ["The goal allows several days. Search each day of the range, and check that the results show the day you searched. Note the best result of each day, then choose the best of all."] : []),
     ...(canAsk ? [`Before you act, call ${ASK_USER} when the goal leaves out a choice that the page needs (for example a size or a color), when the page shows a cost over a limit that the goal sets (read the total before you pay or send), or when a page needs the user to sign in. Do not guess such a choice. Do not ask about what the goal already gives.`] : []),
   ].join("\n");
 }
@@ -217,6 +224,33 @@ export function plannerContext({ url, title, sites }: { url: string; title: stri
   ].join("\n");
 }
 
+/** A control for a choice that a goal must give: a product's size or color ("Size", "Choose a colour"), not a party size (AQ7). */
+const CHOICE = /^\s*(?:(?:choose|select|pick) (?:an? |the |your )?)?(?:size|colou?r)\b/i;
+const wholeWord = (text: string, word: string) => new RegExp(`(?<![\\p{L}\\p{N}])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").test(text);
+
+/** Why a select must wait for ask_user: a size or color that the goal does not name, and that is not the control's value now (AQ7). */
+export function unnamedChoice(page: Snapshot | undefined, goal: string, picks: { id: string; op: string; value?: string }[]): string | undefined {
+  for (const pick of picks) {
+    if ((pick.op !== "select" && pick.op !== "type") || pick.value === undefined) continue;
+    const c = page?.controls.find((x) => x.id === pick.id);
+    if (!c || !(CHOICE.test(c.label) || CHOICE.test(c.name))) continue;
+    const option = c.options?.find((o) => o.value === pick.value);
+    if (option?.selected || c.value === pick.value) continue;
+    if ([pick.value, option?.label ?? ""].some((v) => v.trim() && wholeWord(goal, v.trim()))) continue;
+    return `The goal does not give the ${c.label || c.name}. Call ${ASK_USER} first. Nothing ran.`;
+  }
+  return undefined;
+}
+
+/** The picks of a prepared act or fill call, for the AQ7 guard. */
+const picksOf = (name: string, args: Record<string, unknown>) => name === "act"
+  ? [{ id: String((args.target as { id?: unknown } | undefined)?.id ?? args.controlId), op: String(args.op), ...(typeof args.value === "string" ? { value: args.value } : {}) }]
+  : ((args.targets ?? []) as { id: string; request: { op: string; value?: string } }[]).map((t) => ({ id: t.id, ...t.request }));
+
+/** The page a fill call was planned on, kept until its result (WF22). */
+interface FillPage { fillPage: true; page: Snapshot | undefined }
+const fillPage = (page: Snapshot | undefined): FillPage => ({ fillPage: true, page });
+
 export function createAgent(options: AgentOptions): Agent {
   const { browser } = options;
   // The trail keeps no card number, code or account number at rest; nothing reads it back for a run (G41).
@@ -229,6 +263,8 @@ export function createAgent(options: AgentOptions): Agent {
   // The current run's events and Stop, for a sign-in wait inside a page read.
   let runEmit: (event: AgentEvent) => void = noEvent;
   let runSignal: AbortSignal | undefined;
+  // The current run offers ask_user and has not asked yet: a size or color the goal leaves out waits for it (AQ7, AQ8).
+  let choiceGuard = false;
   // foxshield flagged a page of the current run: a replay ends there (WF5).
   let tainted = false;
   // The current run waited for a sign-in: the page changed, so a replay ends there (WF11).
@@ -252,6 +288,15 @@ export function createAgent(options: AgentOptions): Agent {
     snapshot: async (tabId: number, api?: ScriptingApi) => (lastPage = await shielded.snapshot(tabId, api)),
   };
   const tabTools = [...(options.makeTools?.(() => target) ?? browserTools({ tabId: () => target, browser: browser as never, paw })), ...(options.moreTabTools?.(() => target) ?? [])]
+    .map((tool) => (tool.name !== "act" && tool.name !== "fill" ? tool : {
+      ...tool,
+      prepare: async (args: Record<string, unknown>, ctx: ToolContext) => {
+        const prepared = tool.prepare ? await tool.prepare(args, ctx) : args;
+        const why = choiceGuard ? unnamedChoice(lastPage, ctx.goal, picksOf(tool.name, prepared)) : undefined;
+        if (why) throw new Error(why);
+        return prepared;
+      },
+    }))
     .map((tool) => (tool.name !== "click" ? tool : {
       ...tool,
       describe: async (args: Record<string, unknown>, ctx: ToolContext) => [await tool.describe?.(args, ctx), formDetail(lastPage, String(args.controlId), lastTyped)].filter(Boolean).join(" "),
@@ -517,7 +562,8 @@ export function createAgent(options: AgentOptions): Agent {
       // The system and goal messages stay as they are, and each request starts with the one before it,
       // so a model can reuse its prompt cache. A tab note goes at the end of the newest message only when the
       // tab or the sites change. `notes` maps a foxloop history index to the note after it (G31).
-      const rules = plannerRules({ canOpen: opens, canAsk: asks });
+      const rules = plannerRules({ canOpen: opens, canAsk: asks, days: allowsDays(input.goal) });
+      choiceGuard = asks;
       const notes = new Map<number, string>();
       let lastTab: { url: string; sites: string[] } | undefined;
       const withContext = async (messages: Message[]): Promise<Message[]> => {
@@ -550,7 +596,7 @@ export function createAgent(options: AgentOptions): Agent {
       const replay = kept?.steps.length ? { steps: kept.steps, at: 0, live: true, from: kept === shaped ? kept.goal : undefined } : undefined;
       // The calls of this run that worked, in order; null once one may not be kept (WF6).
       let record: WorkflowStep[] | null = caching ? [] : null;
-      const pending = new Map<string, WorkflowStep | null | undefined>();
+      const pending = new Map<string, WorkflowStep | FillPage | null | undefined>();
       const replayNext = async (messages: Message[]): Promise<ChatReply | undefined> => {
         if (!replay?.live) return undefined;
         const next = replay.steps[replay.at];
@@ -622,12 +668,26 @@ export function createAgent(options: AgentOptions): Agent {
           emit({ ...event, ...(text ? { exactText: text } : {}), ...withOffer(event.action) });
         } else emit(event);
         if (event.type === "tool-call" && event.name === "act" && (event.args as { op?: string } | undefined)?.op === "type") lastTyped = String((event.args as { controlId?: unknown }).controlId);
+        // The run asked the user: the AQ7 guard steps aside, whatever the answer was (AQ8).
+        if (event.type === "tool-result" && event.name === ASK_USER) choiceGuard = false;
+        if (event.type === "tool-call" && event.name === "fill") {
+          const typed = Object.entries((event.args as { fields?: Record<string, unknown> } | undefined)?.fields ?? {}).filter(([, v]) => typeof v === "string").at(-1);
+          if (typed) lastTyped = typed[0];
+        }
         // The workflow cache keeps each call that worked, by its control's role and label (WF1, WF6, WF7).
-        if (record && event.type === "tool-call" && event.step > 0) pending.set(event.id, event.args && typeof event.args === "object" ? toStep(event.name, event.args as Record<string, unknown>, lastPage) : undefined);
-        if (record && event.type === "tool-result" && event.step > 0 && event.ok) {
-          const step = pending.get(event.id);
-          if (!step) record = null;
-          else record.push(event.name === ASK_USER ? { ...step, answer: event.summary } : step);
+        // A fill is kept from its result, as one act step per field that ran (WF22): here it keeps the page it was planned on.
+        if (record && event.type === "tool-call" && event.step > 0) {
+          pending.set(event.id, event.name === "fill" ? fillPage(lastPage) : event.args && typeof event.args === "object" ? toStep(event.name, event.args as Record<string, unknown>, lastPage) : undefined);
+        }
+        // A fill with no data.filled (it threw part way) leaves the fields that ran unknown: stop recording (WF24).
+        const filled = event.type === "tool-result" && event.name === "fill" ? (event.data as { filled?: { controlId: string; op: string; value?: string }[] } | undefined)?.filled : undefined;
+        const fillDone = event.type === "tool-result" && event.step > 0 && event.name === "fill" ? (filled ? fillSteps(filled, (pending.get(event.id) as FillPage | undefined)?.page) : null) : undefined;
+        const done: WorkflowStep[] | null | undefined = event.type !== "tool-result" || event.step <= 0 ? undefined
+          : event.name === "fill" ? fillDone
+          : event.ok ? (() => { const st = pending.get(event.id) as WorkflowStep | null | undefined; return st && (event.name === ASK_USER ? [{ ...st, answer: event.summary }] : [st]); })() : [];
+        if (record && event.type === "tool-result" && event.step > 0 && (event.ok || event.name === "fill")) {
+          if (!done) record = null;
+          else record.push(...done);
         }
         // Another answer to a kept question ends the replay (WF4).
         if (replay?.live && event.type === "tool-result" && event.name === ASK_USER && event.summary !== replay.steps[replay.at - 1]?.answer) replay.live = false;
