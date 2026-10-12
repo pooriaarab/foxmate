@@ -16,6 +16,8 @@ const LONG = 160;
 let port;
 let steps;
 let runHost = "";
+// This page sent the newest goal, so its box clears when the run shows.
+let startedHere = false;
 // A port that connects again gets the current run once more; show it once.
 const shown = new Set();
 
@@ -369,7 +371,9 @@ function newRun(goal) {
   li.append(bubble, steps);
   $("conversation").append(li);
   $("empty").hidden = true;
-  if ($("goal").value === goal) {
+  // The goal comes masked (G39), so it may differ from the box: clear the box when this page started the run.
+  if (startedHere || $("goal").value === goal) {
+    startedHere = false;
     $("goal").value = "";
     grow();
   }
@@ -439,6 +443,7 @@ export const chat = {
   },
   start(tabId, goal, loanId) {
     $("goal").value = goal;
+    startedHere = true;
     runTab = tabId;
     runHost = "";
     if (tabId !== undefined) browser.tabs.get(tabId).then((tab) => { runHost = hostOf(tab); }, () => undefined);
