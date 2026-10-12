@@ -12,7 +12,7 @@ import type { Provider } from "foxmind";
 import { createApprovals, ruleOffer, type Approvals, type RuleContext, type RuleOffer } from "./approvals.js";
 import { formDetail } from "./form.js";
 import { BrainError, createBrain, type Brain, type BrainSettings } from "./brain.js";
-import { maskCards, type Pass, type PassEvent } from "./pass.js";
+import { maskCards, maskSecrets, type Pass, type PassEvent } from "./pass.js";
 import { payTool, type PayOptions, type PayRun } from "./pay.js";
 import { recallNotes, withNotes } from "./recall.js";
 import { generalStep, replayCall, shapeFits, shapeKey, toStep, workflowKey, type WorkflowStep, type WorkflowStore } from "./workflow.js";
@@ -218,7 +218,9 @@ export function plannerContext({ url, title, sites }: { url: string; title: stri
 }
 
 export function createAgent(options: AgentOptions): Agent {
-  const { browser, trail } = options;
+  const { browser } = options;
+  // The trail keeps no card number, code or account number at rest; nothing reads it back for a run (G41).
+  const trail: Trail = { append: (entry) => options.trail.append(maskSecrets(entry)) };
   let target = 0;
   let busy = false;
   // The newest snapshot the planner got, and the control it typed into last, for the form detail of an approval.
@@ -357,7 +359,8 @@ export function createAgent(options: AgentOptions): Agent {
   };
 
   async function run(input: RunInput): Promise<RunEnd> {
-    const emit = (event: AgentEvent) => input.onEvent?.(event);
+    // What a page shows masks card numbers and codes; the planner and the tools get the whole value (G40, G43).
+    const emit = (event: AgentEvent) => input.onEvent?.(maskSecrets(event));
     const refuse = async (reason: string, message: string): Promise<RunEnd> => {
       emit({ type: "refused", reason, message });
       await trail.append({ actor: "foxmate", kind: "run.refused", data: { reason, message } });
