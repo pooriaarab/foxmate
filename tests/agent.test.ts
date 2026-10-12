@@ -4,6 +4,7 @@ import { createMemory, memoryStore } from "foxmemory";
 import type { LoopTool } from "foxloop";
 import { Log, MemoryStore, generateKey } from "foxtrail";
 import { describe, expect, it, vi } from "vitest";
+import { maskSecrets } from "../src/pass.js";
 import { allowsDays, createAgent, plannerRules, unnamedChoice, type AgentEvent, type RunInput } from "../src/agent.js";
 import type { Control, Snapshot } from "foxpaw";
 import type { Workflow, WorkflowStore } from "../src/workflow.js";
@@ -814,4 +815,12 @@ describe("AQ7, AQ8, G44: choices and day ranges", () => {
     expect(plannerRules({ days: true })).toMatch(/Search each day of the range/);
     expect(plannerRules({})).not.toMatch(/each day/);
   });
+});
+
+it("G45: a card number in a fill call or its result is masked like one in act (G40)", () => {
+  const event = { type: "tool-call", name: "fill", args: { fields: { "0:14": "4242 4242 4242 4242", "0:4": "Sam Park" } }, data: { filled: [{ controlId: "0:14", op: "type", value: "4242 4242 4242 4242" }] } };
+  const shown = JSON.stringify(maskSecrets(event));
+  expect(shown).not.toContain("4242 4242 4242 4242");
+  expect(shown).toContain("Sam Park");
+  expect(shown).toContain('"controlId":"0:14"');
 });
