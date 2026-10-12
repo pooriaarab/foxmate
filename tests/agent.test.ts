@@ -357,6 +357,20 @@ describe("agent", () => {
     expect(notes[1]?.content).toMatch(/sites this run may use: shop\.test/i);
   });
 
+  it("G38: a later tab note names only what changed, with no title", async () => {
+    const { run, requests } = await setup();
+    const end = await run({ noTab: true, script: [openSite("https://shop.test/a"), { tool: "snapshot", args: {} }, openSite("https://shop.test/b"), { tool: "snapshot", args: {} }, finish] });
+    expect(end.status).toBe("done");
+    const notes = sent(requests.at(-1)).filter((m) => m.content?.includes(NOTE)).map((m) => m.content!.slice(m.content!.indexOf(NOTE)));
+    expect(notes.length).toBe(3);
+    expect(notes[0]).toMatch(/no web page[\s\S]*sites this run may use/);
+    // The sites changed: named again, with the tab, and no title.
+    expect(notes[1]).toMatch(/The open tab: https:\/\/shop\.test\/a\.\n- The sites this run may use: shop\.test/);
+    expect(notes[1]).not.toMatch(/title/);
+    // Only the tab changed.
+    expect(notes[2]).toBe(`${NOTE}\n- The open tab: https://shop.test/b.`);
+  });
+
   it("G32: the run reads the page before the first planner call; a run with no page does not", async () => {
     const { run, requests, grantsSeen } = await setup();
     await run({ script: [finish] });
