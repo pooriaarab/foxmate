@@ -30,6 +30,11 @@ export interface ShieldOptions {
   onScan?: (scan: ShieldScan) => void | Promise<void>;
   /** foxpass's newest scan of the tab, so the redaction knows which fields hold secrets. */
   fieldHints?: (tabId: number) => FieldInfo[];
+  /**
+   * Runs before each read, the snapshot and each read inside runTask: foxpass's
+   * sign-in wait (HP10-HP13). It throws when the user does not finish.
+   */
+  beforeRead?: (tabId: number) => Promise<void>;
 }
 
 const HIDDEN: ReadonlySet<FindingKind> = new Set(["display-none", "not-rendered", "visibility-hidden", "opacity-zero", "offscreen", "clipped", "tiny-font", "low-contrast", "aria-hidden", "covered"]);
@@ -118,7 +123,7 @@ async function shieldRead(options: ShieldOptions, paw: PawLike, tabId: number, b
 
 /**
  * foxpaw, with every page read passed through foxshield: each snapshot, and
- * each read inside runTask (S13). Only the snapshot, which the planner reads,
+ * each read inside runTask (S13). Each read waits on `beforeRead` first (HP10). Only the snapshot, which the planner reads,
  * also gets foxpass's redaction; runTask needs the real field values (S14).
  */
 export function shieldedPaw(options: ShieldOptions): PawLike {
@@ -132,19 +137,33 @@ export function shieldedPaw(options: ShieldOptions): PawLike {
   return {
     act: paw.act,
     settle: paw.settle,
-    runTask: (tabId, goal, runOptions) => paw.runTask(tabId, goal, {
-      ...runOptions,
-      read: async (readTabId, browser) => {
-        const read = await shieldRead(options, paw, readTabId, browser);
-        await redact(readTabId, read);
-        return read.page;
-      },
-    }),
+    runTask: (tabId, goal, runOptions) => {
+      // foxpaw retries a read that throws for 10 s: a failed wait fails each retry at once, with no new wait (HP12).
+      let failed: unknown;
+      return paw.runTask(tabId, goal, {
+        ...runOptions,
+        read: async (readTabId, browser) => {
+          if (failed) throw failed;
+          try {
+            await options.beforeRead?.(readTabId);
+          } catch (error) {
+            // Stop: give the shielded page, and foxpaw sees the abort before it acts (HP12).
+            if (!runOptions?.signal?.aborted) throw (failed = error);
+          }
+          const read = await shieldRead(options, paw, readTabId, browser);
+          await redact(readTabId, read);
+          return read.page;
+        },
+      });
+    },
     // A pure function of a snapshot that came through this shield: foxloop's browser_task preview (UI10).
     preview: paw.preview,
     // Pure text formats: foxloop gives them only snapshots that came through this shield (S12).
     pageText: paw.pageText,
     changeText: paw.changeText,
-    snapshot: async (tabId: number, browser?: ScriptingApi): Promise<Snapshot> => redact(tabId, await shieldRead(options, paw, tabId, browser)),
+    snapshot: async (tabId: number, browser?: ScriptingApi): Promise<Snapshot> => {
+      await options.beforeRead?.(tabId);
+      return redact(tabId, await shieldRead(options, paw, tabId, browser));
+    },
   };
 }

@@ -244,13 +244,12 @@ export function createAgent(options: AgentOptions): Agent {
       await trail.append({ actor: "foxshield", kind: "shield.scan", data: scan });
     },
     ...(options.pass ? { fieldHints: options.pass.hints } : {}),
+    // Each read, also those inside a form fill, waits for a sign-in first (HP1, HP10).
+    ...(options.pass ? { beforeRead: (tabId: number) => options.pass!.beforeRead(tabId, { emit: passEmit, ...(runSignal ? { signal: runSignal } : {}) }) } : {}),
   });
   const paw = {
     ...shielded,
-    snapshot: async (tabId: number, api?: ScriptingApi) => {
-      await options.pass?.beforeRead(tabId, { emit: passEmit, ...(runSignal ? { signal: runSignal } : {}) });
-      return (lastPage = await shielded.snapshot(tabId, api));
-    },
+    snapshot: async (tabId: number, api?: ScriptingApi) => (lastPage = await shielded.snapshot(tabId, api)),
   };
   const tabTools = [...(options.makeTools?.(() => target) ?? browserTools({ tabId: () => target, browser: browser as never, paw })), ...(options.moreTabTools?.(() => target) ?? [])]
     .map((tool) => (tool.name !== "click" ? tool : {
