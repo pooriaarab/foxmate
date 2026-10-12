@@ -59,6 +59,17 @@ function inOrder(label: string, parts: readonly string[]): boolean {
   return true;
 }
 
+/** The steps to keep for foxloop's `fill`: one `act` step for each field that ran, on the page the call was planned on (WF22, WF23). */
+export function fillSteps(filled: readonly { controlId: string; op: string; value?: string }[], page: Snapshot | undefined): WorkflowStep[] | null | undefined {
+  const steps: WorkflowStep[] = [];
+  for (const f of filled) {
+    const step = toStep("act", { controlId: f.controlId, op: f.op, ...(f.value !== undefined ? { value: f.value } : {}) }, page);
+    if (!step) return step;
+    steps.push(step);
+  }
+  return steps;
+}
+
 /** The call to replay for a step, or why the replay ends (WF1, WF2, WF5). */
 export function replayCall(step: WorkflowStep, page: Snapshot | undefined, messages: readonly Message[], tainted: boolean): { name: string; arguments: string } | string {
   if (tainted) return "foxshield flagged a page of this run";
