@@ -3,7 +3,7 @@
 import { scanDocument, scanHtml, type ScanReport } from "foxshield";
 import type { FieldInfo } from "foxpass";
 import { changeText, pageText, preview, runTask, type ActRequest, type Control, type RunOptions, type Snapshot } from "foxpaw";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { hiddenNodes, shieldedPaw, type ShieldScan } from "../src/shield.js";
 
 const PAGE = `<h1>Trail Mug</h1>
@@ -222,5 +222,97 @@ describe("shield: runTask", () => {
     expect(got?.text).toContain("Trail Mug, $18.");
     expect(got?.text).not.toContain("gift card");
     expect((await shielded.snapshot(1)).controls[0]?.value).toBe("[redacted]");
+  });
+});
+
+// HP10-HP13: a sign-in wall in front of the form. `beforeRead` is foxpass's
+// wait: here the user signs in during the wait, and the wall goes away.
+function walledTab() {
+  const page = signupTab();
+  const log: string[] = [];
+  let wall = true;
+  const wallControls = [input(9, "Password", { type: "password", secret: true }), input(10, "Sign in", { role: "button", tag: "button", type: "submit", submit: true })];
+  const snapshot = async (): Promise<Snapshot> => {
+    log.push("read");
+    const read = await page.snapshot();
+    return wall ? { ...read, controls: structuredClone(wallControls) } : read;
+  };
+  const executeScript = async (details: { func: unknown; args?: unknown[] }) => {
+    if (details.func === scanDocument) log.push("scan");
+    return page.browser.scripting.executeScript(details);
+  };
+  const browser = { scripting: { executeScript } };
+  const signIn = () => { wall = false; };
+  return { page, log, snapshot, browser, signIn };
+}
+
+describe("shield: sign-in wait", () => {
+  it("HP10: each read inside runTask waits for the sign-in first, so the fill never acts on the wall", async () => {
+    const t = walledTab();
+    const waits: number[] = [];
+    const beforeRead = async (tabId: number) => { waits.push(tabId); t.log.push("wait"); t.signIn(); };
+    const shielded = shieldedPaw({ paw: { ...fakePaw, snapshot: t.snapshot, runTask }, browser: t.browser, beforeRead });
+    const result = await shielded.runTask(1, GOAL, { browser: t.browser as never, maxSteps: 10 });
+    expect(result.status).not.toBe("error");
+    expect(t.page.state.acted).toContain(1);
+    expect(t.page.state.acted).not.toContain(9);
+    expect(t.page.state.acted).not.toContain(10);
+    expect(waits.length).toBe(t.page.state.reads);
+    expect(waits.every((id) => id === 1)).toBe(true);
+  });
+
+  it("HP11: the wait comes before the shield, and the shield still scans each read", async () => {
+    const t = walledTab();
+    const beforeRead = async () => { t.log.push("wait"); t.signIn(); };
+    const shielded = shieldedPaw({ paw: { ...fakePaw, snapshot: t.snapshot, runTask }, browser: t.browser, beforeRead });
+    await shielded.runTask(1, GOAL, { browser: t.browser as never, maxSteps: 10 });
+    const reads = t.log.filter((e) => e === "read").length;
+    expect(reads).toBeGreaterThanOrEqual(2);
+    expect(t.log.slice(0, 3)).toEqual(["wait", "read", "scan"]);
+    for (let i = 0; i < t.log.length; i++) if (t.log[i] === "read") expect(t.log[i - 1]).toBe("wait");
+    expect(t.log.filter((e) => e === "scan").length).toBe(reads);
+  });
+
+  it("HP12: Stop during the wait ends the fill as stopped, at once, with no act and no second wait", async () => {
+    const t = walledTab();
+    const stop = new AbortController();
+    let waits = 0;
+    const beforeRead = async () => { waits += 1; stop.abort(); throw new Error("The user did not finish the sign-in step (stopped). Stop, and tell the user."); };
+    const shielded = shieldedPaw({ paw: { ...fakePaw, snapshot: t.snapshot, runTask }, browser: t.browser, beforeRead });
+    const started = Date.now();
+    const result = await shielded.runTask(1, GOAL, { browser: t.browser as never, maxSteps: 10, signal: stop.signal });
+    expect(result.status).toBe("stopped");
+    expect(t.page.state.acted).toEqual([]);
+    expect(waits).toBe(1);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it("HP12: a wait that times out fails the fill once; foxpaw's retries open no new wait", async () => {
+    vi.useFakeTimers();
+    try {
+      const t = walledTab();
+      let waits = 0;
+      const beforeRead = async () => { waits += 1; throw new Error("The user did not finish the sign-in step (timeout). Stop, and tell the user."); };
+      const shielded = shieldedPaw({ paw: { ...fakePaw, snapshot: t.snapshot, runTask }, browser: t.browser, beforeRead });
+      const running = shielded.runTask(1, GOAL, { browser: t.browser as never, maxSteps: 10 });
+      await vi.advanceTimersByTimeAsync(15_000);
+      const result = await running;
+      expect(result.status).toBe("error");
+      expect(result.message).toMatch(/timeout/);
+      expect(t.page.state.acted).toEqual([]);
+      expect(waits).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("HP13: a snapshot waits once, then reads through the shield", async () => {
+    const t = walledTab();
+    let waits = 0;
+    const beforeRead = async () => { waits += 1; t.log.push("wait"); t.signIn(); };
+    const page = await shieldedPaw({ paw: { ...fakePaw, snapshot: t.snapshot }, browser: t.browser, beforeRead }).snapshot(1);
+    expect(waits).toBe(1);
+    expect(t.log.slice(0, 3)).toEqual(["wait", "read", "scan"]);
+    expect(page.controls.map((c) => c.label)).not.toContain("Password");
   });
 });
