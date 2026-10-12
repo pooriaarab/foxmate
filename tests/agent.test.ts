@@ -510,6 +510,23 @@ describe("agent", () => {
     expect(events.some((e) => e.type === "approval-needed" && /^[\w-]+$/.test(e.requestId))).toBe(true);
   });
 
+  it("HP16: a password the goal gives is masked in the trail and the events, not in the run", async () => {
+    const { run, ran, events, trail, requests } = await setup();
+    const goal = 'Enter the password "fE4" into both text fields and press submit.';
+    const end = await run({ goal, script: [{ tool: "fill", args: { text: "fE4" } }, finish] });
+    expect(end.status).toBe("done");
+    expect(ran.map((r) => r.args)).toEqual([{ text: "fE4" }]);
+    expect(requests.some((r) => r.includes("fE4"))).toBe(true);
+    const entries = await trail.entries();
+    for (const shown of [JSON.stringify(events), JSON.stringify(entries)]) expect(shown).not.toContain("fE4");
+    const start = entries.find((e) => e.kind === "run.start")!.data as { goal: string };
+    expect(start.goal).toBe('Enter the password "•••" into both text fields and press submit.');
+    // A bare password, as foxbench writes them.
+    const bare = await setup();
+    await bare.run({ goal: "Log in as sam, password Tr4il-Mix-2026, then open my orders.", script: [{ tool: "fill", args: { text: "Tr4il-Mix-2026" } }, finish] });
+    expect(JSON.stringify(await bare.trail.entries())).not.toContain("Tr4il-Mix-2026");
+  });
+
   it("G36: the planner always gets the finish tool", async () => {
     helper.tools = [];
     await (await setup()).run({ script: [{ tool: "fill", args: { text: "x" } }, finish] });

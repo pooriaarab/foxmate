@@ -12,7 +12,7 @@ import type { Provider } from "foxmind";
 import { createApprovals, ruleOffer, type Approvals, type RuleContext, type RuleOffer } from "./approvals.js";
 import { formDetail, withFields } from "./form.js";
 import { BrainError, createBrain, type Brain, type BrainSettings } from "./brain.js";
-import { HandoffError, maskCards, maskSecrets, type Pass, type PassEvent } from "./pass.js";
+import { HandoffError, goalPasswords, maskCards, maskPasswords, maskSecrets, type Pass, type PassEvent } from "./pass.js";
 import { payTool, type PayOptions, type PayRun } from "./pay.js";
 import { recallNotes, withNotes } from "./recall.js";
 import { fillSteps, generalStep, replayCall, shapeFits, shapeKey, toStep, workflowKey, type WorkflowStep, type WorkflowStore } from "./workflow.js";
@@ -259,7 +259,9 @@ const fillPage = (page: Snapshot | undefined): FillPage => ({ fillPage: true, pa
 export function createAgent(options: AgentOptions): Agent {
   const { browser } = options;
   // The trail keeps no card number, code or account number at rest; nothing reads it back for a run (G41).
-  const trail: Trail = { append: (entry) => options.trail.append(maskSecrets(entry)) };
+  // The passwords the current run's goal names: masked in the trail and the events, never in the run (HP16).
+  let runPasswords: string[] = [];
+  const trail: Trail = { append: (entry) => options.trail.append(maskSecrets(maskPasswords(entry, runPasswords))) };
   let target = 0;
   let busy = false;
   // The newest snapshot the planner got, and the control it typed into last, for the form detail of an approval.
@@ -435,7 +437,7 @@ export function createAgent(options: AgentOptions): Agent {
 
   async function run(input: RunInput): Promise<RunEnd> {
     // What a page shows masks card numbers and codes; the planner and the tools get the whole value (G40, G43).
-    const emit = (event: AgentEvent) => input.onEvent?.(maskSecrets(event));
+    const emit = (event: AgentEvent) => input.onEvent?.(maskSecrets(maskPasswords(event, runPasswords)));
     const refuse = async (reason: string, message: string): Promise<RunEnd> => {
       emit({ type: "refused", reason, message });
       await trail.append({ actor: "foxmate", kind: "run.refused", data: { reason, message } });
@@ -443,6 +445,7 @@ export function createAgent(options: AgentOptions): Agent {
     };
     if (busy) return { status: "refused", reason: "busy", message: "A run is in progress." };
     busy = true;
+    runPasswords = goalPasswords(input.goal);
     runEmit = emit;
     runSignal = input.signal;
     runGoal = input.goal;

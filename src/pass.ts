@@ -49,10 +49,30 @@ function handoffBrowser(browser: PassBrowser): HandoffBrowser {
  * The goal names a password, PIN or passcode, such as `the password "fE4"`,
  * `update the password to '1j1l'` or `password Tr4il-Mix-2026`. The user gave it, so there is no step left for them (HP14).
  */
-const GOAL_PASSWORD = /\b(?:pass(?:word|code|phrase)|PIN)\b(?:\s+(?:is|to|as))?\s*:?\s*["'“‘][^\s"'“”‘’]{1,128}["'”’]/i;
+const GOAL_PASSWORD = /\b(?:pass(?:word|code|phrase)|PIN)\b(?:\s+(?:is|to|as))?\s*:?\s*["'“‘]([^\s"'“”‘’]{1,128})["'”’]/gi;
 /** Or with no quotes: a word of 6 or more characters with a digit or a symbol, as in `password Tr4il-Mix-2026` (HP14). */
-const BARE_PASSWORD = /\b(?:pass(?:word|code|phrase)|PIN)\b(?:\s+(?:is|to|as))?\s*:?\s+(?=\S*[\d!@#$%^&*_+=~-])(?!\S*["'“”‘’])\S{6,128}/i;
-export const goalGivesPassword = (goal: string | undefined) => GOAL_PASSWORD.test(goal ?? "") || BARE_PASSWORD.test(goal ?? "");
+const BARE_PASSWORD = /\b(?:pass(?:word|code|phrase)|PIN)\b(?:\s+(?:is|to|as))?\s*:?\s+(?=\S*[\d!@#$%^&*_+=~-])(?!\S*["'“”‘’])(\S{6,128})/gi;
+/** Each password the goal names (HP14), for the wall check and for masking the trail and events (HP16). */
+export function goalPasswords(goal: string | undefined): string[] {
+  const text = goal ?? "";
+  const quoted = [...text.matchAll(GOAL_PASSWORD)].map((m) => m[1]!);
+  const bare = [...text.matchAll(BARE_PASSWORD)].map((m) => m[1]!.replace(/[,.;:)]+$/, ""));
+  return [...new Set([...quoted, ...bare])].filter(Boolean);
+}
+export const goalGivesPassword = (goal: string | undefined) => goalPasswords(goal).length > 0;
+
+/** Every string in `value` with each password masked as "•••" (HP16). */
+export function maskPasswords<T>(value: T, passwords: readonly string[]): T {
+  const hidden = passwords.filter((p) => p.length >= 2);
+  if (!hidden.length) return value;
+  const walk = (v: unknown): unknown => {
+    if (typeof v === "string") return hidden.reduce((text, p) => text.split(p).join("•••"), v);
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]));
+    return v;
+  };
+  return walk(value) as T;
+}
 /** The walls a password from the goal answers (HP14). A code, passkey, CAPTCHA or consent still needs the user. */
 const ANSWERED = new Set<Wall["kind"]>(["password", "sign-in"]);
 
