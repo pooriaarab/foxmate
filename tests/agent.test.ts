@@ -4,7 +4,7 @@ import { createMemory, memoryStore } from "foxmemory";
 import type { LoopTool } from "foxloop";
 import { Log, MemoryStore, generateKey } from "foxtrail";
 import { describe, expect, it, vi } from "vitest";
-import { maskSecrets } from "../src/pass.js";
+import { HandoffError, maskSecrets } from "../src/pass.js";
 import { allowsDays, createAgent, plannerRules, unnamedChoice, type AgentEvent, type RunInput } from "../src/agent.js";
 import type { Control, Snapshot } from "foxpaw";
 import type { Workflow, WorkflowStore } from "../src/workflow.js";
@@ -34,6 +34,9 @@ const TABS: Record<number, { url: string; cookieStoreId: string; title?: string;
   2: { url: "http://bank.test/inbox", cookieStoreId: "firefox-container-9" },
 };
 
+// HP15: a sign-in wait that ends with no sign-in fails the page read.
+const wall = { fail: false, reads: 0 };
+
 const host = (tabId: () => number) => async () => new URL(TABS[tabId()]?.url ?? "").hostname;
 
 async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { getDomain(host: string): string | null }; redirect?: Record<string, string>; loading?: boolean; workflows?: WorkflowStore } = {}) {
@@ -50,6 +53,8 @@ async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { 
     {
       name: "snapshot", description: "Read the page.", parameters: { type: "object", properties: {} }, scope: "read", domain: host(tabId),
       run: async () => {
+        wall.reads += 1;
+        if (wall.fail) throw new HandoffError("The user did not finish the sign-in step (timeout). Stop, and tell the user.");
         grantsSeen.push((await agentRef!.host.grants()).map((g) => g.scope));
         domainsSeen.push([...new Set((await agentRef!.host.grants()).flatMap((g) => g.domains))].toSorted());
         return { ok: true, summary: "Read the page.", untrusted: "A page." };
@@ -256,6 +261,23 @@ describe("agent", () => {
     const end = await run({ script: [finish, finish] });
     expect(end).toMatchObject({ status: "blocked", reason: "check-failed" });
     expect(events.find((e) => e.type === "check")).toMatchObject({ ok: false, checks: [{ part: "a tool ran with a good result", ok: false }] });
+  });
+
+  it("HP15: a sign-in wait that ends with no sign-in ends the run at once, with one clear line", async () => {
+    const { run, events } = await setup();
+    wall.fail = true;
+    wall.reads = 0;
+    try {
+      const end = await run({ script: [{ tool: "snapshot", args: {} }, { tool: "snapshot", args: {} }, finish] });
+      expect(end).toMatchObject({ status: "blocked", reason: "sign-in" });
+      expect(end.message).toMatch(/timeout/);
+      expect(end.message).toMatch(/sign in on the tab/i);
+      // One wait, not one for each read the planner asks for.
+      expect(wall.reads).toBe(1);
+      expect(events.filter((e) => e.type === "tool-result")).toHaveLength(1);
+    } finally {
+      wall.fail = false;
+    }
   });
 
   it("G16: after private data, open_url and typing need an approval; a page read does not", async () => {
