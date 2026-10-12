@@ -10,6 +10,7 @@ import { sites, startServer } from "foxbench";
 import activity from "./checks/activity.mjs";
 import app from "./checks/app.mjs";
 import bridge from "./checks/bridge.mjs";
+import details from "./checks/details.mjs";
 import keepalive from "./checks/keepalive.mjs";
 import lend from "./checks/lend.mjs";
 import local from "./checks/local.mjs";
@@ -34,7 +35,7 @@ import { runGoal, startFox } from "./lib.mjs";
 // allows 4 notices a minute, and the later checks send some too. rules
 // and modules go after activity: Activity shows the newest 300 entries, and their runs would
 // push the older kinds out.
-const CHECKS = { app, notify, signup, pass, vault, local, traps, memory, lend, space, phone, activity, modules, rules, open, pay, bridge, voice, tasks, keepalive };
+const CHECKS = { app, notify, signup, pass, vault, local, traps, details, memory, lend, space, phone, activity, modules, rules, open, pay, bridge, voice, tasks, keepalive };
 
 const record = { startedAt: new Date().toISOString(), checks: [], runs: {} };
 const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });

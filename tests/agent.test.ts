@@ -447,6 +447,25 @@ describe("agent", () => {
     }
   });
 
+  it("G39-G41, G43: a card number in the goal and the typed args is masked in events and the trail, not in the run", async () => {
+    const { run, ran, events, trail, requests } = await setup();
+    const goal = "Pay with card 4242 4242 4242 4242, CVC 123, verification code 482913, account number 000123456789";
+    const end = await run({ goal, script: [{ tool: "fill", args: { text: "4242 4242 4242 4242" } }, { tool: "click", args: { button: "Pay 4242424242424242" } }, finish] });
+    expect(end.status).toBe("done");
+    // The run itself: the tool types the whole number, the approval was answered, and the planner got the goal.
+    expect(ran.map((r) => r.args)).toEqual([{ text: "4242 4242 4242 4242" }, { button: "Pay 4242424242424242" }]);
+    expect(requests.some((r) => r.includes("4242 4242 4242 4242"))).toBe(true);
+    const entries = await trail.entries();
+    expect((await trail.verify()).ok).toBe(true);
+    for (const shown of [JSON.stringify(events), JSON.stringify(entries)]) {
+      expect(shown).not.toMatch(/4242 ?4242 ?4242 ?4242|CVC 123|482913|000123456789/);
+      expect(shown).toContain("•••• 4242");
+    }
+    const start = entries.find((e) => e.kind === "run.start")!.data as { goal: string };
+    expect(start.goal).toBe("Pay with card •••• 4242, CVC •••, verification code •••, account number •••• 6789");
+    expect(events.some((e) => e.type === "approval-needed" && /^[\w-]+$/.test(e.requestId))).toBe(true);
+  });
+
   it("G36: the planner always gets the finish tool", async () => {
     helper.tools = [];
     await (await setup()).run({ script: [{ tool: "fill", args: { text: "x" } }, finish] });

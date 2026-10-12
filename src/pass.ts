@@ -117,11 +117,32 @@ function luhn(digits: string): boolean {
   }
   return sum % 10 === 0;
 }
-const CODE = /\b(CVC|CVV|CSC|CID|security code)(\s*[:=]?\s*)\d{3,4}\b/gi;
-/** Each card number in the text as "•••• 4242", its last 4 digits only, and each card code as "•••" (G37). */
+// A code after its name: a card code, a one-time code or a PIN.
+const CODE = /\b(CVC2?|CVV2?|CSC|CID|security code|one-time code|verification code|sign-in code|login code|OTP|passcode|PIN)(\s*[:=]?\s*)\d{3,8}\b/gi;
+// A bank account number after its name; it keeps its last 4 digits.
+const ACCOUNT = /\b(account number|account no\.?|account #|routing number|IBAN)(\s*[:=#]?\s*)([A-Z]{2}\d{2} ?)?\d[\d -]{2,30}\d\b/gi;
+/**
+ * Each card number in the text as "•••• 4242", its last 4 digits only, each card code, one-time code
+ * or PIN as "•••", and each account number as "•••• 6789" (G37, G39).
+ */
 export function maskCards(text: string): string {
   return text.replace(CARD, (found) => {
     const digits = found.replace(/\D/g, "");
     return luhn(digits) ? `•••• ${digits.slice(-4)}` : found;
-  }).replace(CODE, (_found, name: string, gap: string) => `${name}${gap}•••`);
+  }).replace(CODE, (_found, name: string, gap: string) => `${name}${gap}•••`)
+    .replace(ACCOUNT, (found: string, name: string, gap: string) => `${name}${gap}•••• ${found.replace(/\D/g, "").slice(-4)}`);
+}
+
+const ID = /(^id|Id)$/;
+/**
+ * A copy of `value` with maskCards on each string in it, for what a page shows and what the trail keeps
+ * (G40, G41). A string under a key that ends in "id" or "Id" stays, so an answer finds its request (G43).
+ */
+export function maskSecrets<T>(value: T, key = ""): T {
+  if (typeof value === "string") return (ID.test(key) ? value : maskCards(value)) as T;
+  if (Array.isArray(value)) return value.map((item) => maskSecrets(item)) as T;
+  if (value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, maskSecrets(v, k)])) as T;
+  }
+  return value;
 }
