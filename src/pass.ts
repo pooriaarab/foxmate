@@ -46,11 +46,13 @@ function handoffBrowser(browser: PassBrowser): HandoffBrowser {
 }
 
 /**
- * The goal names a password, PIN or passcode in quotes, such as `the password "fE4"` or
- * `update the password to '1j1l'`. The user gave it, so there is no step left for them (HP14).
+ * The goal names a password, PIN or passcode, such as `the password "fE4"`,
+ * `update the password to '1j1l'` or `password Tr4il-Mix-2026`. The user gave it, so there is no step left for them (HP14).
  */
 const GOAL_PASSWORD = /\b(?:pass(?:word|code|phrase)|PIN)\b(?:\s+(?:is|to|as))?\s*:?\s*["'“‘][^\s"'“”‘’]{1,128}["'”’]/i;
-export const goalGivesPassword = (goal: string | undefined) => GOAL_PASSWORD.test(goal ?? "");
+/** Or with no quotes: a word of 6 or more characters with a digit or a symbol, as in `password Tr4il-Mix-2026` (HP14). */
+const BARE_PASSWORD = /\b(?:pass(?:word|code|phrase)|PIN)\b(?:\s+(?:is|to|as))?\s*:?\s+(?=\S*[\d!@#$%^&*_+=~-])(?!\S*["'“”‘’])\S{6,128}/i;
+export const goalGivesPassword = (goal: string | undefined) => GOAL_PASSWORD.test(goal ?? "") || BARE_PASSWORD.test(goal ?? "");
 /** The walls a password from the goal answers (HP14). A code, passkey, CAPTCHA or consent still needs the user. */
 const ANSWERED = new Set<Wall["kind"]>(["password", "sign-in"]);
 

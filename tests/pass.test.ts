@@ -58,10 +58,12 @@ describe("pass", () => {
     expect(events).toEqual([]);
   });
 
-  it("HP14: the goal names a password in quotes", () => {
+  it("HP14: the goal names a password, in quotes or as a word with a digit or a symbol", () => {
     for (const goal of ['Enter the password "fE4" into both text fields and press submit.', "make sure to update the password to '1j1l-2k3j'.",
-      'Enter the username "kanesha" and the password "Iq" into the text fields and press login.', "Type the PIN “4821” and send it."]) expect(goalGivesPassword(goal), goal).toBe(true);
-    for (const goal of ["Sign in to my bank and pay the bill.", "Reset my password.", 'Open the "password" settings page.', 'Open "password" and "security".', "Check my Gmail inbox."])
+      'Enter the username "kanesha" and the password "Iq" into the text fields and press login.', "Type the PIN “4821” and send it.",
+      "Log in as sam@example.com, password Tr4il-Mix-2026, then open my orders.", "Sign in with password: Blue-Kite-77!"]) expect(goalGivesPassword(goal), goal).toBe(true);
+    for (const goal of ["Sign in to my bank and pay the bill.", "Reset my password.", 'Open the "password" settings page.', 'Open "password" and "security".', "Check my Gmail inbox.",
+      "Reply to the email about the new password policy.", "Open my password manager.", "Change the password 2 times."])
       expect(goalGivesPassword(goal), goal).toBe(false);
   });
 
