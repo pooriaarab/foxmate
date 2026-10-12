@@ -5,6 +5,7 @@
 import { tasks as benchTasks } from "foxbench";
 import { BENCH_SCRIPTS } from "./bench-scripts.mjs";
 import { runGoal, setSettings } from "./driver.mjs";
+import { SESSION_MS, publicSite, reachModels } from "./remote.mjs";
 
 const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
 
@@ -60,25 +61,42 @@ export function runMetrics(run) {
   return { modelCalls: count("loop.plan") - replayed, steps: count("loop.tool-result"), approvals: run.approvals.length };
 }
 
-/** The foxbench adapter. `planner` is foxmate's settings without the script. */
-export function foxmateAdapter(session, { planner, approve = "careful", timeoutMs = 600_000, name } = {}) {
+/**
+ * The foxbench adapter. `planner` is foxmate's settings without the script.
+ * `renew` starts a new session; when it is set (on Ichabod), the task sites
+ * and model servers go through the tunnel, and a session older than
+ * SESSION_MS is replaced before the next task.
+ */
+export function foxmateAdapter(session, { planner, approve = "careful", timeoutMs = 600_000, name, renew } = {}) {
   let tab;
+  let models;
+  let started = Date.now();
   return {
     name: name ?? `foxmate (${planner.planner === "scripted" ? "scripted planner" : `${planner.planner}${planner.model ? ` ${planner.model}` : ""}`}, ${approve} approvals)`,
     async runTask({ url, goal }) {
       const task = benchTasks.find((t) => t.goal === goal);
-      const settings = planner.planner === "scripted" ? { ...planner, script: JSON.stringify(BENCH_SCRIPTS[task?.id] ?? []) } : planner;
+      if (renew && (Date.now() - started > SESSION_MS || !session.fox.browser.connected)) {
+        await session.fox.close().catch(() => undefined);
+        Object.assign(session, await renew());
+        started = Date.now();
+      }
+      if (renew) models ??= await reachModels(planner);
+      const base = models?.settings ?? planner;
+      const settings = planner.planner === "scripted" ? { ...base, script: JSON.stringify(BENCH_SCRIPTS[task?.id] ?? []) } : base;
+      const site = renew ? await publicSite(url) : undefined;
       // Each task closes only its own tab: a task that ends after its time limit must not close the next one's (BN5).
-      const page = await session.fox.open(url);
+      const page = await session.fox.open(site?.url ?? url);
       tab = page;
       try {
         const run = await runGoal(session, { page, goal, settings, answer: policy(approve, goal), ask: (question) => askSam(url, question), onHandoff: (_text, at) => signInBySam(url, at), timeoutMs });
         const approvals = run.approvals.map((a) => `${a.answer}: ${a.detail || a.text}`.slice(0, 160));
         const questions = run.questions.map((q) => `asked: ${q.text} -> ${q.answer || "(skipped)"}`.slice(0, 200));
-        return { done: run.done, log: [run.status, ...questions, ...approvals].join("\n"), metrics: runMetrics(run) };
+        const log = [run.status, ...questions, ...approvals].join("\n");
+        return { done: run.done, log: models ? models.redact(log) : log, metrics: runMetrics(run) };
       } finally {
         await page.close().catch(() => undefined);
         if (tab === page) tab = undefined;
+        await site?.close();
       }
     },
     async abort() {
@@ -89,6 +107,7 @@ export function foxmateAdapter(session, { planner, approve = "careful", timeoutM
     },
     async close() {
       await setSettings(session.sidebar, {}).catch(() => undefined);
+      await models?.close();
     },
   };
 }
