@@ -65,14 +65,17 @@ export function foxmateAdapter(session, { planner, approve = "careful", timeoutM
     async runTask({ url, goal }) {
       const task = benchTasks.find((t) => t.goal === goal);
       const settings = planner.planner === "scripted" ? { ...planner, script: JSON.stringify(BENCH_SCRIPTS[task?.id] ?? []) } : planner;
-      tab = await session.fox.open(url);
+      // Each task closes only its own tab: a task that ends after its time limit must not close the next one's (BN5).
+      const page = await session.fox.open(url);
+      tab = page;
       try {
-        const run = await runGoal(session, { page: tab, goal, settings, answer: policy(approve, goal), ask: (question) => askSam(url, question), onHandoff: (_text, page) => signInBySam(url, page), timeoutMs });
+        const run = await runGoal(session, { page, goal, settings, answer: policy(approve, goal), ask: (question) => askSam(url, question), onHandoff: (_text, at) => signInBySam(url, at), timeoutMs });
         const approvals = run.approvals.map((a) => `${a.answer}: ${a.detail || a.text}`.slice(0, 160));
         const questions = run.questions.map((q) => `asked: ${q.text} -> ${q.answer || "(skipped)"}`.slice(0, 200));
         return { done: run.done, log: [run.status, ...questions, ...approvals].join("\n"), metrics: runMetrics(run) };
       } finally {
-        await tab.close().catch(() => undefined);
+        await page.close().catch(() => undefined);
+        if (tab === page) tab = undefined;
       }
     },
     async abort() {
