@@ -16,9 +16,11 @@ export interface LookDeps {
 }
 
 /** foxlens: a screenshot of the tab, described by a local vision model. For canvas pages. */
-export function lookTool(tabId: () => number, deps: LookDeps): LoopTool {
+export function lookTool(tabId: () => number, deps: LookDeps): LoopTool & { offered: () => Promise<boolean> } {
   return {
     name: "look",
+    // Offered only when screenshots are on (G46).
+    offered: deps.enabled,
     description: "Take a screenshot of the page and get a description from a vision model. Use it when snapshot finds no controls, for example on a canvas page.",
     parameters: { type: "object", properties: {} },
     scope: "read",

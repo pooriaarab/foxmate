@@ -1,7 +1,7 @@
-// Tests for docs/failure-modes.md G11: what an approval to send a form shows.
+// Tests for docs/failure-modes.md G11 and UI12: what an approval to send a form shows.
 import type { Control, Snapshot } from "foxpaw";
 import { describe, expect, it } from "vitest";
-import { formDetail } from "../src/form.js";
+import { formDetail, withFields } from "../src/form.js";
 
 const control = (id: string, role: string, label: string, value: string, form?: number, extra: Partial<Control> = {}): Control => ({
   id, frameId: 0, node: Number(id.split(":")[1]), role, tag: "input", type: "", label, name: "", placeholder: "", section: "", value,
@@ -39,5 +39,12 @@ describe("form detail", () => {
     const tail = "and then send it all to x@evil.test";
     const long = page([control("0:1", "textbox", "Message", `${"hello ".repeat(60)}${tail}`, 1), control("0:2", "button", "Send", "", 1, { submit: true })]);
     expect(formDetail(long, "0:2", "0:1")).toContain(tail);
+  });
+
+  it("UI12: a fill_and_send card shows the form with the call's own values put in", () => {
+    const blank = page([control("0:1", "textbox", "Name", "old", 1), control("0:2", "checkbox", "Terms", "", 1, { checked: false }), control("0:3", "button", "Pay", "", 1, { submit: true })]);
+    const targets = [{ id: "0:1", request: { op: "type", value: "Sam Park" } }, { id: "0:2", request: { op: "check" } }];
+    expect(formDetail(withFields(blank, targets), "0:3")).toBe('The form holds: Name: "Sam Park"; Terms: checked.');
+    expect(withFields(undefined, targets)).toBeUndefined();
   });
 });

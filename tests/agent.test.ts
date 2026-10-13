@@ -5,7 +5,7 @@ import type { LoopTool } from "foxloop";
 import { Log, MemoryStore, generateKey } from "foxtrail";
 import { describe, expect, it, vi } from "vitest";
 import { HandoffError, maskSecrets } from "../src/pass.js";
-import { allowsDays, createAgent, plannerRules, unnamedChoice, type AgentEvent, type RunInput } from "../src/agent.js";
+import { allowsDays, createAgent, plannerRules, unnamedChoice, type AgentEvent, type AgentOptions, type RunInput } from "../src/agent.js";
 import type { Control, Snapshot } from "foxpaw";
 import type { Workflow, WorkflowStore } from "../src/workflow.js";
 
@@ -39,7 +39,7 @@ const wall = { fail: false, reads: 0 };
 
 const host = (tabId: () => number) => async () => new URL(TABS[tabId()]?.url ?? "").hostname;
 
-async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { getDomain(host: string): string | null }; redirect?: Record<string, string>; loading?: boolean; workflows?: WorkflowStore } = {}) {
+async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { getDomain(host: string): string | null }; redirect?: Record<string, string>; loading?: boolean; workflows?: WorkflowStore; moreTabTools?: AgentOptions["moreTabTools"] } = {}) {
   // Every request to the planner, as text: the redact hook sees each one before it goes out.
   const requests: string[] = [];
   const ran: { tool: string; args: Record<string, unknown>; domain?: string }[] = [];
@@ -108,6 +108,7 @@ async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { 
     trail,
     memory: options.recall ? { recall: options.recall } : memory,
     makeTools,
+    ...(options.moreTabTools ? { moreTabTools: options.moreTabTools } : {}),
     extraTools: [
       { tool: { name: "read_inbox", description: "Mail.", parameters: { type: "object", properties: {} }, scope: "read", domain: () => "www.googleapis.com", run: async () => ({ ok: true, summary: "Read 1 message.", untrusted: "Your code is 991177." }) }, domain: "www.googleapis.com", private: true, optIn: true },
       { tool: { name: "run_python", description: "Python.", parameters: { type: "object", properties: {} }, scope: "fill", domain: () => "space.foxmate", run: async () => ({ ok: true, summary: "ran" }) }, domain: "space.foxmate", private: true },
@@ -278,6 +279,20 @@ describe("agent", () => {
     } finally {
       wall.fail = false;
     }
+  });
+
+  it("G46: a tab tool that is not offered (look with screenshots off) is not in the planner's tools", async () => {
+    let on = false;
+    const look = { name: "look", description: "Screenshot.", parameters: { type: "object", properties: {} }, scope: "read" as const, domain: host(() => 1), offered: async () => on, run: async () => ({ ok: true, summary: "Looked." }) };
+    helper.tools = [];
+    const { run } = await setup({ moreTabTools: () => [look] });
+    await run({ script: [{ tool: "snapshot", args: {} }, finish] });
+    expect(helper.tools.at(-1)).not.toContain("look");
+    expect(helper.tools.at(-1)).toContain("snapshot");
+    on = true;
+    helper.tools = [];
+    await run({ script: [{ tool: "snapshot", args: {} }, finish] });
+    expect(helper.tools.at(-1)).toContain("look");
   });
 
   it("G16: after private data, open_url and typing need an approval; a page read does not", async () => {
