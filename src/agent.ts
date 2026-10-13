@@ -12,7 +12,7 @@ import type { Provider } from "foxmind";
 import { createApprovals, ruleOffer, type Approvals, type RuleContext, type RuleOffer } from "./approvals.js";
 import { formDetail, withFields } from "./form.js";
 import { BrainError, createBrain, type Brain, type BrainSettings } from "./brain.js";
-import { HandoffError, goalPasswords, maskCards, maskPasswords, maskSecrets, type Pass, type PassEvent } from "./pass.js";
+import { HandoffError, goalPasswords, maskCards, maskPasswords, maskSecrets, passwordElsewhere, passwordSite, type Pass, type PassEvent } from "./pass.js";
 import { payTool, type PayOptions, type PayRun } from "./pay.js";
 import { recallNotes, withNotes } from "./recall.js";
 import { fillSteps, generalStep, replayCall, shapeFits, shapeKey, toStep, workflowKey, type WorkflowStep, type WorkflowStore } from "./workflow.js";
@@ -90,8 +90,11 @@ export interface AgentOptions {
   publicSuffix?: PublicSuffix;
   /** Where foxgate keeps the user's standing rules, for example `storageAreaStore(browser.storage.local)` (RU4). Default: memory. */
   ruleStore?: Store;
-  /** The tools for a tab. Default: foxloop's browser tools over foxshield. */
-  makeTools?: (tabId: () => number) => LoopTool[];
+  /**
+   * The tools for a tab. Default: foxloop's browser tools over foxshield. `passwords` gives foxloop the passwords the
+   * current run's goal names, on the run's own site only, so `fill` may type one into a password field (HP20).
+   */
+  makeTools?: (tabId: () => number, options: { passwords: (url: string) => readonly string[] }) => LoopTool[];
   /** The active loan whose container holds this cookie store, if any. A run on that tab is a loan run (G12). */
   loanFor?: (cookieStoreId: string) => Promise<Loan | undefined>;
   /** More tools on the run's tab, for example a screenshot tool. The tab's grants cover them. */
@@ -452,6 +455,8 @@ export function createAgent(options: AgentOptions): Agent {
   let handedOff = false;
   // The current run's goal: a password it names answers a password wall (HP14).
   let runGoal: string | undefined;
+  // The tab's address at the run's start: a password from the goal is typed only on its exact host, scheme and port (HP20).
+  let runStart: string | undefined;
   // The tab's host at the run's start: a password from the goal answers a wall only there (HP18).
   let runHost: string | undefined;
   // A sign-in wait of the current run ended with no sign-in: the run ends after that tool (HP15).
@@ -486,7 +491,11 @@ export function createAgent(options: AgentOptions): Agent {
     ...shielded,
     snapshot: async (tabId: number, api?: ScriptingApi) => (lastPage = await shielded.snapshot(tabId, api)),
   };
-  const tabTools = [...(options.makeTools?.(() => target) ?? browserTools({ tabId: () => target, browser: browser as never, paw })), ...(options.moreTabTools?.(() => target) ?? [])]
+  // The passwords the user's own goal names, on the password site only (the start tab's exact host, scheme and port):
+  // the one way fill types a password (HP20).
+  const onPasswordSite = (url: string) => passwordSite(runStart, url, runGoal);
+  const passwords = (url: string) => (onPasswordSite(url) ? runPasswords : []);
+  const tabTools = [...(options.makeTools?.(() => target, { passwords }) ?? browserTools({ tabId: () => target, browser: browser as never, paw, passwords })), ...(options.moreTabTools?.(() => target) ?? [])]
     .map((tool) => (tool.name !== "act" && tool.name !== "fill" && tool.name !== FILL_SEND ? tool : {
       ...tool,
       prepare: async (args: Record<string, unknown>, ctx: ToolContext) => {
@@ -611,6 +620,18 @@ export function createAgent(options: AgentOptions): Agent {
     resolve(text);
     return true;
   };
+  // A password the goal names goes only into a password field on the run's own site; any other call that carries it is
+  // refused before the gate and the card (HP20). A question goes to the user, and AQ3 refuses one for a password.
+  const keepPassword = (tool: LoopTool): LoopTool => ({
+    ...tool,
+    prepare: async (args: Record<string, unknown>, ctx: ToolContext) => {
+      const prepared = tool.prepare ? await tool.prepare(args, ctx) : args;
+      if (passwordElsewhere(tool.name, prepared ?? args, runPasswords, onPasswordSite)) {
+        throw new Error(`A password from the goal goes only into a password field on ${runHost ?? "the run's own site"}. Nothing ran.`);
+      }
+      return prepared;
+    },
+  });
   const tools = [...tabTools, ...extra.map((e) => e.tool), ...(paying ? [paying] : []), openSite];
   // Each decision that a user rule made goes to the trail with its ruleId first; a failed write denies (RU6).
   const VERB = { allow: "allowed", ask: "asked", deny: "denied" } as const;
@@ -690,6 +711,7 @@ export function createAgent(options: AgentOptions): Agent {
       // A tab with no web page gets no tab grants. The extra tools, such as the Space, still work.
       let domain = webHost(tab.url);
       runHost = domain ?? undefined;
+      runStart = domain ? tab.url : undefined;
       if (input.loan && tab.cookieStoreId !== input.loan.cookieStoreId) return await refuse("loan-mismatch", "The tab is not in the lent container.");
       // A goal from Chat on a lent tab names no loan, but it is a loan run all the same.
       const loan = input.loan ?? (tab.cookieStoreId ? await options.loanFor?.(tab.cookieStoreId) : undefined);
@@ -858,9 +880,9 @@ export function createAgent(options: AgentOptions): Agent {
       }));
       // pay only when payments are on for this run (PY13).
       const payOn = paying && domain && !payRun.off ? [paying] : [];
-      const offered = own
+      const offered = (own
         ? [...(domain || opens ? pageTools : []), ...grantedTools, ...payOn, ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])]
-        : tools;
+        : tools).map((t) => (t === askUser ? t : keepPassword(t)));
       const visible = new Set([...(domain ? pageTools : []), ...grantedTools, ...payOn, ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])].map((t) => t.name));
       // The system and goal messages stay as they are, and each request starts with the one before it,
       // so a model can reuse its prompt cache. A tab note goes at the end of the newest message only when the
@@ -1061,6 +1083,7 @@ export function createAgent(options: AgentOptions): Agent {
       runSignal = undefined;
       runGoal = undefined;
       runHost = undefined;
+      runStart = undefined;
       fileUnread = undefined;
       approvals.cancelAll();
       // A question that still waits ends with the run (AQ2).

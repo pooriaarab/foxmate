@@ -1,4 +1,4 @@
-// Tests for docs/failure-modes.md G11 and UI12: what an approval to send a form shows.
+// Tests for docs/failure-modes.md G11, UI12 and HP20: what an approval to send a form shows.
 import type { Control, Snapshot } from "foxpaw";
 import { describe, expect, it } from "vitest";
 import { formDetail, withFields } from "../src/form.js";
@@ -46,5 +46,11 @@ describe("form detail", () => {
     const targets = [{ id: "0:1", request: { op: "type", value: "Sam Park" } }, { id: "0:2", request: { op: "check" } }];
     expect(formDetail(withFields(blank, targets), "0:3")).toBe('The form holds: Name: "Sam Park"; Terms: checked.');
     expect(withFields(undefined, targets)).toBeUndefined();
+  });
+
+  it("HP20: a password a fill_and_send call types shows masked on its card", () => {
+    const login = page([control("0:1", "textbox", "Username", "", 1), control("0:2", "textbox", "Password", "", 1, { secret: true }), control("0:3", "button", "Log in", "", 1, { submit: true })]);
+    const targets = [{ id: "0:1", request: { op: "type", value: "sam" } }, { id: "0:2", request: { op: "type", value: "Tr4il-Mix-2026" } }];
+    expect(formDetail(withFields(login, targets), "0:3")).toBe('The form holds: Username: "sam"; Password: "•••".');
   });
 });

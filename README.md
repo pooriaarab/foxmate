@@ -272,6 +272,14 @@ This section says exactly what leaves your computer.
   a saved login. foxpass's scan reads no field values. The planner reads the
   page after you sign in, and any secret value left in it shows
   `[redacted]`.
+- **A password in your goal.** When your goal gives a password ("password
+  Tr4il-Mix-2026"), the agent types it only into a password field on the
+  exact site, scheme and port the run started on (`https`, unless the site
+  is on this computer). A step that carries it elsewhere, such as a text
+  box, an address or a message, is refused before you see a card. This is a
+  partial defence: it finds the password inside other text and
+  percent-encoded, but not split into short pieces or encoded another way
+  (base64). The log shows it as `•••`.
 - **Saved logins.** A login vault (foxvault, with its own key) keeps each
   password encrypted in this Firefox profile, for one host. At a sign-in
   wait on that host, Chat shows "Fill saved login". The fill waits for your
