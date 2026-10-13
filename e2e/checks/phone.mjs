@@ -11,26 +11,21 @@ import { saveShot } from "../lib.mjs";
 
 export const PHONE_PREFS = { "media.peerconnection.ice.obfuscate_host_addresses": false };
 
-/** The QR code in Settings, drawn to a canvas in the page and decoded here. */
+/** Decodes the QR code that Settings draws: its SVG squares become pixels, 4 per module. */
 async function readQr(sidebar) {
-  const { width, height, pixels } = await sidebar.evaluate(async () => {
+  const { size, d } = await sidebar.evaluate(() => {
     const svg = document.getElementById("phone-qr");
-    const cells = svg.viewBox.baseVal.width;
-    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
-    const img = new Image(cells * 4, cells * 4);
-    img.src = url;
-    await img.decode();
-    const canvas = Object.assign(document.createElement("canvas"), { width: cells * 4, height: cells * 4 });
-    const ctx = canvas.getContext("2d");
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    URL.revokeObjectURL(url);
-    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    let binary = "";
-    for (let i = 0; i < data.length; i += 8192) binary += String.fromCharCode(...data.subarray(i, i + 8192));
-    return { width: canvas.width, height: canvas.height, pixels: btoa(binary) };
+    return { size: svg.viewBox.baseVal.width, d: svg.querySelector("path").getAttribute("d") };
   });
-  return jsQR(new Uint8ClampedArray(Buffer.from(pixels, "base64")), width, height)?.data ?? "";
+  const k = 4;
+  const width = size * k;
+  const pixels = new Uint8ClampedArray(width * width * 4).fill(255);
+  for (const [, x, y] of d.matchAll(/M(\d+) (\d+)/g)) {
+    for (let row = Number(y) * k; row < (Number(y) + 1) * k; row++) {
+      for (let col = Number(x) * k; col < (Number(x) + 1) * k; col++) pixels.fill(0, (row * width + col) * 4, (row * width + col) * 4 + 3);
+    }
+  }
+  return jsQR(pixels, width, width)?.data ?? "";
 }
 
 /** With FOXMATE_SHOTS=<dir>, saves the phone page as <dir>/<name>.png. */
