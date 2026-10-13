@@ -12,8 +12,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0(yauzl@3.4.0)
       foxbench:
-        specifier: ^0.1.3
-        version: 0.1.3(zod@4.6.5)
+        specifier: ^0.1.6
+        version: 0.1.6(zod@4.6.5)
       foxden:
         specifier: npm:foxden-sandbox@^0.1.2
         version: foxden-sandbox@0.1.2
@@ -30,8 +30,8 @@ importers:
         specifier: npm:foxlink-oauth@^0.1.2
         version: foxlink-oauth@0.1.2
       foxloop:
-        specifier: ^0.1.11
-        version: 0.1.11
+        specifier: ^0.1.12
+        version: 0.1.12
       foxmemory:
         specifier: ^0.1.2
         version: 0.1.2
@@ -45,8 +45,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0
       foxpaw:
-        specifier: ^0.1.11
-        version: 0.1.11
+        specifier: ^0.1.12
+        version: 0.1.12
       foxpay-agent:
         specifier: ^0.1.2
         version: 0.1.2
@@ -1610,8 +1610,8 @@ packages:
     resolution: {integrity: sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==}
     engines: {node: '>= 0.6'}
 
-  foxbench@0.1.3:
-    resolution: {integrity: sha512-2EKiaW7+PhuHp06N9/bNy0NptYMmksBqYdGWGdthGkjCQ8vDh3+yEPhNrDu/7kc8Ge09WNheCFRV+5vc5sCZhg==}
+  foxbench@0.1.6:
+    resolution: {integrity: sha512-7EChWhVlnczmC8mkok0YnloSOF5daI4zlTUcDNLTtGu0wkhm+hmBVlpAGGmSTBPP3MFibtbZy3ifpDDBzZ6RiQ==}
     engines: {node: '>=24'}
     hasBin: true
 
@@ -1640,8 +1640,8 @@ packages:
     resolution: {integrity: sha512-V9sxhOEmk9ls4E65W208ILr5NJbl23pu1/r0vipCgNaAaZ6DzbXYd5SMoK607XaSKWDv1Gr8OR6pyjnejzU69Q==}
     engines: {node: '>=24'}
 
-  foxloop@0.1.11:
-    resolution: {integrity: sha512-AmFtVPI2zDAAVlkHmPy/1/13H5hPiH5MbcW+GymYeOCcnBw9Sn0071uXg8uKE2DhinoFt6Nxw3ME2rq8Qpjb7w==}
+  foxloop@0.1.12:
+    resolution: {integrity: sha512-2RAExvr22okOE2ZD9Gs6O8klZGEBGF8eBHj2OUv47IjGLNhOanl0s7hWLiDew1Nt5N1wXYusXzDe88a1gthTJQ==}
     engines: {node: '>=24'}
 
   foxmemory@0.1.2:
@@ -1672,8 +1672,8 @@ packages:
     resolution: {integrity: sha512-aW/UeTirWctpce45g31OJo3q9e3CDnNm/wrOpSvA2F6mJlDzDpCdWdNw4262G6q7w+F6CTiBMG70Keg8yj+c5g==}
     engines: {node: '>=24'}
 
-  foxpaw@0.1.11:
-    resolution: {integrity: sha512-un1SH+BsGp75dW+EZlsbNZRklF5MdQHdm4HxuWpTBRuazeVLRwEzxPOSN4T41LbeWeXrYMQSYbUTrPpIQl6Yxg==}
+  foxpaw@0.1.12:
+    resolution: {integrity: sha512-XQ9SV25I6xSo5h3ZVjcfCXUwvo+eeLPGRDAh0S3r6bI/mWnpbz31J19gcgNyXFt7DlDq1BqNWYb08V9P3gRCDQ==}
     engines: {node: '>=24'}
 
   foxpay-agent@0.1.2:
@@ -4178,7 +4178,7 @@ snapshots:
 
   forwarded@0.2.0: {}
 
-  foxbench@0.1.3(zod@4.6.5):
+  foxbench@0.1.6(zod@4.6.5):
     dependencies:
       '@modelcontextprotocol/sdk': 1.32.1(zod@4.6.5)
     transitivePeerDependencies:
@@ -4218,10 +4218,10 @@ snapshots:
       foxgate: 0.1.3
       foxvault: 0.1.2
 
-  foxloop@0.1.11:
+  foxloop@0.1.12:
     dependencies:
       foxgate: 0.1.3
-      foxpaw: 0.1.11
+      foxpaw: 0.1.12
 
   foxmemory@0.1.2: {}
 
@@ -4235,7 +4235,7 @@ snapshots:
 
   foxpass@0.1.0: {}
 
-  foxpaw@0.1.11: {}
+  foxpaw@0.1.12: {}
 
   foxpay-agent@0.1.2:
     dependencies:

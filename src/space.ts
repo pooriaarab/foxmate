@@ -14,6 +14,9 @@ export interface DenLike {
 /** Code that opens a network connection. The den has none, so it fails or prints nothing (D6). */
 const NETWORK = /\b(?:urllib|urllib3|requests|httpx|aiohttp|http\.client|socket|pyfetch|pyodide\.http|open_url)\b|\bjs\.fetch\b|\bfetch\s*\(/;
 const NO_NETWORK = "Python has no network and cannot read web pages. Read the page with snapshot, or open an address with open_url.";
+/** Code that reads files. With no files in the Space it finds nothing: the file the goal names is a web page (D7). */
+const FILES = /\bopen\s*\(|\bos\.(?:listdir|walk|scandir)\b|\bglob\b|\bpathlib\b|\/drop\b/;
+const NO_FILES = "The Space has no files. A file that the goal names is on the web page: read it with snapshot.";
 
 const cut = (text: string, max = 4000) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
@@ -28,6 +31,7 @@ export function spaceTool(den: () => Promise<DenLike>): LoopTool {
     async run(args) {
       if (NETWORK.test(String(args.code))) return { ok: false, summary: NO_NETWORK };
       const space = await den();
+      if (FILES.test(String(args.code)) && !(await space.list()).length) return { ok: false, summary: NO_FILES };
       const reply = await space.run(String(args.code), { timeoutMs: 30_000, maxOutputBytes: 64_000 });
       const ok = !reply.error;
       const files = (await space.list()).map((f) => (typeof f === "string" ? f : f.path)).join(", ");
