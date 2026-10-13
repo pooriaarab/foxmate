@@ -1,6 +1,10 @@
 // Tests for docs/failure-modes.md G1-G10: the wiring of foxgate, foxloop,
 // foxtrail, foxmemory and the brain. Only the tab and the tools are stubs.
+import { memoryStore as gateMemory } from "foxgate";
 import { createMemory, memoryStore } from "foxmemory";
+import { x402 } from "foxpay-agent";
+import { fakeX402Api } from "foxpay-agent/testing";
+import { createVault } from "foxvault";
 import type { LoopTool } from "foxloop";
 import { Log, MemoryStore, generateKey } from "foxtrail";
 import { sites, startServer, taskById } from "foxbench";
@@ -16,7 +20,7 @@ import type { Workflow, WorkflowStore } from "../src/workflow.js";
 // G34: a stand-in fast helper on the scripted brain. `reply` undefined means no helper.
 // WF1-WF8: `planned` records each request to the planner.
 // G47: `settle` undefined means no settle helper; `slowMs` delays each planner answer; `stopped` counts aborted planner calls.
-const helper = vi.hoisted(() => ({ reply: undefined as string | undefined, seen: [] as string[], tools: [] as string[][], planned: [] as string[], settle: undefined as string | undefined, settled: [] as string[], slowMs: 0, stopped: 0 }));
+const helper = vi.hoisted(() => ({ reply: undefined as string | undefined, seen: [] as string[], tools: [] as string[][], described: [] as Record<string, string>[], planned: [] as string[], settle: undefined as string | undefined, settled: [] as string[], slowMs: 0, stopped: 0 }));
 vi.mock("../src/brain.js", async (original) => {
   const real = await original<typeof import("../src/brain.js")>();
   return {
@@ -26,6 +30,7 @@ vi.mock("../src/brain.js", async (original) => {
       // G36: the tool names of each planner request.
       const brain = { ...real0, mind: { chat: async (messages: Parameters<typeof real0.mind.chat>[0], options: Parameters<typeof real0.mind.chat>[1]) => {
         helper.tools.push(options.tools.map((t) => t.function.name));
+        helper.described.push(Object.fromEntries(options.tools.map((t) => [t.function.name, t.function.description ?? ""])));
         helper.planned.push(JSON.stringify(messages));
         if (helper.slowMs) {
           await new Promise((done) => setTimeout(done, helper.slowMs));
@@ -62,7 +67,7 @@ const wall = { fail: false, reads: 0 };
 
 const host = (tabId: () => number) => async () => new URL(TABS[tabId()]?.url ?? "").hostname;
 
-async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { getDomain(host: string): string | null }; redirect?: Record<string, string>; loading?: boolean; workflows?: WorkflowStore; moreTabTools?: AgentOptions["moreTabTools"] } = {}) {
+async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { getDomain(host: string): string | null }; redirect?: Record<string, string>; loading?: boolean; workflows?: WorkflowStore; moreTabTools?: AgentOptions["moreTabTools"]; pay?: AgentOptions["pay"]; python?: LoopTool } = {}) {
   // Every request to the planner, as text: the redact hook sees each one before it goes out.
   const requests: string[] = [];
   const ran: { tool: string; args: Record<string, unknown>; domain?: string }[] = [];
@@ -136,7 +141,7 @@ async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { 
     ...(options.moreTabTools ? { moreTabTools: options.moreTabTools } : {}),
     extraTools: [
       { tool: { name: "read_inbox", description: "Mail.", parameters: { type: "object", properties: {} }, scope: "read", domain: () => "www.googleapis.com", run: async () => ({ ok: true, summary: "Read 1 message.", untrusted: "Your code is 991177." }) }, domain: "www.googleapis.com", private: true, optIn: true },
-      { tool: { name: "run_python", description: "Python.", parameters: { type: "object", properties: {} }, scope: "fill", domain: () => "space.foxmate", run: async () => ({ ok: true, summary: "ran" }) }, domain: "space.foxmate", private: true },
+      { tool: options.python ?? { name: "run_python", description: "Python.", parameters: { type: "object", properties: {} }, scope: "fill", domain: () => "space.foxmate", run: async () => ({ ok: true, summary: "ran" }) }, domain: "space.foxmate", private: true },
     ],
     loanFor: async (cookieStoreId: string) => {
       if (cookieStoreId === "firefox-container-9") return { cookieStoreId, scope: "read" as const, domain: "bank.test", site: "bank.test", state: "active" };
@@ -151,6 +156,7 @@ async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { 
     },
     ...(options.publicSuffix ? { publicSuffix: options.publicSuffix } : {}),
     ...(options.workflows ? { workflows: options.workflows } : {}),
+    ...(options.pay ? { pay: options.pay } : {}),
   });
   agentRef = agent;
   const events: AgentEvent[] = [];
@@ -306,6 +312,38 @@ describe("agent", () => {
     } finally {
       wall.fail = false;
     }
+  });
+
+  it("D8: a tool's run description replaces its description for that run only", async () => {
+    let empty = true;
+    const python: LoopTool & { describeRun: () => Promise<string | undefined> } = { name: "run_python", description: "Python on the files in the Space.", parameters: { type: "object", properties: {} }, scope: "fill", domain: () => "space.foxmate",
+      describeRun: async () => (empty ? "Python for arithmetic. The Space has no files now." : undefined), run: async () => ({ ok: true, summary: "ran" }) };
+    helper.described = [];
+    const { run } = await setup({ python });
+    await run({ script: [{ tool: "snapshot", args: {} }, finish] });
+    expect(helper.described.at(-1)?.run_python).toBe("Python for arithmetic. The Space has no files now.");
+    empty = false;
+    await run({ script: [{ tool: "snapshot", args: {} }, finish] });
+    expect(helper.described.at(-1)?.run_python).toBe("Python on the files in the Space.");
+  });
+
+  it("PY13: with payments off (no cap, or a loan) the planner gets no pay tool; with a cap it does", async () => {
+    const vault = createVault();
+    await vault.initialize();
+    await vault.set("vault:wallet", "0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318", { domains: ["shop.test"] });
+    let cap = 0;
+    const api = fakeX402Api({ host: "shop.test", payTo: "0x209693Bc6afc0C5328bA36FaF03C514EF312287C", price: 10_000, body: "Paid." });
+    const pay = { x402: x402({ vault, wallet: "vault:wallet", payTo: { "shop.test": "0x209693Bc6afc0C5328bA36FaF03C514EF312287C" }, fetch: api.fetch }), store: gateMemory(), cap: async () => cap };
+    helper.tools = [];
+    const { run } = await setup({ pay });
+    await run({ script: [{ tool: "snapshot", args: {} }, finish] });
+    expect(helper.tools.at(-1)).not.toContain("pay");
+    await run({ tabId: 2, loan: { cookieStoreId: "firefox-container-9", scope: "read" }, script: [{ tool: "snapshot", args: {} }, finish] });
+    expect(helper.tools.at(-1)).not.toContain("pay");
+    cap = 50_000;
+    await run({ script: [{ tool: "snapshot", args: {} }, finish] });
+    expect(helper.tools.at(-1)).toContain("pay");
+    expect(api.log).toEqual([]);
   });
 
   it("G46: a tab tool that is not offered (look with screenshots off) is not in the planner's tools", async () => {

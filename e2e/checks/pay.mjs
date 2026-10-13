@@ -33,8 +33,8 @@ export default async function payCheck({ session, check, record, scripted, finis
   const withScript = async (steps) => ({ ...(await sidebar.evaluate(async () => (await browser.storage.local.get("settings")).settings ?? {})), ...scripted(steps) });
   try {
     const off = await runGoal(session, { url: `${base}/bill`, goal: "Pay this bill.", settings: scripted([payStep("0.01"), finish, finish]) });
-    check("PY1 with no cap (the default), the pay tool refuses, and the pay address sees nothing", { result: ["Payments are off. The user can set a spending cap in Settings."], requests: 0 },
-      { result: results(off), requests: api.log.filter((l) => l.path.startsWith("/pay")).length });
+    check("PY1, PY13 with no cap (the default), the planner gets no pay tool, and the pay address sees nothing", { result: [true], requests: 0 },
+      { result: results(off).map((r) => r.startsWith('There is no tool "pay"')), requests: api.log.filter((l) => l.path.startsWith("/pay")).length });
 
     // The user sets the cap, the payee and the wallet in Settings.
     const status = await sidebar.evaluate(async (payee, key) => {

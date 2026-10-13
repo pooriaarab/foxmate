@@ -17,6 +17,7 @@ import { payTool, type PayOptions, type PayRun } from "./pay.js";
 import { recallNotes, withNotes } from "./recall.js";
 import { fillSteps, generalStep, replayCall, shapeFits, shapeKey, toStep, workflowKey, type WorkflowStep, type WorkflowStore } from "./workflow.js";
 import { shieldedPaw } from "./shield.js";
+import type { RunDescribedTool } from "./space.js";
 
 export interface Trail {
   append(entry: { actor: string; kind: string; data?: unknown }): Promise<unknown>;
@@ -778,7 +779,7 @@ export function createAgent(options: AgentOptions): Agent {
             return approvals.ask({ step: ctx.step, requestId, action: request.action, expiresAt: request.expiresAt, detail });
           },
         };
-        if (domain) grants.push((await host.addGrant({ scope: "read", domains: [domain], tools: ["pay"], expiresAt })).id);
+        if (domain && !off) grants.push((await host.addGrant({ scope: "read", domains: [domain], tools: ["pay"], expiresAt })).id);
         if (domain && !off) grants.push((await host.addGrant({ scope: "pay", domains: [domain], tools: [PAY_TOOL], spendCap: { value: cap, currency: GATE_CURRENCY.USDC ?? "XTS" }, approval: "always", expiresAt })).id);
       }
       // The Google tools (optIn): a schedule that opted in gets them with no ask. Else the first call of
@@ -805,10 +806,17 @@ export function createAgent(options: AgentOptions): Agent {
       const off = new Set<string>();
       for (const t of tabTools as OfferedTool[]) if (t.offered && !(await t.offered().catch(() => false))) off.add(t.name);
       const pageTools = tabTools.filter((t) => scopes.includes(t.scope) && !off.has(t.name));
+      // A tool may describe itself for this run: run_python with an empty Space (D8).
+      const grantedTools = await Promise.all(granted.map(async ({ tool }) => {
+        const told = await (tool as RunDescribedTool).describeRun?.().catch(() => undefined);
+        return told ? { ...tool, description: told } : tool;
+      }));
+      // pay only when payments are on for this run (PY13).
+      const payOn = paying && domain && !payRun.off ? [paying] : [];
       const offered = own
-        ? [...(domain || opens ? pageTools : []), ...granted.map((e) => e.tool), ...(paying && domain ? [paying] : []), ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])]
+        ? [...(domain || opens ? pageTools : []), ...grantedTools, ...payOn, ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])]
         : tools;
-      const visible = new Set([...(domain ? pageTools : []), ...granted.map((e) => e.tool), ...(paying && domain ? [paying] : []), ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])].map((t) => t.name));
+      const visible = new Set([...(domain ? pageTools : []), ...grantedTools, ...payOn, ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])].map((t) => t.name));
       // The system and goal messages stay as they are, and each request starts with the one before it,
       // so a model can reuse its prompt cache. A tab note goes at the end of the newest message only when the
       // tab or the sites change. `notes` maps a foxloop history index to the note after it (G31).
