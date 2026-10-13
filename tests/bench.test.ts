@@ -1,10 +1,20 @@
-// Tests for docs/failure-modes.md BN1-BN3: the bench command's suite flag,
+// Tests for docs/failure-modes.md BN1-BN3 and BN5: the bench command's suite flag,
 // the metrics that the adapter reports, and the Ask Sam answers. None needs Firefox.
 import { spawnSync } from "node:child_process";
 import { sites, startServer, taskById } from "foxbench";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error -- cli/ is plain JavaScript with no type declarations.
-import { askSam, runMetrics } from "../cli/bench.mjs";
+import { askSam, foxmateAdapter, runMetrics } from "../cli/bench.mjs";
+
+/** A promise that waits until `fail` rejects it: one task's sidebar calls (BN5). */
+function gate() {
+  let reject: ((error: Error) => void) | undefined;
+  const promise = new Promise<never>((_, no) => {
+    reject = no;
+  });
+  promise.catch(() => {});
+  return { promise, fail: () => reject?.(new Error("the run ended")) };
+}
 
 describe("bench", () => {
   it("BN1: an unknown suite exits with code 2 and lists the suites", () => {
@@ -41,5 +51,37 @@ describe("bench", () => {
     expect(server.state.questions.length).toBe(2);
     await server.close();
     expect(await ask(url, "Are you there?")).toBeUndefined();
+  });
+
+  it("BN5: a task that ends after its time limit closes its own tab, not the next task's", async () => {
+    type Tab = { url: () => string; closed: boolean; close: () => Promise<void>; bringToFront: () => Promise<void> };
+    const tabs: Tab[] = [];
+    // Each task's sidebar calls wait until the test lets that task end.
+    const gates: { promise: Promise<never>; fail: () => void }[] = [];
+    const session = {
+      fox: {
+        open: async (url: string) => {
+          gates.push(gate());
+          const tab: Tab = { url: () => url, closed: false, close: async () => { tab.closed = true; }, bringToFront: async () => {} };
+          tabs.push(tab);
+          return tab;
+        },
+      },
+      // The Stop message answers at once.
+      sidebar: { evaluate: async (fn: () => unknown) => (String(fn).includes('"stop"') ? undefined : gates.at(-1)!.promise) },
+    };
+    const adapter = (foxmateAdapter as (s: unknown, o: unknown) => { runTask(i: { url: string; goal: string }): Promise<unknown>; abort(): Promise<void> })(session, { planner: { planner: "saluki" } });
+    const late = adapter.runTask({ url: "http://127.0.0.1:1/a/", goal: "First task" }).catch(() => "late");
+    await new Promise((r) => setTimeout(r, 10));
+    await adapter.abort();
+    const next = adapter.runTask({ url: "http://127.0.0.1:2/b/", goal: "Second task" }).catch(() => "next");
+    await new Promise((r) => setTimeout(r, 10));
+    gates[0]!.fail();
+    expect(await late).toBe("late");
+    expect(tabs[0]!.closed).toBe(true);
+    expect(tabs[1]!.closed).toBe(false);
+    gates[1]!.fail();
+    await next;
+    expect(tabs[1]!.closed).toBe(true);
   });
 });

@@ -12,7 +12,7 @@ import type { Provider } from "foxmind";
 import { createApprovals, ruleOffer, type Approvals, type RuleContext, type RuleOffer } from "./approvals.js";
 import { formDetail } from "./form.js";
 import { BrainError, createBrain, type Brain, type BrainSettings } from "./brain.js";
-import { maskCards, maskSecrets, type Pass, type PassEvent } from "./pass.js";
+import { HandoffError, maskCards, maskSecrets, type Pass, type PassEvent } from "./pass.js";
 import { payTool, type PayOptions, type PayRun } from "./pay.js";
 import { recallNotes, withNotes } from "./recall.js";
 import { fillSteps, generalStep, replayCall, shapeFits, shapeKey, toStep, workflowKey, type WorkflowStep, type WorkflowStore } from "./workflow.js";
@@ -269,8 +269,13 @@ export function createAgent(options: AgentOptions): Agent {
   let tainted = false;
   // The current run waited for a sign-in: the page changed, so a replay ends there (WF11).
   let handedOff = false;
+  // The current run's goal: a password it names answers a password wall (HP14).
+  let runGoal: string | undefined;
+  // A sign-in wait of the current run ended with no sign-in: the run ends after that tool (HP15).
+  let signInEnded: string | undefined;
   const passEmit = (event: PassEvent) => {
     if (event.type === "handoff") handedOff = true;
+    if (event.type === "handoff-end" && !["signed-in", "no-wall", "cancelled"].includes(event.status)) signInEnded ??= event.status;
     runEmit(event);
   };
   const shielded = shieldedPaw({
@@ -281,7 +286,7 @@ export function createAgent(options: AgentOptions): Agent {
     },
     ...(options.pass ? { fieldHints: options.pass.hints } : {}),
     // Each read, also those inside a form fill, waits for a sign-in first (HP1, HP10).
-    ...(options.pass ? { beforeRead: (tabId: number) => options.pass!.beforeRead(tabId, { emit: passEmit, ...(runSignal ? { signal: runSignal } : {}) }) } : {}),
+    ...(options.pass ? { beforeRead: (tabId: number) => options.pass!.beforeRead(tabId, { emit: passEmit, ...(runGoal ? { goal: runGoal } : {}), ...(runSignal ? { signal: runSignal } : {}) }) } : {}),
   });
   const paw = {
     ...shielded,
@@ -300,6 +305,18 @@ export function createAgent(options: AgentOptions): Agent {
     .map((tool) => (tool.name !== "click" ? tool : {
       ...tool,
       describe: async (args: Record<string, unknown>, ctx: ToolContext) => [await tool.describe?.(args, ctx), formDetail(lastPage, String(args.controlId), lastTyped)].filter(Boolean).join(" "),
+    }))
+    // A read that failed on a sign-in wait ends the run (HP15).
+    .map((tool) => ({
+      ...tool,
+      run: async (args: Record<string, unknown>, ctx: ToolContext) => {
+        try {
+          return await tool.run(args, ctx);
+        } catch (error) {
+          if (error instanceof HandoffError && error.status !== "cancelled") signInEnded ??= error.status;
+          throw error;
+        }
+      },
     }));
   const extra = options.extraTools ?? [];
   let foxpay: Foxpay | undefined;
@@ -414,6 +431,8 @@ export function createAgent(options: AgentOptions): Agent {
     busy = true;
     runEmit = emit;
     runSignal = input.signal;
+    runGoal = input.goal;
+    signInEnded = undefined;
     const grants: string[] = [];
     try {
       const tab: TabInfo = input.tabId === undefined ? {} : await browser.tabs.get(input.tabId);
@@ -707,6 +726,13 @@ export function createAgent(options: AgentOptions): Agent {
         }
         if (event.type === "done") end = { status: "done", summary: event.summary };
         if (event.type === "blocked") end = { status: "blocked", reason: event.reason, message: event.message };
+        // The user did not do the sign-in step: no more reads, no second wait (HP15).
+        if (event.type === "tool-result" && signInEnded) {
+          const message = `The sign-in step was not done (${signInEnded}). Sign in on the tab, then run the goal again.`;
+          end = { status: "blocked", reason: "sign-in", message };
+          await trail.append({ actor: "foxmate", kind: "run.blocked", data: { reason: "sign-in", status: signInEnded } });
+          break;
+        }
       }
       // Only a run that ended done, with no private data, is kept (WF6, WF7). The finish is not
       // kept: the planner reads the newest page and writes the summary (WF10).
@@ -723,6 +749,7 @@ export function createAgent(options: AgentOptions): Agent {
       payRun = { off: "No run.", key: "", ask: async () => null };
       runEmit = noEvent;
       runSignal = undefined;
+      runGoal = undefined;
       approvals.cancelAll();
       // A question that still waits ends with the run (AQ2).
       for (const resolve of questions.values()) resolve(undefined);
