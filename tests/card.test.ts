@@ -1,4 +1,4 @@
-// UI10, UI11: the approval for a form fill names where the form sends and
+// UI10, UI11, UI12: the approval for a form fill names where the form sends and
 // which fields get a value, on the sidebar card and on the phone.
 import { describe, expect, it } from "vitest";
 // @ts-expect-error -- a plain JS module of the extension, with no types.
@@ -59,5 +59,18 @@ describe("UI11: the phone names the destination too", () => {
     const { title, detail } = phoneApproval(click);
     expect(title).toBe("foxmate asks: click on shop.example");
     expect(detail.split("\n\n")).toHaveLength(2);
+  });
+});
+
+describe("UI12: fill_and_send names its destination and fields", () => {
+  const send = {
+    tool: "fill_and_send", domain: "shop.example", scope: "submit",
+    args: { fields: {}, send: "0:9", sendTarget: { id: "0:9", label: "Pay $40.00", action: "https://shop.example/checkout/pay?step=2" },
+      targets: [{ id: "0:1", label: "Email", request: { op: "type", value: "sam@example.com" } }, { id: "0:2", label: "Terms", request: { op: "check" } }] },
+  };
+  it("says where the pinned button sends, and each field with its value", () => {
+    expect(sendsTo(send)).toBe("Sends to shop.example/checkout/pay");
+    expect(fieldsOf(send)).toEqual(["Email: sam@example.com", "Terms: checked"]);
+    expect(sendsTo({ ...send, args: { ...send.args, sendTarget: { ...send.args.sendTarget, action: null } } })).toBe("foxpaw found no destination, so nothing will be sent");
   });
 });

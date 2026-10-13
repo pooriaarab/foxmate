@@ -60,12 +60,18 @@ function inOrder(label: string, parts: readonly string[]): boolean {
 }
 
 /** The steps to keep for foxloop's `fill`: one `act` step for each field that ran, on the page the call was planned on (WF22, WF23). */
-export function fillSteps(filled: readonly { controlId: string; op: string; value?: string }[], page: Snapshot | undefined): WorkflowStep[] | null | undefined {
+export function fillSteps(filled: readonly { controlId: string; op: string; value?: string }[], page: Snapshot | undefined, sent?: string): WorkflowStep[] | null | undefined {
   const steps: WorkflowStep[] = [];
   for (const f of filled) {
     const step = toStep("act", { controlId: f.controlId, op: f.op, ...(f.value !== undefined ? { value: f.value } : {}) }, page);
     if (!step) return step;
     steps.push(step);
+  }
+  // fill_and_send's button: its own click step, so a replay asks for it (WF25).
+  if (sent !== undefined) {
+    const click = toStep("click", { controlId: sent }, page);
+    if (!click) return click;
+    steps.push(click);
   }
   return steps;
 }

@@ -10,7 +10,7 @@ import * as foxpaw from "foxpaw";
 import type { ScriptingApi, Snapshot } from "foxpaw";
 import type { Provider } from "foxmind";
 import { createApprovals, ruleOffer, type Approvals, type RuleContext, type RuleOffer } from "./approvals.js";
-import { formDetail } from "./form.js";
+import { formDetail, withFields } from "./form.js";
 import { BrainError, createBrain, type Brain, type BrainSettings } from "./brain.js";
 import { HandoffError, maskCards, maskSecrets, type Pass, type PassEvent } from "./pass.js";
 import { payTool, type PayOptions, type PayRun } from "./pay.js";
@@ -72,6 +72,9 @@ export type AgentEvent =
   | { type: "answer"; step: number; id: string; answered: boolean }
   | PassEvent;
 
+/** A tab tool that may sit out a run: `offered` is asked at the start of each run (G46). */
+export type OfferedTool = LoopTool & { offered?: () => Promise<boolean> };
+
 export interface RunEnd {
   status: "done" | "blocked" | "aborted" | "refused";
   summary?: string;
@@ -91,7 +94,7 @@ export interface AgentOptions {
   /** The active loan whose container holds this cookie store, if any. A run on that tab is a loan run (G12). */
   loanFor?: (cookieStoreId: string) => Promise<Loan | undefined>;
   /** More tools on the run's tab, for example a screenshot tool. The tab's grants cover them. */
-  moreTabTools?: (tabId: () => number) => LoopTool[];
+  moreTabTools?: (tabId: () => number) => OfferedTool[];
   /**
    * More tools, for example the Space. Each one names its own domain.
    * `private`: its good result is private data (G16). `optIn`: granted on a
@@ -243,6 +246,8 @@ export function unnamedChoice(page: Snapshot | undefined, goal: string, picks: {
 }
 
 /** The picks of a prepared act or fill call, for the AQ7 guard. */
+/** foxloop's tool that fills fields and clicks the send button in one call (WF25, UI12). */
+const FILL_SEND = "fill_and_send";
 const picksOf = (name: string, args: Record<string, unknown>) => name === "act"
   ? [{ id: String((args.target as { id?: unknown } | undefined)?.id ?? args.controlId), op: String(args.op), ...(typeof args.value === "string" ? { value: args.value } : {}) }]
   : ((args.targets ?? []) as { id: string; request: { op: string; value?: string } }[]).map((t) => ({ id: t.id, ...t.request }));
@@ -293,7 +298,7 @@ export function createAgent(options: AgentOptions): Agent {
     snapshot: async (tabId: number, api?: ScriptingApi) => (lastPage = await shielded.snapshot(tabId, api)),
   };
   const tabTools = [...(options.makeTools?.(() => target) ?? browserTools({ tabId: () => target, browser: browser as never, paw })), ...(options.moreTabTools?.(() => target) ?? [])]
-    .map((tool) => (tool.name !== "act" && tool.name !== "fill" ? tool : {
+    .map((tool) => (tool.name !== "act" && tool.name !== "fill" && tool.name !== FILL_SEND ? tool : {
       ...tool,
       prepare: async (args: Record<string, unknown>, ctx: ToolContext) => {
         const prepared = tool.prepare ? await tool.prepare(args, ctx) : args;
@@ -305,6 +310,15 @@ export function createAgent(options: AgentOptions): Agent {
     .map((tool) => (tool.name !== "click" ? tool : {
       ...tool,
       describe: async (args: Record<string, unknown>, ctx: ToolContext) => [await tool.describe?.(args, ctx), formDetail(lastPage, String(args.controlId), lastTyped)].filter(Boolean).join(" "),
+    }))
+    // fill_and_send's card shows the form with the call's own values in it (UI12).
+    .map((tool) => (tool.name !== FILL_SEND ? tool : {
+      ...tool,
+      describe: async (args: Record<string, unknown>, ctx: ToolContext) => {
+        const targets = (args.targets ?? []) as { id: string; request: { op: string; value?: string } }[];
+        const typed = targets.filter((t) => t.request.op === "type").at(-1)?.id;
+        return [await tool.describe?.(args, ctx), formDetail(withFields(lastPage, targets), String(args.send), typed)].filter(Boolean).join(" ");
+      },
     }))
     // A read that failed on a sign-in wait ends the run (HP15).
     .map((tool) => ({
@@ -573,7 +587,10 @@ export function createAgent(options: AgentOptions): Agent {
       // An outside agent over foxbridge keeps every tool and every denial as a stop (G29).
       // A run that may open a site holds the tab tools from the start, but the planner sees them
       // only once a tab is open (OS6).
-      const pageTools = tabTools.filter((t) => scopes.includes(t.scope));
+      // A tool that is off for this run (look with screenshots off) is not offered (G46).
+      const off = new Set<string>();
+      for (const t of tabTools as OfferedTool[]) if (t.offered && !(await t.offered().catch(() => false))) off.add(t.name);
+      const pageTools = tabTools.filter((t) => scopes.includes(t.scope) && !off.has(t.name));
       const offered = own
         ? [...(domain || opens ? pageTools : []), ...granted.map((e) => e.tool), ...(paying && domain ? [paying] : []), ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])]
         : tools;
@@ -689,22 +706,25 @@ export function createAgent(options: AgentOptions): Agent {
         if (event.type === "tool-call" && event.name === "act" && (event.args as { op?: string } | undefined)?.op === "type") lastTyped = String((event.args as { controlId?: unknown }).controlId);
         // The run asked the user: the AQ7 guard steps aside, whatever the answer was (AQ8).
         if (event.type === "tool-result" && event.name === ASK_USER) choiceGuard = false;
-        if (event.type === "tool-call" && event.name === "fill") {
+        if (event.type === "tool-call" && (event.name === "fill" || event.name === FILL_SEND)) {
           const typed = Object.entries((event.args as { fields?: Record<string, unknown> } | undefined)?.fields ?? {}).filter(([, v]) => typeof v === "string").at(-1);
           if (typed) lastTyped = typed[0];
         }
         // The workflow cache keeps each call that worked, by its control's role and label (WF1, WF6, WF7).
         // A fill is kept from its result, as one act step per field that ran (WF22): here it keeps the page it was planned on.
         if (record && event.type === "tool-call" && event.step > 0) {
-          pending.set(event.id, event.name === "fill" ? fillPage(lastPage) : event.args && typeof event.args === "object" ? toStep(event.name, event.args as Record<string, unknown>, lastPage) : undefined);
+          pending.set(event.id, event.name === "fill" || event.name === FILL_SEND ? fillPage(lastPage) : event.args && typeof event.args === "object" ? toStep(event.name, event.args as Record<string, unknown>, lastPage) : undefined);
         }
         // A fill with no data.filled (it threw part way) leaves the fields that ran unknown: stop recording (WF24).
-        const filled = event.type === "tool-result" && event.name === "fill" ? (event.data as { filled?: { controlId: string; op: string; value?: string }[] } | undefined)?.filled : undefined;
-        const fillDone = event.type === "tool-result" && event.step > 0 && event.name === "fill" ? (filled ? fillSteps(filled, (pending.get(event.id) as FillPage | undefined)?.page) : null) : undefined;
+        // fill_and_send keeps its fields the same way, then a click step for the button it clicked (WF25).
+        const fills = event.type === "tool-result" && (event.name === "fill" || event.name === FILL_SEND);
+        const fillData = fills ? (event.data as { filled?: { controlId: string; op: string; value?: string }[]; sent?: string } | undefined) : undefined;
+        const filled = fillData?.filled;
+        const fillDone = fills && event.step > 0 ? (filled ? fillSteps(filled, (pending.get(event.id) as FillPage | undefined)?.page, fillData?.sent) : null) : undefined;
         const done: WorkflowStep[] | null | undefined = event.type !== "tool-result" || event.step <= 0 ? undefined
-          : event.name === "fill" ? fillDone
+          : fills ? fillDone
           : event.ok ? (() => { const st = pending.get(event.id) as WorkflowStep | null | undefined; return st && (event.name === ASK_USER ? [{ ...st, answer: event.summary }] : [st]); })() : [];
-        if (record && event.type === "tool-result" && event.step > 0 && (event.ok || event.name === "fill")) {
+        if (record && event.type === "tool-result" && event.step > 0 && (event.ok || fills)) {
           if (!done) record = null;
           else record.push(...done);
         }

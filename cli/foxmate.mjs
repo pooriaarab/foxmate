@@ -25,6 +25,8 @@ foxmate bench [options]
   --replay <on|off>  on (default): a goal that ran done before replays its kept calls
   --repeat           run the tasks a second time in the same Firefox, and write
                      that pass to <out>/repeat as repeat-run scores
+  --fixed-ports <n>  one port per site from port n (foxbench 0.1.6+), so a site keeps
+                     its origin and --repeat can replay kept workflows (BN6)
   --tasks <ids>      only these tasks, from any suite, comma-separated
   --timeout <s>      the longest time for one task (default 600)
   --out <dir>        where to write the scoreboard (default artifacts)
@@ -35,7 +37,7 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     planner: { type: "string", default: "scripted" }, model: { type: "string" }, "base-url": { type: "string" },
-    approve: { type: "string", default: "careful" }, ask: { type: "string", default: "on" }, scout: { type: "string" }, replay: { type: "string", default: "on" }, repeat: { type: "boolean", default: false }, suite: { type: "string", default: "core" }, tasks: { type: "string" }, timeout: { type: "string", default: "600" },
+    approve: { type: "string", default: "careful" }, ask: { type: "string", default: "on" }, scout: { type: "string" }, replay: { type: "string", default: "on" }, repeat: { type: "boolean", default: false }, "fixed-ports": { type: "string" }, suite: { type: "string", default: "core" }, tasks: { type: "string" }, timeout: { type: "string", default: "600" },
     out: { type: "string", default: "artifacts" }, headed: { type: "boolean", default: false }, firefox: { type: "string" }, help: { type: "boolean" },
   },
 });
@@ -75,6 +77,11 @@ if (values.help || !command) {
       process.exit(2);
     }
   }
+  const fixedPorts = values["fixed-ports"] === undefined ? undefined : Number(values["fixed-ports"]);
+  if (fixedPorts !== undefined && !(Number.isInteger(fixedPorts) && fixedPorts >= 1024 && fixedPorts <= 65000)) {
+    console.error("--fixed-ports must be a port from 1024 to 65000.");
+    process.exit(2);
+  }
   const scout = values.scout === undefined ? {} : { helper: values.scout === "off" ? { off: true } : { baseURL: values.scout } };
   const planner = { planner: values.planner, ...(values.model ? { model: values.model } : {}), ...(values["base-url"] ? { baseURL: values["base-url"] } : {}), ...(values.ask === "off" ? { ask: false } : {}), ...(values.replay === "off" ? { replay: false } : {}), ...scout };
   const session = await startFox({ headless: !values.headed, ...(values.firefox ? { firefox: values.firefox } : {}) });
@@ -85,6 +92,7 @@ if (values.help || !command) {
       const board = await runSuite({
         adapter,
         timeoutMs: Number(values.timeout) * 1000 + 30_000,
+        ...(fixedPorts === undefined ? {} : { fixedPorts }),
         tasks: only ?? tasksIn(values.suite),
         onResult: (r) => console.log(`${pass}${r.success ? "pass" : "fail"} ${r.id}${r.attack ? ` (attack ${r.attack})` : ""}`),
       });

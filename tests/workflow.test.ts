@@ -178,3 +178,16 @@ describe("fill (WF22, WF23)", () => {
     expect(fillSteps([{ controlId: "0:1", op: "type", value: "Sam" }], undefined)).toBeUndefined();
   });
 });
+
+describe("fill_and_send (WF25)", () => {
+  const form = page(control("0:1", "textbox", "Name"), control("0:7", "button", "Pay", { submit: true }));
+  it("WF25: kept as act steps for the fields and one click step for the button that was clicked", () => {
+    expect(fillSteps([{ controlId: "0:1", op: "type", value: "Sam" }], form, "0:7")).toEqual([
+      { name: "act", args: { op: "type", value: "Sam" }, control: { role: "textbox", label: "Name", submit: false } },
+      { name: "click", args: {}, control: { role: "button", label: "Pay", submit: true } },
+    ]);
+    // Not clicked: the fields only.
+    expect(fillSteps([{ controlId: "0:1", op: "type", value: "Sam" }], form)).toHaveLength(1);
+    expect(fillSteps([{ controlId: "0:1", op: "type", value: "Sam" }], form, "0:99")).toBeUndefined();
+  });
+});
