@@ -4,9 +4,11 @@
 //   foxmate bench   score foxmate on foxbench in a real Firefox
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { writeArtifact } from "create-foxkit/e2e";
 import { SUITES, runSuite, taskById, tasksIn, toMarkdown, writeScore } from "foxbench";
 import { foxmateAdapter } from "./bench.mjs";
 import { startFox } from "./driver.mjs";
+import { benchExtension, isRemote } from "./remote.mjs";
 
 const HELP = `foxmate try [--firefox <path>]
   Opens Firefox with a fresh, temporary profile and foxmate installed.
@@ -31,7 +33,9 @@ foxmate bench [options]
   --timeout <s>      the longest time for one task (default 600)
   --out <dir>        where to write the scoreboard (default artifacts)
   --headed           show the Firefox window
-  --firefox <path>   the Firefox binary`;
+  --firefox <path>   the Firefox binary
+  FOXKIT_BROWSER=ichabod with ICHABOD_API_KEY runs the bench in Firefox on
+  Ichabod. Build dist-ext-bench/ first: node scripts/build-ext.mjs --bench-remote`;
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -84,9 +88,12 @@ if (values.help || !command) {
   }
   const scout = values.scout === undefined ? {} : { helper: values.scout === "off" ? { off: true } : { baseURL: values.scout } };
   const planner = { planner: values.planner, ...(values.model ? { model: values.model } : {}), ...(values["base-url"] ? { baseURL: values["base-url"] } : {}), ...(values.ask === "off" ? { ask: false } : {}), ...(values.replay === "off" ? { replay: false } : {}), ...scout };
-  const session = await startFox({ headless: !values.headed, ...(values.firefox ? { firefox: values.firefox } : {}) });
+  // FOXKIT_BROWSER=ichabod: Firefox on Ichabod, with the remote bench build.
+  const remote = isRemote();
+  const start = () => startFox({ headless: !values.headed, ...(remote ? { extension: benchExtension() } : {}), ...(values.firefox ? { firefox: values.firefox } : {}) });
+  const session = await start();
   try {
-    const adapter = foxmateAdapter(session, { planner, approve: values.approve, timeoutMs: Number(values.timeout) * 1000 });
+    const adapter = foxmateAdapter(session, { planner, approve: values.approve, timeoutMs: Number(values.timeout) * 1000, ...(remote ? { renew: start } : {}) });
     // A second pass in the same Firefox finds the first pass's kept workflows (WF8).
     for (const [pass, out] of [["", values.out], ...(values.repeat ? [["repeat ", join(values.out, "repeat")]] : [])]) {
       const board = await runSuite({
@@ -101,6 +108,8 @@ if (values.help || !command) {
     }
   } finally {
     await session.fox.close();
+    // The Ichabod session IDs, to find each recording on the Ichabod console.
+    if (remote) console.log(writeArtifact(values.out, "ichabod-sessions", { suite: values.suite }));
   }
 } else {
   console.error(`Unknown command "${command}".\n\n${HELP}`);
