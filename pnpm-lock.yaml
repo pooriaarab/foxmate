@@ -36,8 +36,8 @@ importers:
         specifier: ^0.1.2
         version: 0.1.2
       foxmind:
-        specifier: ^0.1.3
-        version: 0.1.3(@huggingface/transformers@4.3.1(@types/node@24.19.1))
+        specifier: ^0.1.5
+        version: 0.1.5(@huggingface/transformers@4.3.1(@types/node@24.19.1))
       foxnotify:
         specifier: ^0.1.0
         version: 0.1.0(foxsync@0.1.2)
@@ -54,8 +54,8 @@ importers:
         specifier: ^0.1.2
         version: 0.1.2(yauzl@3.4.0)
       foxshield:
-        specifier: ^0.1.2
-        version: 0.1.2
+        specifier: ^0.1.4
+        version: 0.1.4
       foxsync:
         specifier: ^0.1.2
         version: 0.1.2
@@ -1649,8 +1649,8 @@ packages:
     engines: {node: '>=24'}
     hasBin: true
 
-  foxmind@0.1.3:
-    resolution: {integrity: sha512-SE760UsclrU+rUtf+kqZUj28UVsFv701mCUz4ny0GYdmn4JccKXEXxrjYOFlfsWz74pj1SemEtzlX94SikMmuw==}
+  foxmind@0.1.5:
+    resolution: {integrity: sha512-gZyL4Ebq7CZptQHhstlZofhkArOYGbP0bmLk3fkw0vzFu1hBPx83cDoDniN2IegHcDt1BGYXP579Ls24hF/Vdg==}
     engines: {node: '>=24'}
     hasBin: true
     peerDependencies:
@@ -1685,8 +1685,8 @@ packages:
     engines: {node: '>=24'}
     hasBin: true
 
-  foxshield@0.1.2:
-    resolution: {integrity: sha512-m94XS1VC/z5ccI/7UbfM0y/mGptcSAgJ1JhnxUV2zjb9gw8DsedA88vbjyGbbsVr3MvGMfcspydmeHkYeehrlA==}
+  foxshield@0.1.4:
+    resolution: {integrity: sha512-VQ9VPK9GX9U33HLekwowQyUfTU2yDRF9r5ieTBNGPfwWO5P2jLbvd14qZMvW9vBQUDACPdddC/KZ08PMDjb00w==}
     engines: {node: '>=24'}
     hasBin: true
 
@@ -4209,7 +4209,7 @@ snapshots:
 
   foxlens@0.1.2(@huggingface/transformers@4.3.1(@types/node@24.19.1)):
     dependencies:
-      foxmind: 0.1.3(@huggingface/transformers@4.3.1(@types/node@24.19.1))
+      foxmind: 0.1.5(@huggingface/transformers@4.3.1(@types/node@24.19.1))
     transitivePeerDependencies:
       - '@huggingface/transformers'
 
@@ -4225,7 +4225,7 @@ snapshots:
 
   foxmemory@0.1.2: {}
 
-  foxmind@0.1.3(@huggingface/transformers@4.3.1(@types/node@24.19.1)):
+  foxmind@0.1.5(@huggingface/transformers@4.3.1(@types/node@24.19.1)):
     optionalDependencies:
       '@huggingface/transformers': 4.3.1(@types/node@24.19.1)
 
@@ -4253,7 +4253,7 @@ snapshots:
       - utf-8-validate
       - yauzl
 
-  foxshield@0.1.2:
+  foxshield@0.1.4:
     dependencies:
       linkedom: 0.18.13
     transitivePeerDependencies:
@@ -4269,7 +4269,7 @@ snapshots:
 
   foxvoice@0.1.0(@huggingface/transformers@4.3.1(@types/node@24.19.1)):
     dependencies:
-      foxmind: 0.1.3(@huggingface/transformers@4.3.1(@types/node@24.19.1))
+      foxmind: 0.1.5(@huggingface/transformers@4.3.1(@types/node@24.19.1))
     optionalDependencies:
       '@huggingface/transformers': 4.3.1(@types/node@24.19.1)
 
