@@ -37,6 +37,11 @@ const tab = (result: () => Promise<unknown>, inside: number[] | "throw" = []) =>
   },
 });
 const report = (): ScanReport => scanHtml(PAGE);
+// S15: a stand-in page element with a box; contains() follows the tree.
+const el = (name: string, rect: { left: number; right: number; bottom: number }, parent?: { contains: (e: unknown) => boolean }) => {
+  const node = { name, parent, getBoundingClientRect: () => rect, contains: (e: unknown) => e === node || (e as { parent?: unknown }).parent === node };
+  return node;
+};
 
 describe("shield", () => {
   it("S1: hidden instructions do not reach the planner", async () => {
@@ -108,6 +113,26 @@ describe("shield", () => {
     const page = { ...structuredClone(raw), controls: [control("0:3", "Country")] };
     const shielded = shieldedPaw({ paw: { ...fakePaw, snapshot: async () => page }, browser: tab(async () => [{ result: live }]) });
     expect((await shielded.snapshot(1)).controls.map((c) => c.label)).toEqual(["Country"]);
+  });
+
+  it("S15: for an offscreen finding, a control's own box decides; other kinds drop every control inside", () => {
+    const onPage = { left: 10, right: 34, bottom: 40 };
+    const iconButton = el("close", onPage);
+    const indented = el("p", onPage);
+    const movedLink = el("a", { left: -9990, right: -9900, bottom: 80 }, indented);
+    const farButton = el("far", { left: -9999, right: -9900, bottom: 120 });
+    const faded = el("faded", onPage);
+    const selectors: Record<string, unknown[]> = { "#close": [iconButton], "p": [indented], "#far": [farButton], "#faded": [faded] };
+    const page = globalThis as unknown as Record<string, unknown>;
+    const nodes = new Map<number, unknown>([[1, iconButton], [2, movedLink], [3, farButton], [4, faded]]);
+    Object.assign(page, { window: { __foxpaw: { nodes }, scrollX: 0, scrollY: 0 }, document: { querySelectorAll: (s: string) => selectors[s] ?? [] } });
+    try {
+      const findings = [{ selector: "#close", kind: "offscreen" }, { selector: "p", kind: "offscreen" }, { selector: "#far", kind: "offscreen" }, { selector: "#faded", kind: "opacity-zero" }];
+      expect(hiddenNodes(findings, [1, 2, 3, 4])).toEqual([2, 3, 4]);
+    } finally {
+      delete page.window;
+      delete page.document;
+    }
   });
 
   it("S9: a visible control whose label is a word in flagged hidden text stays", async () => {
