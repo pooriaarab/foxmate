@@ -19,6 +19,7 @@ const $ = (id) => document.getElementById(id);
 let port;
 let pairing;
 let link;
+let starts = 0;
 
 async function enabled() {
   const { settings = {} } = await browser.storage.local.get("settings");
@@ -29,6 +30,7 @@ async function render() {
   const on = await enabled();
   $("module-phone").checked = on;
   $("phone-panel").hidden = !on;
+  if (!on) starts++; // a pairing that is still starting must not go on
   if (!on && (link || pairing)) {
     // Turned off, also from another view: no approval goes to the phone.
     pairing?.cancel();
@@ -59,11 +61,20 @@ function drawQr(text) {
 }
 
 async function pair() {
+  // Each press replaces the pairing before it. A press that a later press
+  // overtook while pairDesktop ran drops its own pairing.
+  const turn = ++starts;
   pairing?.cancel();
+  pairing = undefined;
   link?.close();
   link = undefined;
-  const current = (pairing = await pairDesktop({ name: "foxmate", phoneUrl: PHONE_URL, relay: RELAY_URL }));
-  if (!current.qr) throw new Error("the pairing text is too long for a QR code");
+  const current = await pairDesktop({ name: "foxmate", phoneUrl: PHONE_URL, relay: RELAY_URL });
+  if (turn !== starts) return current.cancel();
+  if (!current.qr) {
+    current.cancel();
+    throw new Error("the pairing text is too long for a QR code");
+  }
+  pairing = current;
   drawQr(current.qr);
   $("phone-code").textContent = current.code;
   $("phone-show").hidden = false;
