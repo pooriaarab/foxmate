@@ -1,14 +1,20 @@
-// Tests for docs/failure-modes.md HP5, HP7, HP14, HP17 and HP18. The redaction is foxpass's
+// Tests for docs/failure-modes.md HP5, HP7, HP14, HP17, HP18 and HP20. The redaction is foxpass's
 // own; only the tab and foxpaw's snapshot are stubs.
 import type { FieldInfo } from "foxpass";
 import type { Control, Snapshot } from "foxpaw";
 import { describe, expect, it } from "vitest";
-import { HandoffError, createPass, goalGivesPassword, maskPasswords, redactPage } from "../src/pass.js";
+import { HandoffError, createPass, goalGivesPassword, goalHosts, goalPasswords, maskPasswords, passwordElsewhere, passwordSite, redactPage } from "../src/pass.js";
 
 const control = (id: string, label: string, more: Partial<Control> = {}): Control => ({
   id, frameId: 0, node: Number(id.split(":")[1]), role: "textbox", tag: "input", type: "text", label, name: "", placeholder: "", section: "", value: "",
   disabled: false, readOnly: false, required: false, offscreen: false, submit: false, dialog: false, autocomplete: false, picker: false, secret: false, guard: "", ...more,
 });
+/** HP20: a password site that takes every address, and one that takes only shop.test. */
+const anySite = () => true;
+const shopSite = (url: string) => new URL(url).hostname === "shop.test";
+const wordpressSite = (url: string) => new URL(url).hostname === "wordpress.test";
+/** HP20: an act call into a password field on shop.test, in a frame at `frameUrl`. */
+const pinned = (frameUrl: string) => ({ value: "Blue-Kite-77!", target: { secret: true, url: "https://shop.test/login", frameUrl } });
 const field = (more: Partial<FieldInfo>): FieldInfo => ({
   selector: "#x", tag: "input", type: "text", autocomplete: "", name: "", id: "", label: "", placeholder: "", inputMode: "", maxLength: -1, visible: true, filled: true, form: 0, ...more,
 });
@@ -111,5 +117,92 @@ describe("pass", () => {
     const shown = maskPasswords({ goal: `${goal}\n\nNotes: party of 4.`, other: "fE4 is a hex code" }, ["fE4"], goal);
     expect(shown.goal).toBe('Enter the password "•••" into both fields.\n\nNotes: party of 4.');
     expect(shown.other).toBe("fE4 is a hex code");
+  });
+
+  it("HP20: the goal's password never comes from an address, a 'to' or 'as' word, or a lower-case pin", () => {
+    expect(goalPasswords("Email the password to admin@corp.com today.")).toEqual([]);
+    expect(goalPasswords("Send the password as admin@corp.com.")).toEqual([]);
+    expect(goalPasswords('Use the password "admin@corp.com".')).toEqual([]);
+    expect(goalPasswords("Please pin 'News' to the top of the board.")).toEqual([]);
+    expect(goalPasswords("Pin 'News' to the top.")).toEqual([]);
+    expect(goalPasswords("Type the PIN '4821' and send it.")).toEqual(["4821"]);
+    expect(goalPasswords("make sure to update the password to '1j1l-2k3j'.")).toEqual(["1j1l-2k3j"]);
+    expect(goalPasswords("Log in as sam, password Tr4il-Mix-2026, then open my orders.")).toEqual(["Tr4il-Mix-2026"]);
+  });
+
+  it("HP20: a password goes only to the start tab's exact host, scheme and port, https unless on this computer", () => {
+    const goal = "Log in as sam, password Tr4il-Mix-2026.";
+    expect(passwordSite("https://shop.test/cart", "https://shop.test/login", goal)).toBe(true);
+    expect(passwordSite("http://127.0.0.1:8790/", "http://127.0.0.1:8790/login", goal)).toBe(true);
+    for (const [start, url] of [
+      ["http://shop.test/cart", "http://shop.test/login"], ["https://shop.test/", "http://shop.test/login"], ["https://shop.test/", "https://shop.test:8443/login"],
+      ["https://wordpress.test/", "https://attacker.wordpress.test/login"], ["https://shop.test/", "https://evil.test/login"], ["http://127.0.0.1:8790/", "http://127.0.0.1:8791/"],
+      ["https://shop.test/", "not an address"],
+    ] as [string, string][]) expect(passwordSite(start, url, goal), `${start} -> ${url}`).toBe(false);
+    // A host the goal names must be the start host (an email address names no host).
+    expect(passwordSite("https://shop.test/", "https://shop.test/login", "Log in to bank.test as sam, password Tr4il-Mix-2026.")).toBe(false);
+    expect(passwordSite("https://www.shop.test/", "https://www.shop.test/login", "Log in to shop.test as sam, password Tr4il-Mix-2026.")).toBe(true);
+    expect(passwordSite("https://shop.test/", "https://shop.test/login", "Sign up with email ana@example.com, password Tr4il-Mix-2026.")).toBe(true);
+  });
+
+  it("HP20: the password in an argument is found inside words, encoded, split in an address, or as a short value", () => {
+    const pw = ["Blue-Kite-77!"];
+    for (const args of [{ url: "https://shop.test/v?p=xBlue-Kite-77!" }, { url: "https://shop.test/v?p=Blue-Kite-77%21" }, { url: "https://shop.test/v?p=Blue-Kite-77%2521" },
+      { url: "https://shop.test/v?a=Blue-&b=Kite-77!" }, { url: "https://shop.test/v?p=blue-kite-77!" }, { code: "print('xBlue-Kite-77!y')" }, { text: "Blue%2DKite%2D77%21" }])
+      expect(passwordElsewhere("open_url", args, pw, anySite), JSON.stringify(args)).toBe(true);
+    expect(passwordElsewhere("open_url", { text: "Blue+Kite+77%21" }, ["Blue Kite 77!"], anySite)).toBe(true);
+    expect(passwordElsewhere("open_url", { url: "https://shop.test/kites?size=77&color=blue" }, pw, anySite)).toBe(false);
+    // A short one: as a whole value, or as a whole query value of an address; never inside other words.
+    expect(passwordElsewhere("open_url", { text: "Iq" }, ["Iq"], anySite)).toBe(true);
+    expect(passwordElsewhere("open_url", { url: "https://x.test/?p=Iq" }, ["Iq"], anySite)).toBe(true);
+    expect(passwordElsewhere("open_url", { url: "https://x.test/Iqaluit" }, ["Iq"], anySite)).toBe(false);
+  });
+
+  it("HP20: a password field in a frame from another site does not take the goal's password (C1)", () => {
+    expect(passwordElsewhere("act", pinned("https://shop.test/login"), ["Blue-Kite-77!"], shopSite)).toBe(false);
+    expect(passwordElsewhere("act", pinned("https://evil.test/frame"), ["Blue-Kite-77!"], shopSite)).toBe(true);
+    expect(passwordElsewhere("act", pinned(""), ["Blue-Kite-77!"], shopSite)).toBe(true);
+  });
+
+  it("HP20: only the values the model gave are scanned, not the page's own target fields or the key names", () => {
+    const login = { secret: true, url: "https://wordpress.test/wp-login.php", frameUrl: "https://wordpress.test/wp-login.php", guard: "[\"textbox\",\"wordpress-2026\"]", label: "Password", role: "textbox", node: 2 };
+    // The right fill: the page address holds part of the password.
+    expect(passwordElsewhere("fill", { fields: { "0:2": "wordpress-2026" }, targets: [{ ...login, id: "0:2", request: { op: "type", value: "wordpress-2026" } }] }, ["wordpress-2026"], wordpressSite)).toBe(false);
+    // A click on a page whose address holds the PIN, and a call with a key named like the password.
+    const acct = { secret: false, url: "https://bank.test/acct/481234", frameUrl: "https://bank.test/acct/481234", label: "Pay", role: "button", node: 7 };
+    expect(passwordElsewhere("click", { controlId: "0:7", target: acct }, ["1234"], () => true)).toBe(false);
+    expect(passwordElsewhere("act", { controlId: "0:1", op: "check", target: { ...acct, role: "checkbox" } }, ["secret"], () => true)).toBe(false);
+    expect(passwordElsewhere("click", { controlId: "0:7", target: acct, secret: true } as Record<string, unknown>, ["secret"], () => true)).toBe(false);
+    // An address on the password site whose host holds part of the password; its path and query are still checked.
+    expect(passwordElsewhere("open_url", { url: "https://wordpress.test/wp-admin/" }, ["wordpress-2026"], wordpressSite)).toBe(false);
+    expect(passwordElsewhere("open_url", { url: "https://wordpress.test/x?a=wordpr&b=ess-2026" }, ["wordpress-2026"], wordpressSite)).toBe(true);
+    // A model value is still scanned.
+    expect(passwordElsewhere("click", { controlId: "wordpress-2026", target: acct }, ["wordpress-2026"], wordpressSite)).toBe(true);
+  });
+
+  it("HP20: a target counts only on act, fill and fill_and_send; on another tool it is the model's own value", () => {
+    const fake = { value: "Blue-Kite-77!", target: { secret: true, url: "https://shop.test/login", frameUrl: "https://shop.test/login" } };
+    expect(passwordElsewhere("send_mail", fake, ["Blue-Kite-77!"], shopSite)).toBe(true);
+    expect(passwordElsewhere("send_mail", { targets: [{ id: "0:2", secret: true, url: "https://shop.test/login", frameUrl: "https://shop.test/login", request: { value: "Blue-Kite-77!" } }] }, ["Blue-Kite-77!"], shopSite)).toBe(true);
+    expect(passwordElsewhere("act", fake, ["Blue-Kite-77!"], shopSite)).toBe(false);
+  });
+
+  it("HP20: the trail masks a password inside other words only from 6 characters; a shorter one at word edges", () => {
+    expect(maskPasswords({ a: "shop.test/contest", b: "testing" }, ["test"])).toEqual({ a: "shop.•••/contest", b: "testing" });
+    expect(maskPasswords({ a: "xBlue-Kite-77!y" }, ["Blue-Kite-77!"])).toEqual({ a: "x•••y" });
+  });
+
+  it("HP20: a goal host with letters outside ASCII is read whole", () => {
+    expect(goalHosts("Log in to bücher.de as sam, password Tr4il-Mix-2026.")).toEqual(["xn--bcher-kva.de"]);
+    expect(passwordSite("https://xn--bcher-kva.de/", "https://xn--bcher-kva.de/login", "Log in to bücher.de as sam, password Tr4il-Mix-2026.")).toBe(true);
+    expect(passwordSite("https://cher.de/", "https://cher.de/login", "Log in to bücher.de as sam, password Tr4il-Mix-2026.")).toBe(false);
+  });
+
+  it("HP20: a quoted password after \"to\" counts only when the goal changes, updates, sets or resets it", () => {
+    expect(goalPasswords("Email the password to 'x9-secret' now.")).toEqual([]);
+    expect(goalPasswords("Send the passcode to \"ops-team\".")).toEqual([]);
+    expect(goalPasswords("make sure to update the password to '1j1l-2k3j'.")).toEqual(["1j1l-2k3j"]);
+    expect(goalPasswords("Set my password to \"Ab12\" and reset the PIN to '9911'.")).toEqual(["Ab12", "9911"]);
+    expect(goalPasswords('Change the password as "Zz9"')).toEqual([]);
   });
 });

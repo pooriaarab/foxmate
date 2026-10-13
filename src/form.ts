@@ -20,7 +20,8 @@ export function withFields(page: Snapshot | undefined, targets: readonly { id: s
       const r = given.get(c.id);
       if (!r) return c;
       if (r.op === "check" || r.op === "uncheck") return { ...c, checked: r.op === "check" };
-      return r.value === undefined ? c : { ...c, value: r.value };
+      // A password field shows "•••", as foxpaw reads it, never the value the call types (HP20).
+      return r.value === undefined ? c : { ...c, value: c.secret ? "•••" : r.value };
     }),
   };
 }

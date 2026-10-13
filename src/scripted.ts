@@ -70,7 +70,8 @@ export function scriptMind(script: string, goal: string) {
             .replace(/\{\{control:([^}]+)\}\}/g, (_, label: string) => controlId(messages, label));
         }
         if (Array.isArray(value)) return value.map(fill);
-        if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, fill(v)]));
+        // A key too: fill names its fields by control id (HP20).
+        if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [fill(k), fill(v)]));
         return value;
       };
       if (step.batch) return { calls: step.batch.map((c) => ({ name: c.tool, args: fill(c.args ?? {}) as Record<string, unknown> })) };
