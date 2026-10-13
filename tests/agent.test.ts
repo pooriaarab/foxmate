@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import { askSam } from "../cli/bench.mjs";
 import { mountSite } from "./mount.js";
 import { HandoffError, maskSecrets } from "../src/pass.js";
-import { allowsDays, createAgent, plannerRules, SETTLED_SUMMARY, unnamedChoice, type AgentEvent, type AgentOptions, type RunInput } from "../src/agent.js";
+import { allowsDays, createAgent, plannerRules, priceTie, SETTLED_SUMMARY, unnamedChoice, type AgentEvent, type AgentOptions, type RunInput } from "../src/agent.js";
 import type { Control, Snapshot } from "foxpaw";
 import type { Workflow, WorkflowStore } from "../src/workflow.js";
 
@@ -837,6 +837,63 @@ describe("agent", () => {
     await silent.close();
     expect(stopped).toMatchObject({ status: "blocked", reason: "question" });
     expect(unanswered.ran).toEqual([]);
+  });
+
+  it("AQ10: a tie on price with no send is not asked: the rule picks fewer stops, then the earlier time, and the run goes on", async () => {
+    const tie = "Which flight should I book? (1) Iberline nonstop $840, (2) Northwind 1 stop $840, (3) Maple Air 2 stops $910";
+    const { agent, ran, requests } = await questions();
+    const events: AgentEvent[] = [];
+    // Nobody answers a question here: with no rule, AQ9 would end the run blocked.
+    const end = await agent.run({
+      goal: "Book a round trip from SFO to JFK for 2 adults", tabId: 1, settings: { planner: "scripted", script: JSON.stringify([{ tool: "ask_user", args: { question: tie } }, { tool: "click", args: { button: "Select Iberline" } }, finish]) },
+      onEvent: (event) => {
+        events.push(event);
+        if (event.type === "question") setTimeout(() => void agent.reply(event.id, undefined), 5);
+        if (event.type === "approval-needed") void agent.approvals.answer(event.requestId, "approve", "sidebar");
+      },
+    });
+    expect(end.status).toBe("done");
+    expect(events.some((e) => e.type === "question")).toBe(false);
+    expect(ran.map((r) => r.args.button)).toEqual(["Select Iberline"]);
+    expect(requests[1]).toContain("Do not ask: the options cost the same, so take the one with fewer stops, then the earlier time. Nothing was asked.");
+    expect(plannerRules({ canAsk: true })).toMatch(/cost the same .* fewer stops, then the earlier time/);
+    expect(priceTie("Which flight? Iberline 8:05 $840 or Northwind 10:40 $840")).toBe(true);
+    // Narrow: a different lowest price, a cap, a size or a color, or money that moves still goes to the user.
+    for (const question of [
+      "Which flight should I book? (1) Iberline nonstop $790, (2) Northwind 1 stop $840",
+      "Total is $32.00 (item $24 + shipping $8), which is over your $30 limit. OK to proceed?",
+      "What size should the Merino Hoodie be? (S, M, L, or XL)",
+      "Which color of the hoodie? Navy $40 or Red $40",
+      "Which flight should I pay for? (1) nonstop $840, (2) 1 stop $840",
+      "Which account should I send it from? Checking 1 stop $50, Savings 2 stops $50",
+      // A max, a cap, a limit with no $, a card, a charge or an account is the user's call.
+      "Your max is 800 dollars. Which flight, if any: (1) nonstop $840 (2) 1 stop $840?",
+      "Which flight? You set a maximum of 800 EUR. (1) nonstop $840 (2) 1 stop $840",
+      "Which flight, at most one per day? (1) nonstop $840 (2) 1 stop $840",
+      "Which flight fits your cap? (1) nonstop $840 (2) 1 stop $840",
+      "Which one fits your limits? (1) nonstop $840 (2) 1 stop $840",
+      "Which card should I charge? The 7:00 1 stop is $840 and the 9:00 nonstop is $840",
+      "Which flight goes on the card ending 4242? 8:05 nonstop $840 or 10:40 1 stop $840",
+      "Which account pays? 8:05 nonstop $840 or 10:40 1 stop $840",
+      // Options that differ in date: the day is the user's choice.
+      "Which date: Oct 20 nonstop $300 or Oct 22 nonstop $300?",
+      "Which flight? Oct 20 8:05 nonstop $300 or Oct 22 10:40 1 stop $300",
+      "Which flight? Monday 8:05 $300 or Friday 10:40 $300",
+      // The rule cannot decide: the tied options have the same stops and no time.
+      "Which flight? Iberline nonstop $840 or Northwind nonstop $840",
+    ]) expect(priceTie(question), question).toBe(false);
+    // Ties the rule decides: fewer stops, then the earlier time, also on one shared date.
+    for (const question of [
+      "Which flight should I book? (1) Iberline nonstop $840, (2) Northwind 1 stop $840, (3) Maple Air 2 stops $910",
+      "Which flight? Iberline 8:05 $840 or Northwind 10:40 $840",
+      "Which flight? Iberline 1:15 pm $840 or Northwind 9:30 am $840",
+      "Which flight on Nov 3? (1) 8:05 nonstop $840 (2) 7:10 two stops $840",
+    ]) expect(priceTie(question), question).toBe(true);
+    // A goal that names an amount or a limit makes it the user's call.
+    for (const goal of ["Book a flight to JFK under $900", "Book a flight to JFK for at most 900 dollars", "Book a flight, budget 900", "Book a flight, max 900", "Book a flight to JFK, no more than 900 EUR"]) {
+      expect(priceTie(tie, goal), goal).toBe(false);
+    }
+    expect(priceTie(tie, "Book a round trip from SFO to JFK for 2 adults, leaving November 3, 2026")).toBe(true);
   });
 
   it("AQ2: a question that waits ends with the run; a late or second reply changes nothing", async () => {
