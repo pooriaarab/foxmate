@@ -22,6 +22,7 @@ import pass from "./checks/pass.mjs";
 import pay from "./checks/pay.mjs";
 import rules, { RULE_HOSTS } from "./checks/rules.mjs";
 import phone, { PHONE_PREFS } from "./checks/phone.mjs";
+import settle from "./checks/settle.mjs";
 import signup from "./checks/signup.mjs";
 import space from "./checks/space.mjs";
 import tasks from "./checks/tasks.mjs";
@@ -34,8 +35,9 @@ import { runGoal, startFox } from "./lib.mjs";
 // app goes first: it starts from a fresh first run. notify comes next: foxnotify
 // allows 4 notices a minute, and the later checks send some too. rules
 // and modules go after activity: Activity shows the newest 300 entries, and their runs would
-// push the older kinds out.
-const CHECKS = { app, notify, signup, pass, vault, local, traps, details, memory, lend, space, phone, activity, modules, rules, open, pay, bridge, voice, tasks, keepalive };
+// push the older kinds out. settle goes last: it sets a stand-in fast helper, then puts the
+// settings back.
+const CHECKS = { app, notify, signup, pass, vault, local, traps, details, memory, lend, space, phone, activity, modules, rules, open, pay, bridge, voice, tasks, keepalive, settle };
 
 const record = { startedAt: new Date().toISOString(), checks: [], runs: {} };
 const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });
