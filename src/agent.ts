@@ -361,6 +361,8 @@ export function createAgent(options: AgentOptions): Agent {
   let runHost: string | undefined;
   // A sign-in wait of the current run ended with no sign-in: the run ends after that tool (HP15).
   let signInEnded: string | undefined;
+  // A question of the current run that got no answer: the run ends after that step (AQ9).
+  let unanswered: string | undefined;
   const passEmit = (event: PassEvent) => {
     if (event.type === "handoff") handedOff = true;
     if (event.type === "handoff-end" && !["signed-in", "no-wall", "cancelled"].includes(event.status)) signInEnded ??= event.status;
@@ -457,6 +459,7 @@ export function createAgent(options: AgentOptions): Agent {
       });
       questions.delete(id);
       const text = answer?.trim() || undefined;
+      if (!text && !ctx.signal.aborted) unanswered ??= question;
       await trail.append({ actor: "user", kind: "run.answer", data: { id, answer: text ?? null } });
       runEmit({ type: "answer", step: ctx.step, id, answered: Boolean(text) });
       return text;
@@ -544,6 +547,7 @@ export function createAgent(options: AgentOptions): Agent {
     runSignal = input.signal;
     runGoal = input.goal;
     signInEnded = undefined;
+    unanswered = undefined;
     const grants: string[] = [];
     try {
       const tab: TabInfo = input.tabId === undefined ? {} : await browser.tabs.get(input.tabId);
@@ -878,6 +882,13 @@ export function createAgent(options: AgentOptions): Agent {
         if (event.type === "done") end = { status: "done", summary: event.summary };
         if (event.type === "done" && event.settled) settled = true;
         if (event.type === "blocked") end = { status: "blocked", reason: event.reason, message: event.message };
+        // The user did not answer a question: no guess about what was asked (AQ9).
+        if (event.type === "tool-result" && event.name === ASK_USER && unanswered) {
+          const message = `No answer to: "${unanswered}" Give it in the goal and run it again.`;
+          end = { status: "blocked", reason: "question", message };
+          await trail.append({ actor: "foxmate", kind: "run.blocked", data: { reason: "question" } });
+          break;
+        }
         // The user did not do the sign-in step: no more reads, no second wait (HP15).
         if (event.type === "tool-result" && signInEnded) {
           const message = `The sign-in step was not done (${signInEnded}). Sign in on the tab, then run the goal again.`;
