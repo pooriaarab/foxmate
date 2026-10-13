@@ -1,5 +1,5 @@
 // O1-O3: the optional modules are off by default, and a tool that is off
-// says so. A mail or calendar read asks once per run (G18, G30). With FOXMATE_VISION=<Ollama /v1 address that allows
+// is not offered (look, G46) or says so. A mail or calendar read asks once per run (G18, G30). With FOXMATE_VISION=<Ollama /v1 address that allows
 // moz-extension origins>, the look tool describes a canvas page.
 import { serve } from "create-foxkit/e2e";
 import { saveShot } from "../lib.mjs";
@@ -20,7 +20,8 @@ export default async function modulesCheck({ session, check, record, scripted, f
     });
     // foxloop's first read (read_0) is foxmate's, not a planned step (G32).
     const results = off.trail.filter((e) => e.kind === "loop.tool-result" && e.data.id !== "read_0").map((e) => [e.data.name, e.data.ok, e.data.summary]);
-    check("O1 the look tool refuses while screenshots are off", ["look", false, "Screenshots are off. The user can turn them on in Settings."], results[0]);
+    // G46: with screenshots off the planner is not offered look, so a call to it is an unknown tool.
+    check("O1 the look tool is not offered while screenshots are off", ["look", false, true], [results[0]?.[0], results[0]?.[1], String(results[0]?.[2]).startsWith('There is no tool "look".')]);
     check("O2 after one OK, the calendar tools say Google is not connected, and the second read asks nothing",
       { asks: 1, result: ["read_calendar", false, "Google is not connected. The user can connect it in Settings."] }, { asks: off.approvals.length, result: results[1] });
 
