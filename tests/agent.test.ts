@@ -780,6 +780,26 @@ describe("agent", () => {
     expect(kinds.find((e) => e.kind === "run.answer")?.data).toMatchObject({ answer: "Size L, please." });
   });
 
+  it("AQ9: a question with no answer ends the run after that step, and names the question", async () => {
+    for (const answer of [undefined, "", "   "]) {
+      const { agent, ran } = await questions();
+      const end = await agent.run({
+        goal: "Update my rent payment", tabId: 1, settings: { planner: "scripted", script: JSON.stringify([{ tool: "ask_user", args: { question: "What is the new rent?" } }, { tool: "click", args: { button: "Save" } }, finish]) },
+        onEvent: (event) => {
+          if (event.type === "question") setTimeout(() => void agent.reply(event.id, answer), 5);
+          if (event.type === "approval-needed") void agent.approvals.answer(event.requestId, "approve", "sidebar");
+        },
+      });
+      expect(end).toMatchObject({ status: "blocked", reason: "question" });
+      expect(end.status === "blocked" && end.message).toMatch(/What is the new rent\?/);
+      expect(ran).toEqual([]);
+    }
+    // A refused question (AQ3) does not end the run.
+    const refused = await questions();
+    const end = await refused.agent.run({ goal: "Buy", tabId: 1, settings: { planner: "scripted", script: JSON.stringify([{ tool: "ask_user", args: { question: "What is your password?" } }, finish, finish]) } });
+    expect(end.reason).not.toBe("question");
+  });
+
   it("AQ2: a question that waits ends with the run; a late or second reply changes nothing", async () => {
     const { agent } = await questions();
     const controller = new AbortController();
