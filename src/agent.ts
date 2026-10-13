@@ -144,6 +144,60 @@ export const OPEN_TOOL = "open_site";
 export const USER_DOMAIN = "user.foxmate";
 // A question for a secret is refused before the user sees it (AQ3).
 const SECRET_QUESTION = /pass ?(?:word|code|phrase)|\bpin\b|card ?(?:number|no\b)|\bcv[cv]2?\b|security code|one[- ]time|\botp\b|2fa|verification code|login code/i;
+// AQ10: a choice between options at one price, decided by stops and times, with no money that moves or a limit.
+const TIE_PICK = "take the one with fewer stops, then the earlier time.";
+const TIE_RULE = `When options cost the same and the goal gives no other rule, do not ask: ${TIE_PICK}`;
+const TIE_OPTIONS = /\bnon-?stop\b|\bdirect\b|\bstops?\b|\b\d{1,2}:\d{2}\b/i;
+/** An amount that is not a $, € or £ price: "800 dollars", "500 EUR". */
+const AMOUNT = /\b\d[\d,.]*\s*(?:dollars?|euros?|pounds?|usd|eur|gbp|cad|aud)\b/i;
+const TIE_STAKES = new RegExp(String.raw`\b(?:send|sent|pay|paid|payment|transfer|refund|wire|charge[sd]?|card|account|limits?|budget|max|maximum|at most|cap|over|total|proceed|ok|okay|allow)\b|${AMOUNT.source}`, "i");
+/** A goal that names an amount or a limit: the user's own rule, so a tie goes to the user (AQ10). */
+const GOAL_LIMIT = new RegExp(String.raw`[$€£]\s?\d|${AMOUNT.source}|\b(?:under|below|max|maximum|at most|no more than|up to|less than|cheaper than|budget|limits?|cap)\b`, "i");
+const PRICE = /[$€£]\s?(\d[\d,]*(?:\.\d+)?)/g;
+const TIE_DATE = /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b|\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b|\b(?:mon|tues|wednes|thurs|fri|satur|sun)day\b|\b(?:mon|tue|wed|thu|fri|sat|sun),/gi;
+const STOP_WORDS: Record<string, number> = { one: 1, two: 2, three: 3 };
+
+/** The stops, the time in minutes and the dates of one option, from its text (AQ10). */
+function tieOption(text: string) {
+  const stops = /\bnon-?stop\b|\bdirect\b/i.test(text) ? 0 : (() => {
+    const m = /\b(\d|one|two|three)\s+stops?\b/i.exec(text);
+    return m ? (STOP_WORDS[m[1]!.toLowerCase()] ?? Number(m[1])) : undefined;
+  })();
+  const t = /\b(\d{1,2}):(\d{2})\s*([ap])?\.?m?\b/i.exec(text);
+  let hour = Number(t?.[1]);
+  if (t?.[3]?.toLowerCase() === "p" && hour < 12) hour += 12;
+  if (t?.[3]?.toLowerCase() === "a" && hour === 12) hour = 0;
+  const time = t ? hour * 60 + Number(t[2]) : undefined;
+  return { stops, time, dates: (text.match(TIE_DATE) ?? []).map((d) => d.toLowerCase().replace(/\s+/g, " ")).join(",") };
+}
+
+/**
+ * A question that asks which of several options to take, when the lowest price is on two or more,
+ * the goal sets no amount or limit, and the plain rule decides: the tied options differ in stops
+ * or time and not in date, and one has fewer stops, then the earlier time (AQ10).
+ */
+export function priceTie(question: string, goal = ""): boolean {
+  if (!/\bwhich\b/i.test(question) || !TIE_OPTIONS.test(question) || TIE_STAKES.test(question) || GOAL_LIMIT.test(goal)) return false;
+  // Each option is the text up to its price. The question before the options ("Which flight on Nov 3?") is no option's.
+  const options: { price: number; text: string }[] = [];
+  const first = question.search(PRICE);
+  let from = Math.max(0, ...[...question.slice(0, first).matchAll(/[?:]\s/g)].map((m) => m.index + 1));
+  for (const m of question.matchAll(PRICE)) {
+    const end = m.index + m[0].length;
+    options.push({ price: Number((m[1] ?? "").replaceAll(",", "")), text: question.slice(from, end) });
+    from = end;
+  }
+  const low = Math.min(...options.map((o) => o.price));
+  const tied = options.filter((o) => o.price === low).map((o) => tieOption(o.text));
+  if (tied.length < 2 || new Set(tied.map((o) => o.dates)).size > 1) return false;
+  // -1, 0 or 1 when the rule orders a before b; undefined when it cannot (no stops or times to compare).
+  const order = (a: (typeof tied)[number], b: (typeof tied)[number]) => {
+    if (a.stops !== undefined && b.stops !== undefined && a.stops !== b.stops) return Math.sign(a.stops - b.stops);
+    if (a.time !== undefined && b.time !== undefined && a.time !== b.time) return Math.sign(a.time - b.time);
+    return undefined;
+  };
+  return tied.some((a) => tied.every((b) => a === b || order(a, b) === -1));
+}
 
 /** The host of an http or https address, or undefined. */
 function webHost(url: string | undefined): string | undefined {
@@ -279,7 +333,7 @@ export function plannerRules({ canOpen = false, canAsk = false, days = false }: 
     // AQ6: a planner with ask_user still guesses unless the rules say when to ask.
     // G44: only a goal with a range of days gets this line, so other runs keep their cached prefix.
     ...(days ? ["The goal allows several days. Search each day of the range, and check that the results show the day you searched. Note the best result of each day, then choose the best of all."] : []),
-    ...(canAsk ? [`Before you act, call ${ASK_USER} when the goal leaves out a choice that the page needs (for example a size or a color), when the page shows a cost over a limit that the goal sets (read the total before you pay or send), or when a page needs the user to sign in. Do not guess such a choice. Do not ask about what the goal already gives.`] : []),
+    ...(canAsk ? [`Before you act, call ${ASK_USER} when the goal leaves out a choice that the page needs (for example a size or a color), when the page shows a cost over a limit that the goal sets (read the total before you pay or send), or when a page needs the user to sign in. Do not guess such a choice. Do not ask about what the goal already gives.`, TIE_RULE] : []),
   ].join("\n");
 }
 
@@ -465,11 +519,13 @@ export function createAgent(options: AgentOptions): Agent {
       return text;
     },
   });
-  // A question for a secret is refused before the user sees it, and the planner reads why (AQ3).
+  // A question for a secret, or a tie on price (AQ10), is refused before the user sees it, and the planner reads why (AQ3).
   const askUser: LoopTool = {
     ...asker,
     prepare: (args) => {
       if (SECRET_QUESTION.test(String(args.question))) throw new Error("foxmate never asks the user for a password, a card number or a code. Do not ask for one.");
+      // A tie on price with no money that moves: the rule picks, and the user is not held (AQ10).
+      if (priceTie(String(args.question), runGoal)) throw new Error(`Do not ask: the options cost the same, so ${TIE_PICK} Nothing was asked.`);
       return args;
     },
   };
