@@ -2,6 +2,9 @@
 // (with src/ and the fox primitives), and the other files are copied. It
 // stops when the manifest version is not the package.json version, so AMO
 // signs the version that npm publishes.
+// --bench-remote builds dist-ext-bench/ for `foxmate bench` on Ichabod: it
+// swaps src/model-tier.ts for scripts/bench-tier.mjs, so the planner may use
+// this computer's model through the bench tunnel. npm and AMO get dist-ext/.
 import { cpSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -24,30 +27,44 @@ const noLinkedom = {
     b.onLoad({ filter: /.*/, namespace: "stub" }, () => ({ contents: "export function parseHTML() { throw new Error('linkedom is not in the extension'); }" }));
   },
 };
-rmSync("dist-ext", { recursive: true, force: true });
+const bench = process.argv.includes("--bench-remote");
+const out = bench ? "dist-ext-bench" : "dist-ext";
+const benchTier = {
+  name: "bench-tier",
+  setup(b) {
+    b.onResolve({ filter: /^\.\/model-tier\.js$/ }, () => ({ path: join(process.cwd(), "scripts/bench-tier.mjs") }));
+  },
+};
+rmSync(out, { recursive: true, force: true });
 await build({
   entryPoints: ENTRIES.map((f) => `extension/${f}`),
   external: ["./browser-model.js"],
-  outdir: "dist-ext",
+  outdir: out,
   bundle: true,
   format: "esm",
   target: "firefox153",
   logLevel: "warning",
-  plugins: [noLinkedom],
+  plugins: [noLinkedom, ...(bench ? [benchTier] : [])],
 });
 // amo-metadata.json is the AMO listing, not a part of the add-on.
-for (const file of readdirSync("extension").filter((f) => !f.endsWith(".js") && f !== "amo-metadata.json")) cpSync(`extension/${file}`, `dist-ext/${file}`, { recursive: true });
+for (const file of readdirSync("extension").filter((f) => !f.endsWith(".js") && f !== "amo-metadata.json")) cpSync(`extension/${file}`, `${out}/${file}`, { recursive: true });
 // ONNX Runtime's WASM files for the in-browser models go to dist-ext/ort/
 // (foxmind's default path), because MV3 allows no remote code.
 const ort = join(dirname(dirname(realpathSync("node_modules/@huggingface/transformers"))), "onnxruntime-web", "dist");
-mkdirSync("dist-ext/ort");
-for (const file of ["ort-wasm-simd-threaded.asyncify.mjs", "ort-wasm-simd-threaded.asyncify.wasm"]) cpSync(join(ort, file), join("dist-ext/ort", file));
+mkdirSync(`${out}/ort`);
+for (const file of ["ort-wasm-simd-threaded.asyncify.mjs", "ort-wasm-simd-threaded.asyncify.wasm"]) cpSync(join(ort, file), join(out, "ort", file));
 // The Space: foxden's sandbox page and the Pyodide files, unmodified, so the
 // den loads nothing from the network.
-cpSync("node_modules/foxden/dist/den", "dist-ext/den", { recursive: true });
+cpSync("node_modules/foxden/dist/den", `${out}/den`, { recursive: true });
 const pyodide = dirname(createRequire(realpathSync("node_modules/foxden/package.json")).resolve("pyodide/package.json"));
-mkdirSync("dist-ext/pyodide");
-for (const file of ["pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"]) cpSync(join(pyodide, file), join("dist-ext/pyodide", file));
+mkdirSync(`${out}/pyodide`);
+for (const file of ["pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"]) cpSync(join(pyodide, file), join(out, "pyodide", file));
 const pyVersion = JSON.parse(readFileSync(join(pyodide, "package.json"), "utf8")).version;
-writeFileSync("dist-ext/pyodide/NOTICE.txt", `Pyodide ${pyVersion}, unmodified, from the npm package "pyodide".\nLicense: MPL-2.0. Source: https://github.com/pyodide/pyodide\n`);
-console.log(`Built dist-ext/ (version ${pkg.version}).`);
+writeFileSync(`${out}/pyodide/NOTICE.txt`, `Pyodide ${pyVersion}, unmodified, from the npm package "pyodide".\nLicense: MPL-2.0. Source: https://github.com/pyodide/pyodide\n`);
+// The release build must not accept a tunnel address as a local model (B1).
+const leak = bench ? undefined : ENTRIES.find((f) => readFileSync(`dist-ext/${f}`, "utf8").includes("trycloudflare"));
+if (leak) {
+  console.error(`dist-ext/${leak} holds the bench tunnel check. Build without --bench-remote.`);
+  process.exit(1);
+}
+console.log(`Built ${out}/ (version ${pkg.version}${bench ? ", remote bench build: not for release" : ""}).`);
