@@ -873,7 +873,8 @@ export function createAgent(options: AgentOptions): Agent {
         if (!own) return messages;
         const open = target ? await browser.tabs.get(target).catch(() => undefined) : undefined;
         if (fileUnread && shows(open, fileUnread)) fileUnread = undefined;
-        const sites = [...new Set([...(domain ? [domain] : []), ...granted.map((e) => e.domain)])];
+        // Only web sites: a module tool's domain (space.foxmate, www.googleapis.com) is not a site to open (G52).
+        const sites = domain ? [domain] : [];
         const now = { url: open?.url ?? "", sites };
         // The first note is whole; a later one names only what changed (G38).
         const note = plannerContext({ ...now, title: open?.title ?? "" }, lastTab);
