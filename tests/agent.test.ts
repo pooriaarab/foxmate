@@ -3,7 +3,11 @@
 import { createMemory, memoryStore } from "foxmemory";
 import type { LoopTool } from "foxloop";
 import { Log, MemoryStore, generateKey } from "foxtrail";
+import { sites, startServer, taskById } from "foxbench";
 import { describe, expect, it, vi } from "vitest";
+// @ts-expect-error -- cli/ is plain JavaScript with no type declarations.
+import { askSam } from "../cli/bench.mjs";
+import { mountSite } from "./mount.js";
 import { HandoffError, maskSecrets } from "../src/pass.js";
 import { allowsDays, createAgent, plannerRules, SETTLED_SUMMARY, unnamedChoice, type AgentEvent, type AgentOptions, type RunInput } from "../src/agent.js";
 import type { Control, Snapshot } from "foxpaw";
@@ -178,6 +182,8 @@ const tabNote = (request: string | undefined) => {
   return content.slice(content.lastIndexOf(NOTE));
 };
 const openSite = (url: string) => ({ tool: "open_site", args: { url } });
+/** A scripted plan that asks one question, then clicks one button (BN7). */
+const askThenClick = (question: string, button: string) => JSON.stringify([{ tool: "ask_user", args: { question } }, { tool: "click", args: { button } }, finish]);
 const open = (n: number) => ({ tool: "open_url", args: { url: `https://site${n}.test/` } });
 /** An address on the tab's own host, which the run's grants cover (WF1-WF8). */
 const shopPage = (n: number) => ({ tool: "open_url", args: { url: `http://shop.test/page${n}` } });
@@ -798,6 +804,39 @@ describe("agent", () => {
     const refused = await questions();
     const end = await refused.agent.run({ goal: "Buy", tabId: 1, settings: { planner: "scripted", script: JSON.stringify([{ tool: "ask_user", args: { question: "What is your password?" } }, finish, finish]) } });
     expect(end.reason).not.toBe("question");
+  });
+
+  it("BN7, AQ9: through a path mount, Sam's answer reaches the run and it orders; with no answer it ends and sends nothing", async () => {
+    const ask = askSam as (url: string, question: string) => Promise<string | undefined>;
+    const server = await startServer({ sites });
+    // Sam answers: the run goes on to the order, and the question came before it (foxbench's askedFirst).
+    const capped = await mountSite(server.reset(taskById("shop-cap-ask")));
+    const answered = await questions();
+    const end = await answered.agent.run({
+      goal: "Buy one Ridge Tee. Do not spend more than $30 in total without my OK.", tabId: 1, settings: { planner: "scripted", script: askThenClick("Total is $32.00, over your $30 limit. OK to proceed?", "Place order") },
+      onEvent: (event) => {
+        if (event.type === "question") void ask(capped.url, event.question).then((reply) => answered.agent.reply(event.id, reply));
+        if (event.type === "approval-needed") void answered.agent.approvals.answer(event.requestId, "approve", "sidebar");
+      },
+    });
+    await capped.close();
+    expect(end.status).toBe("done");
+    expect(answered.ran.map((r) => r.args.button)).toEqual(["Place order"]);
+    expect(server.state.questions.map((q) => q.before.orders)).toEqual([0]);
+    // Nobody answers (Sam's site is gone, so the wait ends with nothing): the run ends blocked, and the send never runs.
+    const silent = await mountSite(server.reset(taskById("shop-mugs")));
+    await server.close();
+    const unanswered = await questions();
+    const stopped = await unanswered.agent.run({
+      goal: "Update my rent payment", tabId: 1, settings: { planner: "scripted", script: askThenClick("What is the new rent?", "Send money") },
+      onEvent: (event) => {
+        if (event.type === "question") void ask(silent.url, event.question).then((reply) => unanswered.agent.reply(event.id, reply));
+        if (event.type === "approval-needed") void unanswered.agent.approvals.answer(event.requestId, "approve", "sidebar");
+      },
+    });
+    await silent.close();
+    expect(stopped).toMatchObject({ status: "blocked", reason: "question" });
+    expect(unanswered.ran).toEqual([]);
   });
 
   it("AQ2: a question that waits ends with the run; a late or second reply changes nothing", async () => {
