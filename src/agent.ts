@@ -443,11 +443,17 @@ export function createAgent(options: AgentOptions): Agent {
   let unanswered: string | undefined;
   // The file that the goal names, until the open tab shows it: the first question waits for it (AQ11).
   let fileUnread: string | undefined;
+  // The sign-in waits of this agent, so a refused password question can tell that it handed one over (HP19).
+  let handoffs = 0;
   const passEmit = (event: PassEvent) => {
-    if (event.type === "handoff") handedOff = true;
+    if (event.type === "handoff") {
+      handedOff = true;
+      handoffs += 1;
+    }
     if (event.type === "handoff-end" && !["signed-in", "no-wall", "cancelled"].includes(event.status)) signInEnded ??= event.status;
     runEmit(event);
   };
+  const passWait = (tabId: number) => options.pass!.beforeRead(tabId, { emit: passEmit, ...(runGoal ? { goal: runGoal } : {}), ...(runHost ? { host: runHost } : {}), ...(runSignal ? { signal: runSignal } : {}) });
   const shielded = shieldedPaw({
     browser: browser as never,
     onScan: async (scan) => {
@@ -457,7 +463,7 @@ export function createAgent(options: AgentOptions): Agent {
     },
     ...(options.pass ? { fieldHints: options.pass.hints } : {}),
     // Each read, also those inside a form fill, waits for a sign-in first (HP1, HP10).
-    ...(options.pass ? { beforeRead: (tabId: number) => options.pass!.beforeRead(tabId, { emit: passEmit, ...(runGoal ? { goal: runGoal } : {}), ...(runHost ? { host: runHost } : {}), ...(runSignal ? { signal: runSignal } : {}) }) } : {}),
+    ...(options.pass ? { beforeRead: (tabId: number) => passWait(tabId) } : {}),
   });
   const paw = {
     ...shielded,
@@ -545,11 +551,25 @@ export function createAgent(options: AgentOptions): Agent {
       return text;
     },
   });
+  // A password question on a sign-in wall that the user then passed: the same ask_user call answers that, asks nothing (HP19).
+  // Each prepare and each run start clear it, so a call that the gate denies or blocks after prepare leaves nothing behind.
+  let signedInByAsk = false;
   // A question for a secret, or a tie on price (AQ10), is refused before the user sees it, and the planner reads why (AQ3).
   const askUser: LoopTool = {
     ...asker,
-    prepare: (args) => {
-      if (SECRET_QUESTION.test(String(args.question))) throw new Error("foxmate never asks the user for a password, a card number or a code. Do not ask for one.");
+    prepare: async (args) => {
+      signedInByAsk = false;
+      if (SECRET_QUESTION.test(String(args.question))) {
+        // A click that lands on a sign-in wall reads no page, so no read met the wall and the planner asks
+        // for the password instead. The wall goes to the user here, as on a read (HP19).
+        const before = handoffs;
+        if (options.pass && target) await passWait(target);
+        if (handoffs > before) {
+          signedInByAsk = true;
+          return args;
+        }
+        throw new Error("foxmate never asks the user for a password, a card number or a code. Do not ask for one. Read the page: on a sign-in page foxmate hands the sign-in to the user, then you go on.");
+      }
       // A tie on price with no money that moves: the rule picks, and the user is not held (AQ10).
       if (priceTie(String(args.question), runGoal)) throw new Error(`Do not ask: the options cost the same, so ${TIE_PICK} Nothing was asked.`);
       // A goal's file not read yet: the first question about it is refused once, with where the file is.
@@ -560,6 +580,11 @@ export function createAgent(options: AgentOptions): Agent {
         throw new Error(fileAsk(file));
       }
       return args;
+    },
+    run: async (args, ctx) => {
+      if (!signedInByAsk) return asker.run(args, ctx);
+      signedInByAsk = false;
+      return { ok: true, summary: "foxmate never asks for a password: it handed the sign-in to the user, and the user signed in on the tab. Nothing was asked. Read the page and go on." };
     },
   };
   const reply = (id: string, text: string | undefined): boolean => {
@@ -637,6 +662,7 @@ export function createAgent(options: AgentOptions): Agent {
     runGoal = input.goal;
     signInEnded = undefined;
     unanswered = undefined;
+    signedInByAsk = false;
     fileUnread = goalFile(input.goal);
     const grants: string[] = [];
     try {

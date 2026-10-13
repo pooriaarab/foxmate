@@ -34,6 +34,9 @@ export async function startLogin() {
       return page(res, `<title>Verify</title><h1>Enter your code</h1><form method="post" action="/verify"><label for="code">Code from your phone</label> <input id="code" name="code" autocomplete="one-time-code" inputmode="numeric" maxlength="6"> <button type="submit">Verify</button></form>`);
     }
     if (url.pathname === "/account" && stage.get(id) === "in") return page(res, `<title>Account</title><h1>Your account</h1><p>Balance: $1,204.50</p><p><a href="/logout">Sign out</a></p>`);
+    // HP19: a page with no wall, and a link that reaches the wall only after the click's own read, as a
+    // redirect through a slow tunnel does on Ichabod.
+    if (url.pathname === "/home") return page(res, `<title>Bank</title><h1>Your bank</h1><p><a href="#account" id="account">My account</a></p><script>document.getElementById("account").addEventListener("click", () => setTimeout(() => { location.href = "/account"; }, 1500));</script>`);
     if (url.pathname !== "/login") return go(res, "/login");
     return page(res, `<title>Sign in</title><h1>Sign in to your bank</h1><form method="post" action="/login"><label for="email">Email</label> <input id="email" name="email" type="email" autocomplete="username"> <label for="password">Password</label> <input id="password" name="password" type="password" autocomplete="current-password"> <button type="submit">Sign in</button></form>`);
   });
