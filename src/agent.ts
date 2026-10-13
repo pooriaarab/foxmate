@@ -324,14 +324,37 @@ const MONTHS = "January|February|March|April|May|June|July|August|September|Octo
 /** A goal that allows a range of days: "from October 20 to October 22", "between May 3 and 5" (G44). */
 const DAY_RANGE = new RegExp(String.raw`\b(?:from|between)\s+(?:${MONTHS})\s+\d{1,2}(?:,\s*\d{4})?\s+(?:to|and|through|until)\s+(?:(?:${MONTHS})\s+)?\d{1,2}\b`, "i");
 export const allowsDays = (goal: string) => DAY_RANGE.test(goal);
+// AQ11: a goal that names a file ("landlord-notices.txt"): the file is a page on the site, behind its links.
+const GOAL_FILE = /(?<![\w/@.-])[\w-]+(?:\.[\w-]+)*\.(?:txt|pdf|csv|md|docx?|xlsx?|json|html?)\b/i;
+/** A tab whose address or title holds the file name (AQ11). */
+const shows = (tab: { url?: string; title?: string } | undefined, file: string) => {
+  let url = tab?.url ?? "";
+  try {
+    url = decodeURIComponent(url);
+  } catch {
+    // An address with a bad escape is read as it is.
+  }
+  return `${url} ${tab?.title ?? ""}`.toLowerCase().includes(file.toLowerCase());
+};
+/** The file name that a goal names, or undefined (AQ11). */
+export const goalFile = (goal: string): string | undefined => GOAL_FILE.exec(goal)?.[0];
+const FILE_RULE = "The goal names a file. Unless the Space holds it, it is a page on this site: open it through the site's links (such as Documents or Files) and read it before you ask the user anything.";
+/** A question about money: an amount, a total, a limit, or an OK to spend. It goes to the user, file or not (AQ11). */
+const SPEND_QUESTION = new RegExp(String.raw`[$€£]\s?\d|${AMOUNT.source}|\b(?:money|total|limits?|budget|max|maximum|cap|cost|price|fee|charge[sd]?|spend|pay|paid|payment|transfer|ok|okay|confirm|approve|proceed|go ahead)\b`, "i");
+/** A question that the goal's file may answer: it names the file, or asks where, what, which, who, when or how (AQ11). */
+const fileQuestion = (question: string, file: string) =>
+  !SPEND_QUESTION.test(question) && (question.toLowerCase().includes(file.toLowerCase()) || /\b(?:where|what|which|who|when|how|file|document|link|url|path)\b/i.test(question));
+const fileAsk = (file: string) => `Do not ask yet: the goal names the file ${file}. Unless the Space holds it, it is a page on this site: open it through the site's links (such as Documents or Files), read it, and use what it says. Nothing was asked.`;
 
-export function plannerRules({ canOpen = false, canAsk = false, days = false }: { canOpen?: boolean; canAsk?: boolean; days?: boolean } = {}): string {
+export function plannerRules({ canOpen = false, canAsk = false, days = false, file = false }: { canOpen?: boolean; canAsk?: boolean; days?: boolean; file?: boolean } = {}): string {
   return [
     "",
     "Work on the open page: read it with the tools, and use what it shows. Do not make up web addresses. Use open_url only for an address on a site that the tab note names.",
     ...(canOpen ? [`To go to another site, call ${OPEN_TOOL} with its address. The user approves each one first. Then foxmate opens it in a new tab, and you work there.`] : []),
     // AQ6: a planner with ask_user still guesses unless the rules say when to ask.
     // G44: only a goal with a range of days gets this line, so other runs keep their cached prefix.
+    // AQ11: only a goal that names a file gets this line, as G44.
+    ...(file ? [FILE_RULE] : []),
     ...(days ? ["The goal allows several days. Search each day of the range, and check that the results show the day you searched. Note the best result of each day, then choose the best of all."] : []),
     ...(canAsk ? [`Before you act, call ${ASK_USER} when the goal leaves out a choice that the page needs (for example a size or a color), when the page shows a cost over a limit that the goal sets (read the total before you pay or send), or when a page needs the user to sign in. Do not guess such a choice. Do not ask about what the goal already gives.`, TIE_RULE] : []),
   ].join("\n");
@@ -417,6 +440,8 @@ export function createAgent(options: AgentOptions): Agent {
   let signInEnded: string | undefined;
   // A question of the current run that got no answer: the run ends after that step (AQ9).
   let unanswered: string | undefined;
+  // The file that the goal names, until the open tab shows it: the first question waits for it (AQ11).
+  let fileUnread: string | undefined;
   const passEmit = (event: PassEvent) => {
     if (event.type === "handoff") handedOff = true;
     if (event.type === "handoff-end" && !["signed-in", "no-wall", "cancelled"].includes(event.status)) signInEnded ??= event.status;
@@ -526,6 +551,13 @@ export function createAgent(options: AgentOptions): Agent {
       if (SECRET_QUESTION.test(String(args.question))) throw new Error("foxmate never asks the user for a password, a card number or a code. Do not ask for one.");
       // A tie on price with no money that moves: the rule picks, and the user is not held (AQ10).
       if (priceTie(String(args.question), runGoal)) throw new Error(`Do not ask: the options cost the same, so ${TIE_PICK} Nothing was asked.`);
+      // A goal's file not read yet: the first question about it is refused once, with where the file is.
+      // A question about money, a total, a limit or an OK to spend goes to the user (AQ11).
+      if (fileUnread && fileQuestion(String(args.question), fileUnread)) {
+        const file = fileUnread;
+        fileUnread = undefined;
+        throw new Error(fileAsk(file));
+      }
       return args;
     },
   };
@@ -604,6 +636,7 @@ export function createAgent(options: AgentOptions): Agent {
     runGoal = input.goal;
     signInEnded = undefined;
     unanswered = undefined;
+    fileUnread = goalFile(input.goal);
     const grants: string[] = [];
     try {
       const tab: TabInfo = input.tabId === undefined ? {} : await browser.tabs.get(input.tabId);
@@ -779,13 +812,14 @@ export function createAgent(options: AgentOptions): Agent {
       // The system and goal messages stay as they are, and each request starts with the one before it,
       // so a model can reuse its prompt cache. A tab note goes at the end of the newest message only when the
       // tab or the sites change. `notes` maps a foxloop history index to the note after it (G31).
-      const rules = plannerRules({ canOpen: opens, canAsk: asks, days: allowsDays(input.goal) });
+      const rules = plannerRules({ canOpen: opens, canAsk: asks, days: allowsDays(input.goal), file: Boolean(goalFile(input.goal)) });
       choiceGuard = asks;
       const notes = new Map<number, string>();
       let lastTab: { url: string; sites: string[] } | undefined;
       const withContext = async (messages: Message[]): Promise<Message[]> => {
         if (!own) return messages;
         const open = target ? await browser.tabs.get(target).catch(() => undefined) : undefined;
+        if (fileUnread && shows(open, fileUnread)) fileUnread = undefined;
         const sites = [...new Set([...(domain ? [domain] : []), ...granted.map((e) => e.domain)])];
         const now = { url: open?.url ?? "", sites };
         // The first note is whole; a later one names only what changed (G38).
@@ -973,6 +1007,7 @@ export function createAgent(options: AgentOptions): Agent {
       runSignal = undefined;
       runGoal = undefined;
       runHost = undefined;
+      fileUnread = undefined;
       approvals.cancelAll();
       // A question that still waits ends with the run (AQ2).
       for (const resolve of questions.values()) resolve(undefined);
