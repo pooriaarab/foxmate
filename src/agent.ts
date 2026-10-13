@@ -564,7 +564,7 @@ export function createAgent(options: AgentOptions): Agent {
       const recalled = options.memory && !input.mind ? await recallNotes(options.memory, input.goal) : { notes: [] };
       if (!input.mind) emit({ type: "recall", ...recalled });
       const goal = withNotes(input.goal, recalled.notes);
-      let brain: { mind: MindLike; planner: string; check?: Brain["check"]; settle?: Brain["settle"] } | undefined = input.mind && { mind: input.mind, planner: "foxbridge" };
+      let brain: { mind: MindLike; planner: string; check?: Brain["check"] } | undefined = input.mind && { mind: input.mind, planner: "foxbridge" };
       if (!brain) try {
         brain = await createBrain(input.settings, {
           goal,
@@ -584,7 +584,7 @@ export function createAgent(options: AgentOptions): Agent {
       let lastTool = "";
       const brainCheck = brain.check;
       /** Ask the helper about the newest page: the page goes as delimited data, through the redact hook (G34, G49). */
-      const askHelper = async (ask: NonNullable<Brain["check"]>, system: (nonce: string) => string, goalText: string, said: string, signal?: AbortSignal) => {
+      const askHelper = async (ask: NonNullable<Brain["check"]>, system: (nonce: string) => string, goalText: string, said: string, signal?: AbortSignal, maxTokens?: number) => {
         const masked = lastPage && { ...lastPage, controls: lastPage.controls.map((c) => (c.secret && c.value ? { ...c, value: "•••" } : c)) };
         const page = (masked ? foxpaw.pageText(masked) : lastTool).replace(/</g, "&lt;").replace(/>/g, "&gt;").slice(0, 6000);
         const nonce = crypto.randomUUID().replaceAll("-", "").slice(0, 16);
@@ -592,7 +592,7 @@ export function createAgent(options: AgentOptions): Agent {
           { role: "system", content: system(nonce) },
           { role: "user", content: `Goal: ${goalText}\n${said}\n\n<<<PAGE ${nonce}>>>\n${page}\n<<<END ${nonce}>>>` },
         ];
-        const answer = await ask(options.redact ? (JSON.parse(await options.redact(JSON.stringify(messages))) as Message[]) : messages, signal);
+        const answer = await ask(options.redact ? (JSON.parse(await options.redact(JSON.stringify(messages))) as Message[]) : messages, signal, maxTokens);
         if (!answer) return undefined;
         try {
           // The planner may wrap its JSON in a code fence (B18).
@@ -612,14 +612,13 @@ export function createAgent(options: AgentOptions): Agent {
         if (verdict.done !== false || verdict.sure === false) return undefined;
         return { ok: false, checks: [{ part: "the page shows that the goal is reached (fast helper)", ok: false, evidence: why }], problem: why };
       } : undefined;
-      const brainSettle = brain.settle;
       // G47, G48, G50: after a sent form, the helper may end the run in place of the planner's last call.
       // Only for a goal of one part, and never on a page that foxshield flagged or that still has a step left.
-      settle = !input.mind && brainSettle && mayEndOnSettle(input.goal) ? async ({ goal: goalText, signal }) => {
+      settle = !input.mind && brainCheck && mayEndOnSettle(input.goal) ? async ({ goal: goalText, signal }) => {
         // No tool runs while settle runs, so these read the page the helper reads.
         if (!formSent || newestFlagged || stepLeft(lastPage)) return undefined;
         if (!(await codeCheck()).ok) return undefined;
-        const verdict = await askHelper(brainSettle, settlePrompt, goalText, "The agent sent a form.", signal);
+        const verdict = await askHelper(brainCheck, settlePrompt, goalText, "The agent sent a form.", signal, 80);
         if (!verdict) return undefined;
         await trail.append({ actor: "foxmate", kind: "check.settle", data: { provider: verdict.provider, done: verdict.done, sure: verdict.sure, why: verdict.why } });
         if (verdict.done !== true || verdict.sure !== true || signal.aborted) return undefined;
