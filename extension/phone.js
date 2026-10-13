@@ -44,7 +44,11 @@ async function render() {
 function drawQr(text) {
   const { data, size } = encode(text, { ecc: "L", border: 2 });
   const svg = $("phone-qr");
+  // A whole number of pixels per module keeps the edges sharp for a camera.
+  const side = size * Math.max(2, Math.floor(400 / size));
   svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+  svg.setAttribute("width", String(side));
+  svg.setAttribute("height", String(side));
   const back = document.createElementNS(SVG, "rect");
   back.setAttribute("width", String(size));
   back.setAttribute("height", String(size));
