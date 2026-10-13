@@ -664,6 +664,8 @@ export function createAgent(options: AgentOptions): Agent {
     unanswered = undefined;
     signedInByAsk = false;
     fileUnread = goalFile(input.goal);
+    // foxshield's flagged text is per run, and the goal's values are never refused (S16).
+    shielded.newRun(input.goal);
     const grants: string[] = [];
     try {
       const tab: TabInfo = input.tabId === undefined ? {} : await browser.tabs.get(input.tabId);
