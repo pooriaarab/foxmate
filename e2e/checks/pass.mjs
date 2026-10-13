@@ -10,6 +10,8 @@ import { startPlanner } from "../planner.mjs";
 
 const SECRETS = [PASSWORD, CODE];
 const leaks = (value) => SECRETS.filter((s) => JSON.stringify(value).includes(s));
+/** A planner step that asks the user (HP19). */
+const asked = (question) => ({ tool: "ask_user", args: { question } });
 /** The "Your turn" line of a run in Chat, once it shows. */
 const signInLine = (sidebar, runs) => poll(sidebar, (n) => [...(document.querySelectorAll("#conversation > li")[n]?.querySelectorAll(".steps li") ?? [])].find((li) => li.textContent.includes("Sign in on this tab"))?.textContent ?? null, runs, 60_000);
 
@@ -71,6 +73,29 @@ export default async function passCheck({ session, check, record, runGoal }) {
     // The first read (G32) meets the wall before any planner request.
     check("HP4 Stop ends the wait and the run", { status: "Stopped.", ended: "cancelled", requests: 0 },
       { status: stopped.status, ended: stopped.trail.find((e) => e.kind === "handoff.ended")?.data.status, requests: planner.bodies.length });
+
+    // HP19: a click lands on the wall, so no read meets it, and the planner asks for the password three times
+    // (bench shop-signin-handoff on Ichabod: "Blocked (repeated-failure)"). The first ask hands the wall to the user.
+    await page.goto(`${site.url}/home`);
+    planner.play([(body) => ({ tool: "click", args: { controlId: /\[([0-9:]+)\] link \\"My account/.exec(body)?.[1] ?? "" } }),
+      // The model thinks a few seconds, so the wall shows by the time it asks.
+      async () => (await new Promise((done) => setTimeout(done, 2500)), asked("The bank needs a sign-in. What is your password?")), asked("What email and password should I use for the bank?"), asked("Please give me the bank password."), { tool: "snapshot" },
+      { tool: "finish", args: { summary: "The balance is $1,204.50." } }]);
+    const viaAsk = sidebar.evaluate(() => document.querySelectorAll("#conversation > li").length).then(async (n) => {
+      await signInLine(sidebar, n);
+      await page.type("#email", EMAIL);
+      await page.type("#password", PASSWORD);
+      await Promise.all([page.waitForNavigation().catch(() => undefined), page.click("button[type=submit]")]);
+      await poll(page, () => location.pathname === "/verify" && Boolean(document.getElementById("code")));
+      await page.type("#code", CODE);
+      await page.click("button[type=submit]");
+    });
+    viaAsk.catch(() => undefined);
+    const clicked = await runGoal(session, { page, goal: "Read my balance on my bank.", settings });
+    record.runs.passAsk = { status: clicked.status, steps: clicked.steps, kinds: clicked.kinds, requests: planner.bodies.length };
+    const signedIn = await Promise.race([viaAsk.then(() => true, () => false), new Promise((done) => setTimeout(() => done(false), 1000))]);
+    check("HP19 a password question after a click onto the wall hands the wall to the user, and the run goes on", { done: true, signedIn: true, paused: 1, read: true },
+      { done: clicked.done, signedIn, paused: clicked.kinds.filter((k) => k === "handoff.paused").length, read: planner.bodies.some((b) => b.includes("Balance: $1,204.50")) });
 
     const manifest = JSON.parse(readFileSync("dist-ext/manifest.json", "utf8"));
     check("HP8 the manifest asks for no webNavigation permission", false, [...manifest.permissions, ...(manifest.optional_permissions ?? [])].includes("webNavigation"));

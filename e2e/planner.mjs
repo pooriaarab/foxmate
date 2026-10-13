@@ -19,9 +19,9 @@ export async function startPlanner() {
     const body = Buffer.concat(chunks).toString("utf8");
     bodies.push(body);
     await held;
-    // A step can be a function of the request, for example to find a control id.
+    // A step can be a function of the request, for example to find a control id, or an async one that thinks a while.
     const next = script.shift() ?? { tool: "finish", args: { summary: "The script ended." } };
-    const step = typeof next === "function" ? next(body) : next;
+    const step = typeof next === "function" ? await next(body) : next;
     // A slow planner answer, so a check beside it has time to answer first (G47).
     if (step.delayMs) await new Promise((done) => setTimeout(done, step.delayMs));
     const call = { id: `call_${bodies.length}`, type: "function", function: { name: step.tool, arguments: JSON.stringify(step.args ?? {}) } };
