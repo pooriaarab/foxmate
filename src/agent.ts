@@ -17,6 +17,7 @@ import { payTool, type PayOptions, type PayRun } from "./pay.js";
 import { recallNotes, withNotes } from "./recall.js";
 import { fillSteps, generalStep, replayCall, shapeFits, shapeKey, toStep, workflowKey, type WorkflowStep, type WorkflowStore } from "./workflow.js";
 import { shieldedPaw } from "./shield.js";
+import type { RunDescribedTool } from "./space.js";
 
 export interface Trail {
   append(entry: { actor: string; kind: string; data?: unknown }): Promise<unknown>;
@@ -144,6 +145,60 @@ export const OPEN_TOOL = "open_site";
 export const USER_DOMAIN = "user.foxmate";
 // A question for a secret is refused before the user sees it (AQ3).
 const SECRET_QUESTION = /pass ?(?:word|code|phrase)|\bpin\b|card ?(?:number|no\b)|\bcv[cv]2?\b|security code|one[- ]time|\botp\b|2fa|verification code|login code/i;
+// AQ10: a choice between options at one price, decided by stops and times, with no money that moves or a limit.
+const TIE_PICK = "take the one with fewer stops, then the earlier time.";
+const TIE_RULE = `When options cost the same and the goal gives no other rule, do not ask: ${TIE_PICK}`;
+const TIE_OPTIONS = /\bnon-?stop\b|\bdirect\b|\bstops?\b|\b\d{1,2}:\d{2}\b/i;
+/** An amount that is not a $, € or £ price: "800 dollars", "500 EUR". */
+const AMOUNT = /\b\d[\d,.]*\s*(?:dollars?|euros?|pounds?|usd|eur|gbp|cad|aud)\b/i;
+const TIE_STAKES = new RegExp(String.raw`\b(?:send|sent|pay|paid|payment|transfer|refund|wire|charge[sd]?|card|account|limits?|budget|max|maximum|at most|cap|over|total|proceed|ok|okay|allow)\b|${AMOUNT.source}`, "i");
+/** A goal that names an amount or a limit: the user's own rule, so a tie goes to the user (AQ10). */
+const GOAL_LIMIT = new RegExp(String.raw`[$€£]\s?\d|${AMOUNT.source}|\b(?:under|below|max|maximum|at most|no more than|up to|less than|cheaper than|budget|limits?|cap)\b`, "i");
+const PRICE = /[$€£]\s?(\d[\d,]*(?:\.\d+)?)/g;
+const TIE_DATE = /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b|\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b|\b(?:mon|tues|wednes|thurs|fri|satur|sun)day\b|\b(?:mon|tue|wed|thu|fri|sat|sun),/gi;
+const STOP_WORDS: Record<string, number> = { one: 1, two: 2, three: 3 };
+
+/** The stops, the time in minutes and the dates of one option, from its text (AQ10). */
+function tieOption(text: string) {
+  const stops = /\bnon-?stop\b|\bdirect\b/i.test(text) ? 0 : (() => {
+    const m = /\b(\d|one|two|three)\s+stops?\b/i.exec(text);
+    return m ? (STOP_WORDS[m[1]!.toLowerCase()] ?? Number(m[1])) : undefined;
+  })();
+  const t = /\b(\d{1,2}):(\d{2})\s*([ap])?\.?m?\b/i.exec(text);
+  let hour = Number(t?.[1]);
+  if (t?.[3]?.toLowerCase() === "p" && hour < 12) hour += 12;
+  if (t?.[3]?.toLowerCase() === "a" && hour === 12) hour = 0;
+  const time = t ? hour * 60 + Number(t[2]) : undefined;
+  return { stops, time, dates: (text.match(TIE_DATE) ?? []).map((d) => d.toLowerCase().replace(/\s+/g, " ")).join(",") };
+}
+
+/**
+ * A question that asks which of several options to take, when the lowest price is on two or more,
+ * the goal sets no amount or limit, and the plain rule decides: the tied options differ in stops
+ * or time and not in date, and one has fewer stops, then the earlier time (AQ10).
+ */
+export function priceTie(question: string, goal = ""): boolean {
+  if (!/\bwhich\b/i.test(question) || !TIE_OPTIONS.test(question) || TIE_STAKES.test(question) || GOAL_LIMIT.test(goal)) return false;
+  // Each option is the text up to its price. The question before the options ("Which flight on Nov 3?") is no option's.
+  const options: { price: number; text: string }[] = [];
+  const first = question.search(PRICE);
+  let from = Math.max(0, ...[...question.slice(0, first).matchAll(/[?:]\s/g)].map((m) => m.index + 1));
+  for (const m of question.matchAll(PRICE)) {
+    const end = m.index + m[0].length;
+    options.push({ price: Number((m[1] ?? "").replaceAll(",", "")), text: question.slice(from, end) });
+    from = end;
+  }
+  const low = Math.min(...options.map((o) => o.price));
+  const tied = options.filter((o) => o.price === low).map((o) => tieOption(o.text));
+  if (tied.length < 2 || new Set(tied.map((o) => o.dates)).size > 1) return false;
+  // -1, 0 or 1 when the rule orders a before b; undefined when it cannot (no stops or times to compare).
+  const order = (a: (typeof tied)[number], b: (typeof tied)[number]) => {
+    if (a.stops !== undefined && b.stops !== undefined && a.stops !== b.stops) return Math.sign(a.stops - b.stops);
+    if (a.time !== undefined && b.time !== undefined && a.time !== b.time) return Math.sign(a.time - b.time);
+    return undefined;
+  };
+  return tied.some((a) => tied.every((b) => a === b || order(a, b) === -1));
+}
 
 /** The host of an http or https address, or undefined. */
 function webHost(url: string | undefined): string | undefined {
@@ -270,16 +325,39 @@ const MONTHS = "January|February|March|April|May|June|July|August|September|Octo
 /** A goal that allows a range of days: "from October 20 to October 22", "between May 3 and 5" (G44). */
 const DAY_RANGE = new RegExp(String.raw`\b(?:from|between)\s+(?:${MONTHS})\s+\d{1,2}(?:,\s*\d{4})?\s+(?:to|and|through|until)\s+(?:(?:${MONTHS})\s+)?\d{1,2}\b`, "i");
 export const allowsDays = (goal: string) => DAY_RANGE.test(goal);
+// AQ11: a goal that names a file ("landlord-notices.txt"): the file is a page on the site, behind its links.
+const GOAL_FILE = /(?<![\w/@.-])[\w-]+(?:\.[\w-]+)*\.(?:txt|pdf|csv|md|docx?|xlsx?|json|html?)\b/i;
+/** A tab whose address or title holds the file name (AQ11). */
+const shows = (tab: { url?: string; title?: string } | undefined, file: string) => {
+  let url = tab?.url ?? "";
+  try {
+    url = decodeURIComponent(url);
+  } catch {
+    // An address with a bad escape is read as it is.
+  }
+  return `${url} ${tab?.title ?? ""}`.toLowerCase().includes(file.toLowerCase());
+};
+/** The file name that a goal names, or undefined (AQ11). */
+export const goalFile = (goal: string): string | undefined => GOAL_FILE.exec(goal)?.[0];
+const FILE_RULE = "The goal names a file. Unless the Space holds it, it is a page on this site: open it through the site's links (such as Documents or Files) and read it before you ask the user anything.";
+/** A question about money: an amount, a total, a limit, or an OK to spend. It goes to the user, file or not (AQ11). */
+const SPEND_QUESTION = new RegExp(String.raw`[$€£]\s?\d|${AMOUNT.source}|\b(?:money|total|limits?|budget|max|maximum|cap|cost|price|fee|charge[sd]?|spend|pay|paid|payment|transfer|ok|okay|confirm|approve|proceed|go ahead)\b`, "i");
+/** A question that the goal's file may answer: it names the file, or asks where, what, which, who, when or how (AQ11). */
+const fileQuestion = (question: string, file: string) =>
+  !SPEND_QUESTION.test(question) && (question.toLowerCase().includes(file.toLowerCase()) || /\b(?:where|what|which|who|when|how|file|document|link|url|path)\b/i.test(question));
+const fileAsk = (file: string) => `Do not ask yet: the goal names the file ${file}. Unless the Space holds it, it is a page on this site: open it through the site's links (such as Documents or Files), read it, and use what it says. Nothing was asked.`;
 
-export function plannerRules({ canOpen = false, canAsk = false, days = false }: { canOpen?: boolean; canAsk?: boolean; days?: boolean } = {}): string {
+export function plannerRules({ canOpen = false, canAsk = false, days = false, file = false }: { canOpen?: boolean; canAsk?: boolean; days?: boolean; file?: boolean } = {}): string {
   return [
     "",
     "Work on the open page: read it with the tools, and use what it shows. Do not make up web addresses. Use open_url only for an address on a site that the tab note names.",
     ...(canOpen ? [`To go to another site, call ${OPEN_TOOL} with its address. The user approves each one first. Then foxmate opens it in a new tab, and you work there.`] : []),
     // AQ6: a planner with ask_user still guesses unless the rules say when to ask.
     // G44: only a goal with a range of days gets this line, so other runs keep their cached prefix.
+    // AQ11: only a goal that names a file gets this line, as G44.
+    ...(file ? [FILE_RULE] : []),
     ...(days ? ["The goal allows several days. Search each day of the range, and check that the results show the day you searched. Note the best result of each day, then choose the best of all."] : []),
-    ...(canAsk ? [`Before you act, call ${ASK_USER} when the goal leaves out a choice that the page needs (for example a size or a color), when the page shows a cost over a limit that the goal sets (read the total before you pay or send), or when a page needs the user to sign in. Do not guess such a choice. Do not ask about what the goal already gives.`] : []),
+    ...(canAsk ? [`Before you act, call ${ASK_USER} when the goal leaves out a choice that the page needs (for example a size or a color), when the page shows a cost over a limit that the goal sets (read the total before you pay or send), or when a page needs the user to sign in. Do not guess such a choice. Do not ask about what the goal already gives.`, TIE_RULE] : []),
   ].join("\n");
 }
 
@@ -361,6 +439,10 @@ export function createAgent(options: AgentOptions): Agent {
   let runHost: string | undefined;
   // A sign-in wait of the current run ended with no sign-in: the run ends after that tool (HP15).
   let signInEnded: string | undefined;
+  // A question of the current run that got no answer: the run ends after that step (AQ9).
+  let unanswered: string | undefined;
+  // The file that the goal names, until the open tab shows it: the first question waits for it (AQ11).
+  let fileUnread: string | undefined;
   const passEmit = (event: PassEvent) => {
     if (event.type === "handoff") handedOff = true;
     if (event.type === "handoff-end" && !["signed-in", "no-wall", "cancelled"].includes(event.status)) signInEnded ??= event.status;
@@ -457,16 +539,26 @@ export function createAgent(options: AgentOptions): Agent {
       });
       questions.delete(id);
       const text = answer?.trim() || undefined;
+      if (!text && !ctx.signal.aborted) unanswered ??= question;
       await trail.append({ actor: "user", kind: "run.answer", data: { id, answer: text ?? null } });
       runEmit({ type: "answer", step: ctx.step, id, answered: Boolean(text) });
       return text;
     },
   });
-  // A question for a secret is refused before the user sees it, and the planner reads why (AQ3).
+  // A question for a secret, or a tie on price (AQ10), is refused before the user sees it, and the planner reads why (AQ3).
   const askUser: LoopTool = {
     ...asker,
     prepare: (args) => {
       if (SECRET_QUESTION.test(String(args.question))) throw new Error("foxmate never asks the user for a password, a card number or a code. Do not ask for one.");
+      // A tie on price with no money that moves: the rule picks, and the user is not held (AQ10).
+      if (priceTie(String(args.question), runGoal)) throw new Error(`Do not ask: the options cost the same, so ${TIE_PICK} Nothing was asked.`);
+      // A goal's file not read yet: the first question about it is refused once, with where the file is.
+      // A question about money, a total, a limit or an OK to spend goes to the user (AQ11).
+      if (fileUnread && fileQuestion(String(args.question), fileUnread)) {
+        const file = fileUnread;
+        fileUnread = undefined;
+        throw new Error(fileAsk(file));
+      }
       return args;
     },
   };
@@ -544,6 +636,8 @@ export function createAgent(options: AgentOptions): Agent {
     runSignal = input.signal;
     runGoal = input.goal;
     signInEnded = undefined;
+    unanswered = undefined;
+    fileUnread = goalFile(input.goal);
     const grants: string[] = [];
     try {
       const tab: TabInfo = input.tabId === undefined ? {} : await browser.tabs.get(input.tabId);
@@ -685,7 +779,7 @@ export function createAgent(options: AgentOptions): Agent {
             return approvals.ask({ step: ctx.step, requestId, action: request.action, expiresAt: request.expiresAt, detail });
           },
         };
-        if (domain) grants.push((await host.addGrant({ scope: "read", domains: [domain], tools: ["pay"], expiresAt })).id);
+        if (domain && !off) grants.push((await host.addGrant({ scope: "read", domains: [domain], tools: ["pay"], expiresAt })).id);
         if (domain && !off) grants.push((await host.addGrant({ scope: "pay", domains: [domain], tools: [PAY_TOOL], spendCap: { value: cap, currency: GATE_CURRENCY.USDC ?? "XTS" }, approval: "always", expiresAt })).id);
       }
       // The Google tools (optIn): a schedule that opted in gets them with no ask. Else the first call of
@@ -712,20 +806,28 @@ export function createAgent(options: AgentOptions): Agent {
       const off = new Set<string>();
       for (const t of tabTools as OfferedTool[]) if (t.offered && !(await t.offered().catch(() => false))) off.add(t.name);
       const pageTools = tabTools.filter((t) => scopes.includes(t.scope) && !off.has(t.name));
+      // A tool may describe itself for this run: run_python with an empty Space (D8).
+      const grantedTools = await Promise.all(granted.map(async ({ tool }) => {
+        const told = await (tool as RunDescribedTool).describeRun?.().catch(() => undefined);
+        return told ? { ...tool, description: told } : tool;
+      }));
+      // pay only when payments are on for this run (PY13).
+      const payOn = paying && domain && !payRun.off ? [paying] : [];
       const offered = own
-        ? [...(domain || opens ? pageTools : []), ...granted.map((e) => e.tool), ...(paying && domain ? [paying] : []), ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])]
+        ? [...(domain || opens ? pageTools : []), ...grantedTools, ...payOn, ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])]
         : tools;
-      const visible = new Set([...(domain ? pageTools : []), ...granted.map((e) => e.tool), ...(paying && domain ? [paying] : []), ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])].map((t) => t.name));
+      const visible = new Set([...(domain ? pageTools : []), ...grantedTools, ...payOn, ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])].map((t) => t.name));
       // The system and goal messages stay as they are, and each request starts with the one before it,
       // so a model can reuse its prompt cache. A tab note goes at the end of the newest message only when the
       // tab or the sites change. `notes` maps a foxloop history index to the note after it (G31).
-      const rules = plannerRules({ canOpen: opens, canAsk: asks, days: allowsDays(input.goal) });
+      const rules = plannerRules({ canOpen: opens, canAsk: asks, days: allowsDays(input.goal), file: Boolean(goalFile(input.goal)) });
       choiceGuard = asks;
       const notes = new Map<number, string>();
       let lastTab: { url: string; sites: string[] } | undefined;
       const withContext = async (messages: Message[]): Promise<Message[]> => {
         if (!own) return messages;
         const open = target ? await browser.tabs.get(target).catch(() => undefined) : undefined;
+        if (fileUnread && shows(open, fileUnread)) fileUnread = undefined;
         const sites = [...new Set([...(domain ? [domain] : []), ...granted.map((e) => e.domain)])];
         const now = { url: open?.url ?? "", sites };
         // The first note is whole; a later one names only what changed (G38).
@@ -878,6 +980,13 @@ export function createAgent(options: AgentOptions): Agent {
         if (event.type === "done") end = { status: "done", summary: event.summary };
         if (event.type === "done" && event.settled) settled = true;
         if (event.type === "blocked") end = { status: "blocked", reason: event.reason, message: event.message };
+        // The user did not answer a question: no guess about what was asked (AQ9).
+        if (event.type === "tool-result" && event.name === ASK_USER && unanswered) {
+          const message = `No answer to: "${unanswered}" Give it in the goal and run it again.`;
+          end = { status: "blocked", reason: "question", message };
+          await trail.append({ actor: "foxmate", kind: "run.blocked", data: { reason: "question" } });
+          break;
+        }
         // The user did not do the sign-in step: no more reads, no second wait (HP15).
         if (event.type === "tool-result" && signInEnded) {
           const message = `The sign-in step was not done (${signInEnded}). Sign in on the tab, then run the goal again.`;
@@ -906,6 +1015,7 @@ export function createAgent(options: AgentOptions): Agent {
       runSignal = undefined;
       runGoal = undefined;
       runHost = undefined;
+      fileUnread = undefined;
       approvals.cancelAll();
       // A question that still waits ends with the run (AQ2).
       for (const resolve of questions.values()) resolve(undefined);

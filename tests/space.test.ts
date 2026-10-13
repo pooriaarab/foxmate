@@ -1,4 +1,4 @@
-// Tests for docs/failure-modes.md D6 and D7: run_python is not a way to fetch web pages or find files.
+// Tests for docs/failure-modes.md D6, D7 and D8: run_python is not a way to fetch web pages or find files.
 import { describe, expect, it } from "vitest";
 import { spaceTool } from "../src/space.js";
 
@@ -43,7 +43,7 @@ describe("space", () => {
       const out = await spaceTool(open).run({ code }, ctx);
       expect(out.ok, code).toBe(false);
       expect(out.summary).toMatch(/no files/i);
-      expect(out.summary).toMatch(/snapshot/);
+      expect(out.summary).toMatch(/site.s links/);
       expect(ran).toEqual([]);
     }
     const full = den(["/drop/notices.txt"]);
@@ -51,5 +51,18 @@ describe("space", () => {
     expect(full.ran).toHaveLength(1);
     const sums = den();
     expect((await spaceTool(sums.den).run({ code: "round(1000 * 0.195 + 5.29, 2)" }, ctx)).ok).toBe(true);
+  });
+
+  it("D8: an empty Space gets a run description for arithmetic that points to the site's links; the D7 hint does too", async () => {
+    const empty = spaceTool(den().den);
+    const told = await empty.describeRun?.();
+    expect(told).toMatch(/no files/i);
+    expect(told).toMatch(/arithmetic/i);
+    expect(told).toMatch(/links/i);
+    expect(told).not.toMatch(/on the files in the Space/);
+    const out = await empty.run({ code: "import os\nprint(os.listdir('/drop'))" }, ctx);
+    expect(out.summary).toMatch(/links/i);
+    expect(out.summary).toMatch(/Documents or Files/);
+    expect(await spaceTool(den(["/drop/bill.txt"]).den).describeRun?.()).toBeUndefined();
   });
 });
