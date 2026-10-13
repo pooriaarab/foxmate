@@ -263,7 +263,9 @@ This section says exactly what leaves your computer.
   the webhook notice" and Firefox's `websiteActivity` consent says yes.
   [docs/amo-data.md](docs/amo-data.md) lists all that foxmate sends.
 - **Phone approvals (off by default).** foxsync sends each approval to your
-  phone over an encrypted peer-to-peer WebRTC link.
+  phone over an encrypted peer-to-peer WebRTC link. To pair, the phone
+  camera opens foxsync's phone page from a QR code. The phone sends its
+  sealed pairing answer through the foxsync relay, which cannot read it.
 - **The log.** foxtrail stays in this browser. It holds each tool call, its
   arguments and short quotes of what foxshield flagged. It does not hold whole
   pages. The URLs of requests that foxlend blocked are kept without their
@@ -404,7 +406,7 @@ vision check runs too. Some of them:
 | Book a table, before and after the user saves "party size: 4" | For 2, then for 4; the approval shows the note |
 | Lend a local bank, send money in the lent tab, revoke | The lent tab is signed in; the page's requests to the attacker are blocked; the container is gone; your own tab stays signed in |
 | Drop a CSV in the Space, ask for a sum | Python sums it; its request to a probe server never arrives |
-| Pair a second Firefox as the phone | Its Approve sends the form; its Deny stops the run |
+| A second Firefox opens the Settings QR code: foxsync's hosted phone page | It pairs through the relay with no copy step; its Approve sends the form; its Deny stops the run |
 | Reload the extension while an approval waits | foxrunner runs the task again, and it finishes |
 | Wait 90 s at an approval | The run goes on; the app page keeps the background page loaded |
 | A read loan allows `attacker.test`; a normal run opens it | foxgate denies it: the loan's grant is not the run's |

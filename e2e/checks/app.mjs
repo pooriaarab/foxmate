@@ -45,8 +45,8 @@ export default async function appCheck({ session, check }) {
   // UI6: "Pair a phone" moves the Settings pairing panel into the step and starts a pairing.
   const pair = await sidebar.evaluate(async () => {
     document.getElementById("ob-phone-pair").click();
-    for (let i = 0; i < 100 && !document.getElementById("phone-offer").value; i++) await new Promise((r) => setTimeout(r, 100));
-    return { inStep: Boolean(document.querySelector("#ob-phone-slot #phone-panel")), shown: !document.getElementById("phone-panel").hidden, offer: document.getElementById("phone-offer").value.length > 0, on: (await browser.storage.local.get("settings")).settings?.modules?.phone === true };
+    for (let i = 0; i < 100 && document.getElementById("phone-show").hidden; i++) await new Promise((r) => setTimeout(r, 100));
+    return { inStep: Boolean(document.querySelector("#ob-phone-slot #phone-panel")), shown: !document.getElementById("phone-panel").hidden, qr: document.querySelector("#phone-qr path")?.getAttribute("d").length > 0, on: (await browser.storage.local.get("settings")).settings?.modules?.phone === true };
   });
   // UI7: the saved-login form saves through the Settings path, and the password field clears.
   const login = await sidebar.evaluate(async () => {
@@ -79,7 +79,7 @@ export default async function appCheck({ session, check }) {
     { seen: ["welcome", "model", "approvals", "extras", "first"], open: false, done: true, goal: true, demoLeft: 0, waiting: 0, rules: 0 }, { seen, ...walk });
   check("UI1 the demo card is the simple card, and Always allow works in the demo",
     { buttons: ["Deny", "Always allow", "Approve"], site: "bistro-lune.example", line: 'Send the form with "Book table"', icon: "B", img: false, answered: "Always allowed.", result: true }, demo);
-  check("UI6 Pair a phone runs the Settings pairing inside the step, then puts it back", { inStep: true, shown: true, offer: true, on: true, home: true, button: true }, { ...pair, ...back });
+  check("UI6 Pair a phone runs the Settings pairing inside the step, then puts it back", { inStep: true, shown: true, qr: true, on: true, home: true, button: true }, { ...pair, ...back });
   check("UI7 the onboarding saves a login through foxvault and clears the password", { status: "Saved for login.example.test.", cleared: true, listed: true }, login);
   await sidebar.evaluate(async () => {
     await browser.runtime.sendMessage({ op: "login-remove", host: "login.example.test" });
