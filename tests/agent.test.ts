@@ -5,13 +5,14 @@ import type { LoopTool } from "foxloop";
 import { Log, MemoryStore, generateKey } from "foxtrail";
 import { describe, expect, it, vi } from "vitest";
 import { HandoffError, maskSecrets } from "../src/pass.js";
-import { allowsDays, createAgent, plannerRules, unnamedChoice, type AgentEvent, type AgentOptions, type RunInput } from "../src/agent.js";
+import { allowsDays, createAgent, plannerRules, SETTLED_SUMMARY, unnamedChoice, type AgentEvent, type AgentOptions, type RunInput } from "../src/agent.js";
 import type { Control, Snapshot } from "foxpaw";
 import type { Workflow, WorkflowStore } from "../src/workflow.js";
 
 // G34: a stand-in fast helper on the scripted brain. `reply` undefined means no helper.
 // WF1-WF8: `planned` records each request to the planner.
-const helper = vi.hoisted(() => ({ reply: undefined as string | undefined, seen: [] as string[], tools: [] as string[][], planned: [] as string[] }));
+// G47: `settle` undefined means no settle helper; `slowMs` delays each planner answer; `stopped` counts aborted planner calls.
+const helper = vi.hoisted(() => ({ reply: undefined as string | undefined, seen: [] as string[], tools: [] as string[][], planned: [] as string[], settle: undefined as string | undefined, settled: [] as string[], slowMs: 0, stopped: 0 }));
 vi.mock("../src/brain.js", async (original) => {
   const real = await original<typeof import("../src/brain.js")>();
   return {
@@ -19,9 +20,21 @@ vi.mock("../src/brain.js", async (original) => {
     createBrain: async (...args: Parameters<typeof real.createBrain>) => {
       const real0 = await real.createBrain(...args);
       // G36: the tool names of each planner request.
-      const brain = { ...real0, mind: { chat: (messages: Parameters<typeof real0.mind.chat>[0], options: Parameters<typeof real0.mind.chat>[1]) => { helper.tools.push(options.tools.map((t) => t.function.name)); helper.planned.push(JSON.stringify(messages)); return real0.mind.chat(messages, options); } } };
-      if (helper.reply === undefined) return brain;
-      return { ...brain, check: async (messages: unknown[]) => { helper.seen.push(JSON.stringify(messages)); return { text: helper.reply!, provider: "scout" }; } };
+      const brain = { ...real0, mind: { chat: async (messages: Parameters<typeof real0.mind.chat>[0], options: Parameters<typeof real0.mind.chat>[1]) => {
+        helper.tools.push(options.tools.map((t) => t.function.name));
+        helper.planned.push(JSON.stringify(messages));
+        if (helper.slowMs) {
+          await new Promise((done) => setTimeout(done, helper.slowMs));
+          if (options.signal?.aborted) {
+            helper.stopped += 1;
+            throw new Error("aborted");
+          }
+        }
+        return real0.mind.chat(messages, options);
+      } } };
+      const settled = helper.settle === undefined ? brain : { ...brain, settle: async (messages: unknown[]) => { helper.settled.push(JSON.stringify(messages)); return { text: helper.settle!, provider: "scout" }; } };
+      if (helper.reply === undefined) return settled;
+      return { ...settled, check: async (messages: unknown[]) => { helper.seen.push(JSON.stringify(messages)); return { text: helper.reply!, provider: "scout" }; } };
     },
   };
 });
@@ -76,6 +89,8 @@ async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { 
         ran.push({ tool: "click", args, domain: ctx.domain });
         const now = Date.now();
         if ((await agentRef!.host.grants()).some((g) => !g.expiresAt || g.expiresAt > now + 61_000)) throw new Error("a grant outlives the run budget");
+        // G47: a click that sends a form says so, as foxpaw does, and carries no task check.
+        if (args.button === "Send form") return { ok: true, summary: "Done: click on control 0:7. The form was sent.", stopBatch: "the form was sent" };
         return { ok: true, summary: "Clicked.", check: { ok: true, checks: [{ part: "clicked", ok: true, evidence: String(args.button) }] } };
       },
     },
@@ -462,6 +477,52 @@ describe("agent", () => {
       expect(helper.seen).toEqual([]);
     } finally {
       helper.reply = undefined;
+    }
+  });
+
+  it("G47, G49: after a sent form, a sure 'done' from the settle helper ends the run without the last planner call", async () => {
+    try {
+      helper.settle = '{"done": true, "sure": true, "why": "Order TH-1 placed for the mug"}';
+      helper.reply = '{"done": false, "sure": true, "why": "the G34 check must not run"}';
+      helper.slowMs = 200;
+      Object.assign(helper, { settled: [], seen: [], planned: [], stopped: 0 });
+      const { run, trail } = await setup();
+      const end = await run({ script: [{ tool: "click", args: { button: "Send form" } }, { tool: "finish", args: { summary: "The planner says done." } }] });
+      // The helper read page text: its words go to the trail, never to the summary (G49).
+      expect(end).toMatchObject({ status: "done", summary: SETTLED_SUMMARY });
+      expect(helper.planned).toHaveLength(2);
+      await new Promise((done) => setTimeout(done, 250));
+      expect(helper.stopped).toBe(1);
+      expect(helper.seen).toEqual([]);
+      expect(helper.settled).toHaveLength(1);
+      const asked = JSON.parse(helper.settled[0]!) as { role: string; content: string }[];
+      expect(asked[0]!.content).toContain("final result");
+      expect(asked[1]!.content).toContain("Goal: Buy the mug");
+      expect(asked[1]!.content).toMatch(/<<<PAGE [0-9a-f]{16}>>>[\s\S]*<<<END [0-9a-f]{16}>>>/);
+      const kinds = (await trail.entries()).map((e: { kind: string }) => e.kind);
+      expect(kinds).toContain("check.settle");
+    } finally {
+      Object.assign(helper, { settle: undefined, reply: undefined, slowMs: 0 });
+    }
+  });
+
+  it("G48: an unsure settle, no sent form, or a goal that asks a question leaves the planner to finish", async () => {
+    try {
+      helper.slowMs = 100;
+      helper.settle = '{"done": true, "sure": false, "why": "cannot tell"}';
+      helper.settled = [];
+      const unsure = await (await setup()).run({ script: [{ tool: "click", args: { button: "Send form" } }, finish] });
+      expect(unsure).toMatchObject({ status: "done", summary: "Done." });
+      expect(helper.settled).toHaveLength(1);
+      helper.settle = '{"done": true, "sure": true, "why": "Mug bought"}';
+      helper.settled = [];
+      const typed = await (await setup()).run({ script: [{ tool: "fill", args: { text: "x" } }, finish] });
+      expect(typed).toMatchObject({ status: "done", summary: "Done." });
+      const asked = await (await setup()).run({ goal: "How much is the mug? Send the form first.", script: [{ tool: "click", args: { button: "Send form" } }, finish] });
+      expect(asked).toMatchObject({ status: "done", summary: "Done." });
+      expect(helper.settled).toEqual([]);
+    } finally {
+      Object.assign(helper, { settle: undefined, slowMs: 0 });
     }
   });
 

@@ -15,7 +15,8 @@ export default async function vaultCheck({ session, check, record, runGoal }) {
   const { fox, sidebar } = session;
   const [planner, site] = await Promise.all([startPlanner(), startLogin()]);
   const host = new URL(site.url).hostname;
-  const settings = { planner: "llama-server", baseURL: planner.url, model: "fake" };
+  // No fast helper: the default one on :8082 is a real model.
+  const settings = { planner: "llama-server", baseURL: planner.url, model: "fake", helper: { off: true } };
   try {
     // LV12: save the login through the Settings view, as a person would.
     const saved = await sidebar.evaluate(async (h, user, pass) => {

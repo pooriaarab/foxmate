@@ -30,8 +30,8 @@ importers:
         specifier: npm:foxlink-oauth@^0.1.2
         version: foxlink-oauth@0.1.2
       foxloop:
-        specifier: ^0.1.12
-        version: 0.1.12
+        specifier: ^0.1.13
+        version: 0.1.13
       foxmemory:
         specifier: ^0.1.2
         version: 0.1.2
@@ -1640,8 +1640,8 @@ packages:
     resolution: {integrity: sha512-V9sxhOEmk9ls4E65W208ILr5NJbl23pu1/r0vipCgNaAaZ6DzbXYd5SMoK607XaSKWDv1Gr8OR6pyjnejzU69Q==}
     engines: {node: '>=24'}
 
-  foxloop@0.1.12:
-    resolution: {integrity: sha512-2RAExvr22okOE2ZD9Gs6O8klZGEBGF8eBHj2OUv47IjGLNhOanl0s7hWLiDew1Nt5N1wXYusXzDe88a1gthTJQ==}
+  foxloop@0.1.13:
+    resolution: {integrity: sha512-H7AIWUxKt2rxkqdnwFn7wZpD8XZuaYxq1bedWx6Y+/167TIfvEfEJvKNtguBXOLZDCLv7LQ5iRYyqAlunXtu8Q==}
     engines: {node: '>=24'}
 
   foxmemory@0.1.2:
@@ -4218,7 +4218,7 @@ snapshots:
       foxgate: 0.1.3
       foxvault: 0.1.2
 
-  foxloop@0.1.12:
+  foxloop@0.1.13:
     dependencies:
       foxgate: 0.1.3
       foxpaw: 0.1.12
