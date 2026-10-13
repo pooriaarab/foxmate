@@ -47,6 +47,8 @@ export interface Brain {
    * Resolves undefined when the run has no helper (B15).
    */
   check?: (messages: Message[], signal?: AbortSignal) => Promise<{ text: string; provider: string } | undefined>;
+  /** The settle check on the helper only, never escalated to the planner (G47). Undefined with no helper. */
+  settle?: (messages: Message[], signal?: AbortSignal) => Promise<{ text: string; provider: string } | undefined>;
 }
 
 export type BrainErrorCode = "not-local" | "unknown-planner" | "bad-script" | "no-browser-model";
@@ -99,7 +101,7 @@ export async function createBrain(settings: BrainSettings, deps: BrainDeps = {})
     mind = createMind({
       providers: [planner, ...(scout ? [scout] : [])],
       only: ["browser", "local"],
-      ...(scout ? { roles: { plan: { use: [planner.name] }, check: { use: [scout.name, planner.name], escalate: "unsure", timeoutMs: HELPER_WAIT_MS } } } : {}),
+      ...(scout ? { roles: { plan: { use: [planner.name] }, check: { use: [scout.name, planner.name], escalate: "unsure", timeoutMs: HELPER_WAIT_MS }, settle: { use: [scout.name] } } } : {}),
     });
   } catch (error) {
     if (!(error instanceof TypeError) || !/leaves no provider|cannot cross only/.test(error.message)) throw error;
@@ -109,11 +111,11 @@ export async function createBrain(settings: BrainSettings, deps: BrainDeps = {})
   if (!scout) return { mind, planner: id };
   // One look at the helper per run, at the first check (B15).
   let up: Promise<boolean> | undefined;
-  const check = async (messages: Message[], signal?: AbortSignal) => {
+  const ask = (role: "check" | "settle", maxTokens: number) => async (messages: Message[], signal?: AbortSignal) => {
     up ??= scout.probe({ timeoutMs: HELPER_PROBE_MS }).then((p) => p.ok, () => false);
     if (!(await up)) return undefined;
-    const answer = await mind.chat(messages, { role: "check", maxTokens: 200, ...(signal ? { signal } : {}) });
+    const answer = await mind.chat(messages, { role, maxTokens, ...(signal ? { signal } : {}) });
     return { text: answer.message.content ?? "", provider: answer.provider };
   };
-  return { mind, planner: id, check };
+  return { mind, planner: id, check: ask("check", 200), settle: ask("settle", 80) };
 }
