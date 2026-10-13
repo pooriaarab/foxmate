@@ -339,7 +339,10 @@ const shows = (tab: { url?: string; title?: string } | undefined, file: string) 
 };
 /** The file name that a goal names, or undefined (AQ11). */
 export const goalFile = (goal: string): string | undefined => GOAL_FILE.exec(goal)?.[0];
-const FILE_RULE = "The goal names a file. Unless the Space holds it, it is a page on this site: open it through the site's links (such as Documents or Files) and read it before you ask the user anything.";
+// AQ13: the file's values are copied as written.
+const FILE_RULE = "The goal names a file. Unless the Space holds it, it is a page on this site: open it through the site's links (such as Documents or Files) and read it before you ask the user anything. Copy the values it gives (an address, an amount, a name) exactly as written.";
+/** AQ13: a value the goal needs that the file does not give is never taken from another page. */
+const fileGap = (canAsk: boolean) => `If the file does not give a value that the goal needs, such as an amount or a payee, do not take one from another page: ${canAsk ? `call ${ASK_USER}` : "finish and say what is missing"}.`;
 /** A question about money: an amount, a total, a limit, or an OK to spend. It goes to the user, file or not (AQ11). */
 const SPEND_QUESTION = new RegExp(String.raw`[$€£]\s?\d|${AMOUNT.source}|\b(?:money|total|limits?|budget|max|maximum|cap|cost|price|fee|charge[sd]?|spend|pay|paid|payment|transfer|ok|okay|confirm|approve|proceed|go ahead)\b`, "i");
 /** A question that the goal's file may answer: it names the file, or asks where, what, which, who, when or how (AQ11). */
@@ -367,7 +370,7 @@ export function plannerRules({ canOpen = false, canAsk = false, days = false, fi
     // AQ6: a planner with ask_user still guesses unless the rules say when to ask.
     // G44: only a goal with a range of days gets this line, so other runs keep their cached prefix.
     // AQ11: only a goal that names a file gets this line, as G44.
-    ...(file ? [FILE_RULE] : []),
+    ...(file ? [FILE_RULE, fileGap(canAsk)] : []),
     // G51, AQ12: only goals that need them get these lines, as G44.
     ...(math ? [MATH_RULE, ...(math === "share" ? [SHARE_RULE] : [])] : []),
     ...(days ? ["The goal allows several days. Search each day of the range, and check that the results show the day you searched. Note the best result of each day, then choose the best of all."] : []),
