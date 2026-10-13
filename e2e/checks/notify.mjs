@@ -86,7 +86,7 @@ export default async function notifyCheck({ session, check, record, runGoal }) {
     check("NT7 a notice setting keeps the other settings", { planner: "scripted", webhook: true }, { planner: set.planner, webhook: set.notices?.webhook });
 
     // NT1: an approval waits while the sidebar is closed.
-    const settings = { ...(await session.sidebar.evaluate(async () => (await browser.storage.local.get("settings")).settings)), planner: "llama-server", baseURL: planner.url, model: "fake" };
+    const settings = { ...(await session.sidebar.evaluate(async () => (await browser.storage.local.get("settings")).settings)), planner: "llama-server", baseURL: planner.url, model: "fake", helper: { off: true } };
     await session.sidebar.evaluate((s) => browser.storage.local.set({ settings: s }), settings);
     planner.play([{ tool: "snapshot" }, book, { tool: "finish", args: { summary: "Booked." } }], { hold: true });
     const page = await fox.open(`${site.url}/table.html`);
