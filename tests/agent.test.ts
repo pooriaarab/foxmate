@@ -1239,6 +1239,14 @@ it("G51: the run's system message holds the run_python line only for a goal that
   expect(systemOf(plain.requests[0])).not.toContain("run_python from the numbers");
 });
 
+it("AQ13: a goal that names a file gets the lines to copy its values exactly and never to borrow a missing value", () => {
+  const rules = plannerRules({ file: true, canAsk: true });
+  expect(rules).toContain("Copy the values it gives (an address, an amount, a name) exactly as written.");
+  expect(rules).toContain("If the file does not give a value that the goal needs, such as an amount or a payee, do not take one from another page: call ask_user.");
+  expect(plannerRules({ file: true })).toContain("do not take one from another page: finish and say what is missing.");
+  expect(plannerRules({})).not.toContain("exactly as written");
+});
+
 it("G45: a card number in a fill call or its result is masked like one in act (G40)", () => {
   const event = { type: "tool-call", name: "fill", args: { fields: { "0:14": "4242 4242 4242 4242", "0:4": "Sam Park" } }, data: { filled: [{ controlId: "0:14", op: "type", value: "4242 4242 4242 4242" }] } };
   const shown = JSON.stringify(maskSecrets(event));
