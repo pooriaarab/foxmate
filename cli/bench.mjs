@@ -25,11 +25,14 @@ export function policy(name, goal) {
 /**
  * Asks foxbench's stand-in user: posts the question to the Ask Sam chat at
  * /user/ on the task's site and returns Sam's newest answer, or undefined
- * when the chat does not answer (BN3).
+ * when the chat does not answer (BN3). It posts as the task page would, with
+ * the page as the Referer: a site behind a path mount (the tunnel a cloud
+ * browser reaches it through) has no /user/ at the root of the address, and
+ * the mount finds the site by the Referer (BN7).
  */
 export async function askSam(url, question) {
   try {
-    const res = await fetch(new URL("/user/", url), { method: "POST", body: new URLSearchParams({ q: question }), signal: AbortSignal.timeout(10_000) });
+    const res = await fetch(new URL("/user/", url), { method: "POST", headers: { referer: url }, body: new URLSearchParams({ q: question }), signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return undefined;
     const answers = [...(await res.text()).matchAll(/<strong>Sam:<\/strong> ([^<]*)<\/p>/g)];
     // foxbench writes each special character as a numeric entity.
