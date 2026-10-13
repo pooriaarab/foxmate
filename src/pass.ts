@@ -30,13 +30,29 @@ export interface PassOptions {
   logins?: Logins;
 }
 
-export class HandoffError extends Error {}
+/** A sign-in wait that ended with no sign-in. `status` is foxpass's end status, such as "timeout" (HP15). */
+export class HandoffError extends Error {
+  readonly status: string;
+  constructor(message: string, status?: string) {
+    super(message);
+    this.status = status ?? /\(([\w-]+)\)/.exec(message)?.[1] ?? "ended";
+  }
+}
 
 /** foxpass's browser. The stand-in reads the tab address, so foxpass scans the top frame of the tab (HP8). */
 function handoffBrowser(browser: PassBrowser): HandoffBrowser {
   const getFrame = async ({ tabId }: { tabId: number }) => ({ url: (await browser.tabs.get(tabId)).url ?? "" });
   return { tabs: browser.tabs, windows: browser.windows, scripting: browser.scripting, webNavigation: { getFrame }, ...(browser.cookies ? { cookies: browser.cookies } : {}) };
 }
+
+/**
+ * The goal names a password, PIN or passcode in quotes, such as `the password "fE4"` or
+ * `update the password to '1j1l'`. The user gave it, so there is no step left for them (HP14).
+ */
+const GOAL_PASSWORD = /\b(?:pass(?:word|code|phrase)|PIN)\b(?:\s+(?:is|to|as))?\s*:?\s*["'“‘][^\s"'“”‘’]{1,128}["'”’]/i;
+export const goalGivesPassword = (goal: string | undefined) => GOAL_PASSWORD.test(goal ?? "");
+/** The walls a password from the goal answers (HP14). A code, passkey, CAPTCHA or consent still needs the user. */
+const ANSWERED = new Set<Wall["kind"]>(["password", "sign-in"]);
 
 /** A password field for a new password is a sign-up: the planner fills it (HP9). */
 const signUp = (wall: Wall, fields: FieldInfo[]) => wall.kind === "password" && /\bnew-password\b/.test(fields.find((f) => f.selector === wall.selector)?.autocomplete ?? "");
@@ -50,7 +66,7 @@ export function createPass(options: PassOptions) {
   let waiting: { tabId: number; emit: (event: PassEvent) => void } | undefined;
 
   /** Waits for the user when the tab shows a wall. Throws HandoffError when the user does not finish. */
-  async function beforeRead(tabId: number, run: { signal?: AbortSignal; emit: (event: PassEvent) => void }): Promise<void> {
+  async function beforeRead(tabId: number, run: { signal?: AbortSignal; emit: (event: PassEvent) => void; goal?: string }): Promise<void> {
     let scan;
     try {
       scan = await scanTab(browser, tabId);
@@ -59,7 +75,10 @@ export function createPass(options: PassOptions) {
       return;
     }
     hints.set(tabId, scan.scan.fields);
-    const walls = scan.walls.filter((w) => !signUp(w, scan.scan.fields));
+    const all = scan.walls.filter((w) => !signUp(w, scan.scan.fields));
+    const walls = goalGivesPassword(run.goal) ? all.filter((w) => !ANSWERED.has(w.kind)) : all;
+    // The log keeps the kinds only, never the goal's password (HP6, HP14).
+    if (walls.length < all.length) await log("handoff.skipped", { reason: "goal-password", kinds: all.filter((w) => !walls.includes(w)).map((w) => w.kind) });
     const [wall] = walls;
     if (!wall) return;
     const fill = Boolean(await options.logins?.has(wall.host).catch(() => false));
@@ -77,7 +96,7 @@ export function createPass(options: PassOptions) {
     await log("handoff.ended", { status: result.status });
     // The page changed under the user: read the newest fields next time.
     hints.delete(tabId);
-    if (result.status !== "signed-in" && result.status !== "no-wall") throw new HandoffError(`The user did not finish the sign-in step (${result.status}). Stop, and tell the user.`);
+    if (result.status !== "signed-in" && result.status !== "no-wall") throw new HandoffError(`The user did not finish the sign-in step (${result.status}). Stop, and tell the user.`, result.status);
   }
 
   /** The user asks to fill the saved login into the tab that the run waits on. */
