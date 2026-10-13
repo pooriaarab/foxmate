@@ -70,8 +70,11 @@ async function pair() {
   link = undefined;
   const current = await pairDesktop({ name: "foxmate", phoneUrl: PHONE_URL, relay: RELAY_URL });
   if (turn !== starts) return current.cancel();
+  if (!current.qr) {
+    current.cancel();
+    throw new Error("the pairing text is too long for a QR code");
+  }
   pairing = current;
-  if (!current.qr) throw new Error("the pairing text is too long for a QR code");
   drawQr(current.qr);
   $("phone-code").textContent = current.code;
   $("phone-show").hidden = false;
