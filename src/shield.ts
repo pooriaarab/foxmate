@@ -17,6 +17,8 @@ export interface ShieldScan {
   findings: number;
   top: { kind: FindingKind; reason: string; score: number; text: string }[];
   droppedControls: string[];
+  /** Blocks at or above the threshold, which sanitize() wraps as untrusted data (G49). */
+  flagged: number;
   /** Why the page text was withheld, when it was. */
   withheld?: string;
 }
@@ -99,7 +101,7 @@ async function shieldRead(options: ShieldOptions, paw: PawLike, tabId: number, b
     report = await scan(options, tabId);
   } catch (error) {
     const why = error instanceof Error ? error.message : String(error);
-    return { page: { ...page, text: WITHHELD }, seen: { url: page.url, findings: 0, top: [], droppedControls: [], withheld: why } };
+    return { page: { ...page, text: WITHHELD }, seen: { url: page.url, findings: 0, top: [], droppedControls: [], flagged: 0, withheld: why } };
   }
   const threshold = options.threshold ?? 0.5;
   // Ask the page which controls sit inside an element that foxshield found hidden. A word
@@ -114,7 +116,7 @@ async function shieldRead(options: ShieldOptions, paw: PawLike, tabId: number, b
       hiddenSet = new Set(nodes as number[]);
     } catch (error) {
       const why = error instanceof Error ? error.message : String(error);
-      return { page: { ...page, text: WITHHELD }, seen: { url: page.url, findings: report.findings.length, top: [], droppedControls: [], withheld: why } };
+      return { page: { ...page, text: WITHHELD }, seen: { url: page.url, findings: report.findings.length, top: [], droppedControls: [], flagged: 0, withheld: why } };
     }
   }
   const inHidden = (c: Control) => c.frameId === 0 && hiddenSet.has(c.node);
@@ -125,6 +127,7 @@ async function shieldRead(options: ShieldOptions, paw: PawLike, tabId: number, b
       findings: report.findings.length,
       top: report.findings.slice(0, 5).map((f) => ({ kind: f.kind, reason: f.reason, score: f.score, text: f.text })),
       droppedControls: page.controls.filter(inHidden).map((c) => c.label),
+      flagged: report.blocks.filter((b) => (b.score ?? 0) >= threshold).length,
     },
   };
 }

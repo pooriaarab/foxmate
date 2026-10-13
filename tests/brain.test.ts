@@ -155,6 +155,15 @@ describe("brain", () => {
     }
   });
 
+  it("B19: the settle check goes only to the helper, never to the planner, also when unsure (G47)", async () => {
+    const bodies = servers('{"done": true, "sure": false, "why": "cannot tell"}');
+    const brain = await createBrain({ planner: "llama-server" }, deps);
+    expect(await brain.settle?.(ask)).toMatchObject({ provider: "scout", text: '{"done": true, "sure": false, "why": "cannot tell"}' });
+    expect(bodies.map((b) => new URL(b.url).port)).toEqual(["8082"]);
+    const off = await createBrain({ planner: "llama-server", helper: { off: true } }, deps);
+    expect(off.settle).toBeUndefined();
+  });
+
   it("B13: a batch step sends all its calls in one reply", async () => {
     const script = JSON.stringify([{ batch: [{ tool: "act", args: { controlId: "0:1", op: "type", value: "{{goal}}" } }, { tool: "act", args: { controlId: "0:2", op: "type", value: "b" } }] }, { tool: "snapshot", args: {} }]);
     const brain = await createBrain({ planner: "scripted", script }, { goal: "Ada" });
