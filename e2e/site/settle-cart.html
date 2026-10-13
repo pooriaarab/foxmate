@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Mugshop · Cart</title></head>
+  <body>
+    <h1>Your cart</h1>
+    <p>Blue mug, 12.00</p>
+    <form action="settle-review.html" method="get">
+      <input type="hidden" name="item" value="blue-mug" />
+      <button type="submit">Check out</button>
+    </form>
+    <script>
+      // ?next= picks the review page: a button, a link styled as a button, or a German button (G50).
+      const next = new URLSearchParams(location.search).get("next");
+      if (next) document.querySelector("form").action = next;
+    </script>
+  </body>
+</html>
