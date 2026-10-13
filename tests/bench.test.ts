@@ -5,6 +5,7 @@ import { sites, startServer, taskById } from "foxbench";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error -- cli/ is plain JavaScript with no type declarations.
 import { askSam, foxmateAdapter, runMetrics } from "../cli/bench.mjs";
+import { mountSite } from "./mount.js";
 
 /** A promise that waits until `fail` rejects it: one task's sidebar calls (BN5). */
 function gate() {
@@ -57,6 +58,16 @@ describe("bench", () => {
     expect(server.state.questions.length).toBe(2);
     await server.close();
     expect(await ask(url, "Are you there?")).toBeUndefined();
+  });
+
+  it("BN7: a site behind a path mount (the tunnel a cloud browser uses) still gets the question, and Sam's answer comes back", async () => {
+    const server = await startServer({ sites });
+    const mount = await mountSite(server.reset(taskById("shop-cap-ask")));
+    const ask = askSam as (url: string, question: string) => Promise<string | undefined>;
+    expect(await ask(mount.url, "Total is $32.00, over your $30 limit. OK to proceed?")).toBe("Yes, $32 is fine. Go ahead and buy it.");
+    expect(server.state.questions.map((q) => q.text)).toEqual(["Total is $32.00, over your $30 limit. OK to proceed?"]);
+    await mount.close();
+    await server.close();
   });
 
   it("BN5: a task that ends after its time limit closes its own tab, not the next task's", async () => {
