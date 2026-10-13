@@ -450,6 +450,14 @@ describe("agent", () => {
     expect(requests.length).toBe(2);
   });
 
+  it("G52: the tab note names only web sites, not the domains of module tools", async () => {
+    const { run, requests } = await setup();
+    await run({ script: [{ tool: "snapshot", args: {} }, finish] });
+    const note = tabNote(requests[0]);
+    expect(note).toContain("- The sites this run may use: shop.test. The gate denies every other site.");
+    expect(note).not.toMatch(/space\.foxmate|googleapis/);
+  });
+
   it("G31: each request starts with the request before it, unchanged; a tab note goes only at the end, when the tab changes", async () => {
     const { run, requests } = await setup();
     const end = await run({ noTab: true, script: [openSite("https://shop.test/"), { tool: "snapshot", args: {} }, { tool: "snapshot", args: {} }, finish] });
