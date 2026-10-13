@@ -22,6 +22,8 @@ export async function startPlanner() {
     // A step can be a function of the request, for example to find a control id.
     const next = script.shift() ?? { tool: "finish", args: { summary: "The script ended." } };
     const step = typeof next === "function" ? next(body) : next;
+    // A slow planner answer, so a check beside it has time to answer first (G47).
+    if (step.delayMs) await new Promise((done) => setTimeout(done, step.delayMs));
     const call = { id: `call_${bodies.length}`, type: "function", function: { name: step.tool, arguments: JSON.stringify(step.args ?? {}) } };
     return res.writeHead(200, json).end(JSON.stringify({ choices: [{ index: 0, finish_reason: "tool_calls", message: { role: "assistant", content: "", tool_calls: [call] } }] }));
   });
@@ -29,13 +31,37 @@ export async function startPlanner() {
   return {
     url: `http://127.0.0.1:${server.address().port}/v1`,
     bodies,
-    /** The next run's tool calls. With hold, no answer goes out until release(). */
+    /** The next run's tool calls; `delayMs` on a step slows its answer. With hold, no answer goes out until release(). */
     play(steps, { hold = false } = {}) {
       script = [...steps];
       bodies.length = 0;
       held = hold ? new Promise((done) => (release = done)) : Promise.resolve();
     },
     release: () => release(),
+    close: () => new Promise((done) => { server.closeAllConnections(); server.close(() => done()); }),
+  };
+}
+
+/**
+ * A stand-in for the fast helper (llama-server on :8082). It is gullible: it
+ * answers every check with `verdict`, as a small model that obeys page text
+ * would. It keeps each request body.
+ */
+export async function startHelper(verdict) {
+  const bodies = [];
+  const json = { "content-type": "application/json", "access-control-allow-origin": "*", "access-control-allow-headers": "*" };
+  const server = createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    if (req.method === "OPTIONS") return res.writeHead(204, json).end();
+    if (req.url.endsWith("/models")) return res.writeHead(200, json).end(JSON.stringify({ data: [{ id: "helper" }] }));
+    bodies.push(Buffer.concat(chunks).toString("utf8"));
+    return res.writeHead(200, json).end(JSON.stringify({ choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: JSON.stringify(verdict) } }] }));
+  });
+  await new Promise((done) => server.listen(0, "127.0.0.1", done));
+  return {
+    url: `http://127.0.0.1:${server.address().port}/v1`,
+    bodies,
     close: () => new Promise((done) => { server.closeAllConnections(); server.close(() => done()); }),
   };
 }
