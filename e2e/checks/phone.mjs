@@ -44,6 +44,8 @@ export default async function phoneCheck({ session, check, record, scripted, fin
       const box = document.getElementById("module-phone");
       if (!box.checked) box.click();
       for (let i = 0; i < 20 && document.getElementById("phone-panel").hidden; i++) await new Promise((r) => setTimeout(r, 100));
+      // A double press: the second pairing replaces the first, and only it pairs.
+      document.getElementById("phone-pair").click();
       document.getElementById("phone-pair").click();
       for (let i = 0; i < 100 && document.getElementById("phone-show").hidden; i++) await new Promise((r) => setTimeout(r, 100));
       // The page CSS must draw each module as a plain black square, with no icon stroke.
