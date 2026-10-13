@@ -7,7 +7,7 @@
 import { createHandoff, messageFor, redactSnapshot, scanTab, type FieldInfo, type HandoffBrowser, type Notice, type SnapshotField, type Wall } from "foxpass";
 import type { Snapshot } from "foxpaw";
 import type { Trail } from "./agent.js";
-import type { FillEnd, LoginEvent, Logins } from "./logins.js";
+import { isLocalHost, type FillEnd, type LoginEvent, type Logins } from "./logins.js";
 
 /** The parts of `browser` that foxmate gives foxpass. No webNavigation (HP8). */
 export interface PassBrowser {
@@ -49,32 +49,56 @@ function handoffBrowser(browser: PassBrowser): HandoffBrowser {
  * The goal names a password, PIN or passcode, such as `the password "fE4"`,
  * `update the password to '1j1l'` or `password Tr4il-Mix-2026`. The user gave it, so there is no step left for them (HP14).
  */
-const GOAL_PASSWORD = /\b(?:pass(?:word|code|phrase)|PIN)\b(?:\s+(?:is|to|as))?\s*:?\s*["'“‘]([^\s"'“”‘’]{1,128})["'”’]/gi;
-/** Or with no quotes: a word of 6 or more characters with a digit or a symbol, as in `password Tr4il-Mix-2026` (HP14). */
-const BARE_PASSWORD = /\b(?:pass(?:word|code|phrase)|PIN)\b(?:\s+(?:is|to|as))?\s*:?\s+(?=\S*[\d!@#$%^&*_+=~-])(?!\S*["'“”‘’])(\S{6,128})/gi;
-/** Each password the goal names (HP14), for the wall check and for masking the trail and events (HP16). */
+const QUOTED = `\\s*:?\\s*["'“‘]([^\\s"'“”‘’]{1,128})["'”’]`;
+// "PIN" counts only in capitals: "pin 'News' to the top" names no PIN (HP20).
+// "to" counts only when the goal changes the password: "update the password to '1j1l'", never "email the password to 'ops'" (HP20).
+const CHANGE = `\\b(?:change|update|set|reset)\\s+(?:(?:the|my|your|our)\\s+)?`;
+const GOAL_PASSWORD = new RegExp(`\\bpass(?:word|code|phrase)\\b(?:\\s+is)?${QUOTED}`, "gi");
+const GOAL_NEW_PASSWORD = new RegExp(`${CHANGE}pass(?:word|code|phrase)\\s+to${QUOTED}`, "gi");
+const GOAL_PIN = new RegExp(`\\bPIN\\b(?:\\s+is)?${QUOTED}`, "g");
+// The same words in any case with no "i" flag, so "PIN" itself stays in capitals.
+const CHANGE_ANY_CASE = `\\b(?:[Cc]hange|[Uu]pdate|[Ss]et|[Rr]eset|CHANGE|UPDATE|SET|RESET)\\s+(?:(?:[Tt]he|[Mm]y|[Yy]our|[Oo]ur)\\s+)?`;
+const GOAL_NEW_PIN = new RegExp(`${CHANGE_ANY_CASE}PIN\\s+to${QUOTED}`, "g");
+/**
+ * Or with no quotes: a word of 6 or more characters with a digit or a symbol, as in `password Tr4il-Mix-2026` (HP14).
+ * Not after "to" or "as": "email the password to admin@corp.com" names an address, not a password (HP20).
+ */
+const BARE = `(?:\\s+is)?\\s*:?\\s+(?=\\S*[\\d!@#$%^&*_+=~-])(?!\\S*["'“”‘’])(\\S{6,128})`;
+const BARE_PASSWORD = new RegExp(`\\bpass(?:word|code|phrase)\\b${BARE}`, "gi");
+const BARE_PIN = new RegExp(`\\bPIN\\b${BARE}`, "g");
+const QUOTED_FORMS = [GOAL_PASSWORD, GOAL_NEW_PASSWORD, GOAL_PIN, GOAL_NEW_PIN];
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const bareValue = (p: string) => p.replace(/[,.;:)]+$/, "");
+/** Each password the goal names (HP14), for the wall check and for masking the trail and events (HP16). Never an email address (HP20). */
 export function goalPasswords(goal: string | undefined): string[] {
   const text = goal ?? "";
-  const quoted = [...text.matchAll(GOAL_PASSWORD)].map((m) => m[1]!);
-  const bare = [...text.matchAll(BARE_PASSWORD)].map((m) => m[1]!.replace(/[,.;:)]+$/, ""));
-  return [...new Set([...quoted, ...bare])].filter(Boolean);
+  const quoted = QUOTED_FORMS.flatMap((re) => [...text.matchAll(re)].map((m) => ({ at: m.index, p: m[1]! })))
+    .toSorted((a, b) => a.at - b.at).map((q) => q.p);
+  const bare = [BARE_PASSWORD, BARE_PIN].flatMap((re) => [...text.matchAll(re)].map((m) => bareValue(m[1]!)));
+  return [...new Set([...quoted, ...bare])].filter((p) => p && !EMAIL.test(p));
 }
 export const goalGivesPassword = (goal: string | undefined) => goalPasswords(goal).length > 0;
 
 /** The goal with each password it names (the HP14 match) masked as "•••" (HP16). */
-const maskGoal = (goal: string) => goal.replace(GOAL_PASSWORD, (m, p: string) => m.replace(p, "•••")).replace(BARE_PASSWORD, (m, p: string) => m.replace(p.replace(/[,.;:)]+$/, ""), "•••"));
+const maskGoal = (goal: string) => QUOTED_FORMS.reduce((g, re) => g.replace(re, (m, p: string) => m.replace(p, "•••")), goal)
+  .replace(BARE_PASSWORD, (m, p: string) => m.replace(bareValue(p), "•••")).replace(BARE_PIN, (m, p: string) => m.replace(bareValue(p), "•••"));
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
- * Every string in `value` with each password masked as "•••" (HP16). A password of 4 or more characters is masked as a
- * whole word, in any case, also URL-encoded; a shorter one only where a string is that password, where it stands in
- * double quotes, and in the goal.
+ * Every string in `value` with each password masked as "•••" (HP16), in any case, also URL-encoded: one of 6 or more
+ * characters wherever it stands, also inside other words; one of 4 or 5 as a whole word; a shorter one only where a
+ * string is that password, where it stands in double quotes, and in the goal.
  */
 export function maskPasswords<T>(value: T, passwords: readonly string[], goal?: string): T {
   const long = [...new Set(passwords.filter((p) => p.length >= 4).flatMap((p) => [p, encodeURIComponent(p)]))];
+  const inside = long.filter((p) => p.length >= 6);
+  const edged = long.filter((p) => p.length < 6);
   const short = new Set(passwords.filter((p) => p.length > 0 && p.length < 4));
   if (!long.length && !short.size) return value;
-  const words = long.length ? new RegExp(`(?<![\\p{L}\\p{N}])(?:${long.map(escape).join("|")})(?![\\p{L}\\p{N}])`, "giu") : undefined;
+  // From 6 characters also inside other words, so a call that hides it in "xPASSWORD" keeps it out of the trail (HP20);
+  // a shorter one only as a whole word, so "test" leaves "testing" alone.
+  const parts = [...inside.map(escape), ...edged.map((p) => `(?<![\\p{L}\\p{N}])${escape(p)}(?![\\p{L}\\p{N}])`)];
+  const words = parts.length ? new RegExp(`(?:${parts.join("|")})`, "giu") : undefined;
   const text = (t: string) => {
     if (short.has(t)) return "•••";
     let own = goal !== undefined && t === goal ? maskGoal(t) : t;
@@ -95,6 +119,98 @@ export function maskPasswords<T>(value: T, passwords: readonly string[], goal?: 
   };
   return walk(value) as T;
 }
+/** The run's own site for a sign-in wall: the tab's host at the run's start, or a subdomain of it (HP18). */
+export const onRunSite = (host: string | undefined, runHost: string | undefined) => runHost !== undefined && host !== undefined && (host === runHost || host.endsWith(`.${runHost}`));
+
+const webUrl = (url: string | undefined) => {
+  try {
+    const u = new URL(url ?? "");
+    return u.protocol === "http:" || u.protocol === "https:" ? u : undefined;
+  } catch {
+    return undefined;
+  }
+};
+const TLDS = new Set(["com", "net", "org", "io", "dev", "app", "co", "ai", "me", "info", "biz", "edu", "gov", "ca", "uk", "us", "de", "fr", "es", "it", "nl", "eu", "au", "jp", "test", "example", "local", "localhost"]);
+/** The hosts the goal names (an address, or a name such as shop.test), without "www."; an email address names none (HP20). */
+export function goalHosts(goal: string | undefined): string[] {
+  const hosts = [...(goal ?? "").matchAll(/(?<![@\p{L}\p{N}_.-])((?:[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?\.)+(\p{L}{2,24}))(?![\p{L}\p{N}_@-]|\.[\p{L}\p{N}])/gu)]
+    .filter((m) => TLDS.has(m[2]!.toLowerCase())).map((m) => webUrl(`https://${m[1]}`)?.hostname).filter((h): h is string => Boolean(h));
+  // The URL parser gives the host as the address bar has it: lower case, letters outside ASCII as punycode.
+  return [...new Set(hosts.map((h) => h.replace(/^www\./, "")))];
+}
+
+/**
+ * Where a password the goal names may be typed (HP20): a page with the start tab's exact host, scheme and port, on https
+ * unless the host is on this computer (as LV10), and, when the goal names hosts, a start host that is one of them.
+ */
+export function passwordSite(start: string | undefined, url: string, goal: string | undefined): boolean {
+  const a = webUrl(start);
+  const b = webUrl(url);
+  if (!a || !b || a.protocol !== b.protocol || a.host !== b.host) return false;
+  if (b.protocol !== "https:" && !isLocalHost(b.hostname)) return false;
+  const named = goalHosts(goal);
+  return !named.length || named.includes(a.hostname.replace(/^www\./, ""));
+}
+
+/** What a call does with a password the goal names, as foxloop pins it: a target with its password flag, page and frame address. */
+interface Pinned { id?: unknown; secret?: unknown; url?: unknown; frameUrl?: unknown; request?: { value?: unknown } }
+
+/** The tools that may type a password into a password field, and the page-derived fields foxloop's `prepare` adds (never scanned). */
+const TYPING = new Set(["act", "fill", "fill_and_send"]);
+const PREPARED: Record<string, readonly string[]> = { act: ["target"], click: ["target"], fill: ["targets"], fill_and_send: ["targets", "sendTarget"], browser_task: ["form"] };
+
+/** Every string value in `value`; key names are the tool's own words, or control ids. */
+const stringsIn = (value: unknown): string[] => typeof value === "string" ? [value]
+  : Array.isArray(value) ? value.flatMap(stringsIn)
+  : value && typeof value === "object" ? Object.values(value).flatMap(stringsIn) : [];
+const bytes = (t: string) => t.replace(/%([0-9a-f]{2})/gi, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
+const decode = (t: string) => { try { return decodeURIComponent(t); } catch { return bytes(t); } };
+/** A string as it is and each percent-decoding of it ("+" as a space), until it stops changing. */
+function decodings(text: string): string[] {
+  const out = [text];
+  for (let next = decode(text.replace(/\+/g, " ")); next !== out.at(-1) && out.length < 7; next = decode(next.replace(/\+/g, " "))) out.push(next);
+  return out.map((t) => t.toLowerCase());
+}
+const looksLikeAddress = (text: string) => /^[a-z][a-z0-9+.-]*:|^\/|[?&][^=\s]*=/i.test(text.trim());
+const queryValues = (text: string) => [...text.matchAll(/[?&][^=&#\s]*=([^&#\s]*)/g)].flatMap((m) => decodings(m[1]!));
+
+/**
+ * A prepared call that carries a password the goal names anywhere but into a password field on the password site, through
+ * act, fill or fill_and_send (HP20). `onSite` is passwordSite for the run. Only the values the model gave are scanned:
+ * foxloop's pinned targets and browser_task's form preview come from the page. A partial defence: a password of 4 or more
+ * characters is found in any case, inside other words and percent-encoded; in an address, any 6 characters of it in a row
+ * are enough (on the password site, in its path and query only). A shorter one counts only as a whole value or a whole
+ * query value. A password split into pieces under 6 characters, or encoded another way (base64, reversed), is not found.
+ */
+export function passwordElsewhere(tool: string, args: Record<string, unknown>, passwords: readonly string[], onSite: (url: string) => boolean): boolean {
+  if (!passwords.length) return false;
+  const rest = JSON.parse(JSON.stringify(args)) as Record<string, unknown> & { target?: Pinned; targets?: Pinned[]; fields?: Record<string, unknown> };
+  // The password field must be on the password site, by the page address and by the address of its own frame (C1),
+  // and the target must be one foxloop pinned for a tool that types.
+  const allowed = (t: Pinned | undefined, value: unknown) => TYPING.has(tool) && t?.secret === true && typeof t.url === "string" && typeof t.frameUrl === "string"
+    && t.frameUrl !== "" && onSite(t.url) && onSite(t.frameUrl) && typeof value === "string" && passwords.includes(value);
+  if (tool === "act" && allowed(rest.target, rest.value)) delete rest.value;
+  if (tool === "fill" || tool === "fill_and_send") {
+    for (const t of Array.isArray(rest.targets) ? rest.targets : []) if (allowed(t, t.request?.value) && rest.fields && typeof t.id === "string") delete rest.fields[t.id];
+  }
+  for (const key of PREPARED[tool] ?? []) delete rest[key];
+  const lower = passwords.map((p) => p.toLowerCase());
+  return stringsIn(rest).some((text) => {
+    const forms = decodings(text);
+    const address = looksLikeAddress(text);
+    // An address on the password site may hold part of the password in its own host (wordpress.test for wordpress-2026).
+    const own = address ? webUrl(text.trim()) : undefined;
+    const windowed = own && onSite(own.href) ? decodings(own.href.slice(own.origin.length)) : forms;
+    return lower.some((p) => {
+      if (p.length < 4) return forms.some((f) => f.trim() === p) || (address && queryValues(text).includes(p));
+      if (forms.some((f) => f.includes(p))) return true;
+      if (!address || p.length < 6) return false;
+      const pieces = Array.from({ length: p.length - 5 }, (_, i) => p.slice(i, i + 6));
+      return windowed.some((f) => pieces.some((piece) => f.includes(piece)));
+    });
+  });
+}
+
 /** The walls a password from the goal answers (HP14). A code, passkey, CAPTCHA or consent still needs the user. */
 const ANSWERED = new Set<Wall["kind"]>(["password", "sign-in"]);
 
@@ -121,8 +237,7 @@ export function createPass(options: PassOptions) {
     hints.set(tabId, scan.scan.fields);
     const all = scan.walls.filter((w) => !signUp(w, scan.scan.fields));
     // Only on the run's own site: a password from the goal never goes to another host (HP18).
-    const own = (host: string) => run.host !== undefined && (host === run.host || host.endsWith(`.${run.host}`));
-    const walls = goalGivesPassword(run.goal) ? all.filter((w) => !(ANSWERED.has(w.kind) && own(w.host))) : all;
+    const walls = goalGivesPassword(run.goal) ? all.filter((w) => !(ANSWERED.has(w.kind) && onRunSite(w.host, run.host))) : all;
     // The log keeps the kinds only, never the goal's password (HP6, HP14).
     if (walls.length < all.length) await log("handoff.skipped", { reason: "goal-password", kinds: all.filter((w) => !walls.includes(w)).map((w) => w.kind) });
     const [wall] = walls;
