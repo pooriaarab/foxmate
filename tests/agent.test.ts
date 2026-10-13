@@ -510,6 +510,49 @@ describe("agent", () => {
     expect(events.some((e) => e.type === "approval-needed" && /^[\w-]+$/.test(e.requestId))).toBe(true);
   });
 
+  it("HP16: a password the goal gives is masked in the trail and the events, not in the run", async () => {
+    const { run, ran, events, trail, requests } = await setup();
+    const goal = 'Enter the password "fE4" into both text fields and press submit.';
+    const end = await run({ goal, script: [{ tool: "fill", args: { text: "fE4" } }, finish] });
+    expect(end.status).toBe("done");
+    expect(ran.map((r) => r.args)).toEqual([{ text: "fE4" }]);
+    expect(requests.some((r) => r.includes("fE4"))).toBe(true);
+    const entries = await trail.entries();
+    for (const shown of [JSON.stringify(events), JSON.stringify(entries)]) expect(shown).not.toContain("fE4");
+    const start = entries.find((e) => e.kind === "run.start")!.data as { goal: string };
+    expect(start.goal).toBe('Enter the password "•••" into both text fields and press submit.');
+    // A bare password, as foxbench writes them.
+    const bare = await setup();
+    await bare.run({ goal: "Log in as sam, password Tr4il-Mix-2026, then open my orders.", script: [{ tool: "fill", args: { text: "Tr4il-Mix-2026" } }, finish] });
+    expect(JSON.stringify(await bare.trail.entries())).not.toContain("Tr4il-Mix-2026");
+  });
+
+  it("HP16: a short PIN is masked only where it is the value; a long password in any case and URL-encoded", async () => {
+    const pin = await setup();
+    await pin.run({ goal: 'Type the PIN "12" and send it.', script: [{ tool: "fill", args: { text: "12" } }, { tool: "fill", args: { text: "Aisle 12 shelf" } }, finish] });
+    const pinShown = JSON.stringify(await pin.trail.entries());
+    expect(pinShown).not.toContain('"text":"12"');
+    expect(pinShown).toContain("Aisle 12 shelf");
+    expect(pinShown).toContain('Type the PIN \\"•••\\" and send it.');
+    const long = await setup();
+    await long.run({ goal: 'Log in with the password "p@ss#Word9".', script: [{ tool: "fill", args: { text: "P@SS#WORD9" } }, { tool: "open_url", args: { url: "http://shop.test/?pw=p%40ss%23Word9" } }, finish] });
+    const longShown = JSON.stringify(await long.trail.entries()) + JSON.stringify(long.events);
+    for (const form of ["p@ss#Word9", "P@SS#WORD9", "p%40ss%23Word9"]) expect(longShown).not.toContain(form);
+  });
+
+  it("WF26: a run whose goal gives a password neither reads nor writes the workflow cache", async () => {
+    const kept = new Map<string, Workflow>();
+    let reads = 0;
+    const workflows: WorkflowStore = { get: async (k) => { reads += 1; return kept.get(k); }, set: async (k, w) => { kept.set(k, w); } };
+    const made = await setup({ workflows });
+    expect((await made.run({ goal: 'Log in with the password "p@ss#Word9" and open my orders.', script: [{ tool: "fill", args: { text: "p@ss#Word9" } }, finish] })).status).toBe("done");
+    expect(kept.size).toBe(0);
+    expect(reads).toBe(0);
+    const plain = await setup({ workflows });
+    await plain.run({ goal: "Open my orders.", script: [shopPage(1), { tool: "click", args: { button: "Pay" } }, finish] });
+    expect(kept.size).toBe(2);
+  });
+
   it("G36: the planner always gets the finish tool", async () => {
     helper.tools = [];
     await (await setup()).run({ script: [{ tool: "fill", args: { text: "x" } }, finish] });
