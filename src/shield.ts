@@ -6,6 +6,7 @@
 // the page the planner reads and out of the quotes (HP5, HP6, S14).
 import type { PawLike } from "foxloop";
 import * as foxpaw from "foxpaw";
+import { parseGoal } from "foxpaw";
 import type { Control, ScriptingApi, Snapshot } from "foxpaw";
 import type { FieldInfo } from "foxpass";
 import { sanitize, scanDocument, type FindingKind, type ScanReport } from "foxshield";
@@ -83,7 +84,45 @@ async function scan(options: ShieldOptions, tabId: number): Promise<ScanReport> 
 }
 
 /** A page as the shield sees it, before foxpass's redaction, with what foxshield did. */
-interface ShieldRead { page: Snapshot; seen: ShieldScan }
+/** `flagged`: the text of each block that sanitize() wraps as instructions to an agent (S16). */
+interface ShieldRead { page: Snapshot; seen: ShieldScan; flagged?: string[] }
+
+/**
+ * A value as S16 compares it, the same on both sides: NFKC, no invisible or
+ * format characters (Unicode Cf: zero-width, soft hyphen, bidi marks), no
+ * character that is not a letter or a digit, lower case. foxshield's tidy()
+ * removes zero-width characters from the text the planner reads, so a raw
+ * compare missed a value split by one (S16).
+ */
+export const squash = (text: string) => text.normalize("NFKC").replace(/\p{Cf}/gu, "").replace(/[^\p{L}\p{N}]+/gu, "").toLowerCase();
+/** A value that names something (an IBAN, an account, an address, a link): 6 or more characters with 4 digits, an @ or a web address (S16). */
+const NAMES = (value: string) => {
+  const plain = value.normalize("NFKC").replace(/\p{Cf}/gu, "");
+  return squash(plain).length >= 6 && (/(?:\d\D*){4}/.test(plain) || plain.includes("@") || /:\/\/|www/i.test(plain));
+};
+const FLAGGED = "The value comes from page text that foxshield flagged as instructions to an AI agent, and the goal does not name it, so foxmate does not type it.";
+const FLAGGED_TASK = "The task holds a value that comes from page text that foxshield flagged as instructions to an AI agent, and the goal does not name it, so foxmate does not run it.";
+/** The flagged text a run keeps: one entry per distinct squashed text (S17). Past the cap, every value that names something and that the goal does not name is refused. */
+const MAX_FLAGGED = 500;
+/** A table cell block: a cell next to a flagged cell is the row's own data, not the rest of a split attack (S18). */
+const CELL = /> (?:td|th):nth-of-type\(\d+\)$/;
+/**
+ * A block that is only a value, with at most a short label ("IBAN: US13 3000 ...", "x@evil.test"):
+ * each word holds a digit, an @ or a web address. A sentence ("Questions? Call 0800 123 456.") is not (S18).
+ */
+const bare = (text: string) => {
+  const words = text.normalize("NFKC").replace(/\p{Cf}/gu, "").replace(/^[^:\n]{1,24}:/, "").trim().split(/\s+/).filter(Boolean);
+  return words.length > 0 && words.every((w) => /[\d@]|:\/\/|^www\./i.test(w));
+};
+/** The values in a browser_task goal that foxpaw can type: each requirement value, and each email, web address or run of digit words (S19). */
+const goalValues = (goal: string): string[] => {
+  const plain = goal.normalize("NFKC").replace(/\p{Cf}/gu, "");
+  const spans = [/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, /(?:https?:\/\/|www\.)\S+/gi, /[\p{L}\p{N}]*\p{N}[\p{L}\p{N}]*(?:[\s./\\_-]+[\p{L}\p{N}]*\p{N}[\p{L}\p{N}]*)*/gu];
+  return [...parseGoal(plain).requirements.flatMap((r) => (r.value ? [r.value] : [])), ...spans.flatMap((re) => plain.match(re) ?? [])];
+};
+
+/** foxpaw through foxshield, with `newRun`: each run starts with no flagged text and its own goal (S16). */
+export type ShieldedPaw = PawLike & { newRun(goal: string): void };
 
 /**
  * The shield-only read: wait for the load (S11), read, scan, drop the controls
@@ -122,6 +161,9 @@ async function shieldRead(options: ShieldOptions, paw: PawLike, tabId: number, b
   const inHidden = (c: Control) => c.frameId === 0 && hiddenSet.has(c.node);
   return {
     page: { ...page, controls: page.controls.filter((c) => !inHidden(c)), text: cut(sanitize(report, { threshold }), MAX_TEXT) },
+    // A flagged block, and a block next to it that is only a value and not a table cell: an attack
+    // can put its instruction in one block and its value alone in the next (S18).
+    flagged: report.blocks.filter((b, i, all) => (b.score ?? 0) >= threshold || (!CELL.test(b.selector) && bare(b.text) && [all[i - 1], all[i + 1]].some((n) => (n?.score ?? 0) >= threshold))).map((b) => squash(b.text)),
     seen: {
       url: page.url,
       findings: report.findings.length,
@@ -137,8 +179,26 @@ async function shieldRead(options: ShieldOptions, paw: PawLike, tabId: number, b
  * each read inside runTask (S13). Each read waits on `beforeRead` first (HP10). Only the snapshot, which the planner reads,
  * also gets foxpass's redaction; runTask needs the real field values (S14).
  */
-export function shieldedPaw(options: ShieldOptions): PawLike {
+export function shieldedPaw(options: ShieldOptions): ShieldedPaw {
   const paw = options.paw ?? foxpaw;
+  // The flagged text that this run read, and its goal, both squashed (S16). A Set: a page read
+  // again adds nothing, so repeated reads cannot fill the cap before an attack value (S17).
+  let flagged = new Set<string>();
+  let overflow = false;
+  let runGoal = "";
+  const remember = (read: ShieldRead) => {
+    for (const text of read.flagged ?? []) {
+      if (flagged.has(text)) continue;
+      if (flagged.size >= MAX_FLAGGED) overflow = true;
+      else flagged.add(text);
+    }
+  };
+  /** A value that only flagged text of this run holds, and the goal does not (S16-S19). */
+  const refuses = (raw: string) => {
+    const value = squash(raw);
+    if (!NAMES(raw) || runGoal.includes(value)) return false;
+    return overflow || [...flagged].some((text) => text.includes(value));
+  };
   /** Redacts the page with foxpass. The quotes for the trail are always redacted. */
   const redact = async (tabId: number, { page, seen }: ShieldRead): Promise<Snapshot> => {
     const safe = redactPage(page, options.fieldHints?.(tabId) ?? [], seen.top.map((t) => t.text));
@@ -146,12 +206,24 @@ export function shieldedPaw(options: ShieldOptions): PawLike {
     return { ...safe.page, text: cut(safe.page.text, MAX_TEXT) };
   };
   return {
-    act: paw.act,
+    newRun: (text: string) => {
+      flagged = new Set();
+      overflow = false;
+      runGoal = squash(text);
+    },
+    // A value that only flagged text holds is refused before it reaches the page (S16).
+    act: async (tabId, control, request, page, browser) => {
+      if (refuses(request.value ?? "")) return { ok: false, reason: "unsupported", detail: FLAGGED };
+      return paw.act(tabId, control, request, page, browser);
+    },
     settle: paw.settle,
-    runTask: (tabId, goal, runOptions) => {
+    runTask: async (tabId, goal, runOptions) => {
       // foxpaw retries a read that throws for 10 s: a failed wait fails each retry at once, with no new wait (HP12).
       let failed: unknown;
-      return paw.runTask(tabId, goal, {
+      // browser_task types the values of its goal with foxpaw's own act, past the S16 check above.
+      // Each read checks them: a refused one gives a page with no controls, so nothing is acted on (S19).
+      let refused = false;
+      const result = await paw.runTask(tabId, goal, {
         ...runOptions,
         read: async (readTabId, browser) => {
           if (failed) throw failed;
@@ -162,10 +234,16 @@ export function shieldedPaw(options: ShieldOptions): PawLike {
             if (!runOptions?.signal?.aborted) throw (failed = error);
           }
           const read = await shieldRead(options, paw, readTabId, browser);
+          remember(read);
           await redact(readTabId, read);
+          if (refused || goalValues(goal).some(refuses)) {
+            refused = true;
+            return { ...read.page, controls: [], text: FLAGGED_TASK };
+          }
           return read.page;
         },
       });
+      return refused ? { ...result, status: "blocked", blockedReason: FLAGGED_TASK, verified: false } : result;
     },
     // A pure function of a snapshot that came through this shield: foxloop's browser_task preview (UI10).
     preview: paw.preview,
@@ -174,7 +252,9 @@ export function shieldedPaw(options: ShieldOptions): PawLike {
     changeText: paw.changeText,
     snapshot: async (tabId: number, browser?: ScriptingApi): Promise<Snapshot> => {
       await options.beforeRead?.(tabId);
-      return redact(tabId, await shieldRead(options, paw, tabId, browser));
+      const read = await shieldRead(options, paw, tabId, browser);
+      remember(read);
+      return redact(tabId, read);
     },
   };
 }
