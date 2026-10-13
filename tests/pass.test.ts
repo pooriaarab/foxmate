@@ -3,7 +3,7 @@
 import type { FieldInfo } from "foxpass";
 import type { Control, Snapshot } from "foxpaw";
 import { describe, expect, it } from "vitest";
-import { HandoffError, createPass, goalGivesPassword, redactPage } from "../src/pass.js";
+import { HandoffError, createPass, goalGivesPassword, maskPasswords, redactPage } from "../src/pass.js";
 
 const control = (id: string, label: string, more: Partial<Control> = {}): Control => ({
   id, frameId: 0, node: Number(id.split(":")[1]), role: "textbox", tag: "input", type: "text", label, name: "", placeholder: "", section: "", value: "",
@@ -104,5 +104,12 @@ describe("pass", () => {
     await expect(sub.beforeRead(1, { emit: () => {}, goal })).rejects.toBeInstanceOf(HandoffError);
     const own = createPass({ browser: loginTab(), trail: { append: async () => {} }, timeoutMs: 1000 });
     await expect(own.beforeRead(1, { emit: () => {}, goal, host: "127.0.0.1" })).resolves.toBeUndefined();
+  });
+
+  it("HP16: a short password is masked where the goal stands inside a longer text, such as the goal with notes", () => {
+    const goal = 'Enter the password "fE4" into both fields.';
+    const shown = maskPasswords({ goal: `${goal}\n\nNotes: party of 4.`, other: "fE4 is a hex code" }, ["fE4"], goal);
+    expect(shown.goal).toBe('Enter the password "•••" into both fields.\n\nNotes: party of 4.');
+    expect(shown.other).toBe("fE4 is a hex code");
   });
 });
