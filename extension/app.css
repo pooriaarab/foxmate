@@ -409,7 +409,8 @@ details.raw pre { margin-top: 4px; white-space: pre-wrap; }
 .page > .card, .page > form.card { margin-top: 20px; }
 .page h2 + .card { margin-top: 0; }
 .sub { margin: 2px 0 12px 7px; padding: 2px 0 4px 18px; border-left: 1px solid var(--line-strong); }
-.phone-qr { display: block; max-width: 100%; height: auto; margin: 10px 0 4px; shape-rendering: crispEdges; }
+/* Not the icon style: a stroke on each module would join them into one dark block. */
+.phone-qr { display: block; max-width: 100%; height: auto; margin: 10px 0 4px; fill: #000; stroke: none; shape-rendering: crispEdges; }
 .phone-code { margin: 6px 0; font-family: ui-monospace, monospace; font-size: 15px; letter-spacing: 0.04em; user-select: all; }
 .callout { background: var(--ask-bg); border: 1px solid var(--ask-line); border-radius: 12px; padding: 10px 14px; margin-top: 16px; }
 .list > li { padding: 12px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }

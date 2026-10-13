@@ -46,7 +46,9 @@ export default async function phoneCheck({ session, check, record, scripted, fin
       for (let i = 0; i < 20 && document.getElementById("phone-panel").hidden; i++) await new Promise((r) => setTimeout(r, 100));
       document.getElementById("phone-pair").click();
       for (let i = 0; i < 100 && document.getElementById("phone-show").hidden; i++) await new Promise((r) => setTimeout(r, 100));
-      return { code: document.getElementById("phone-code").textContent, boxes: document.querySelectorAll("#phone-panel textarea").length };
+      // The page CSS must draw each module as a plain black square, with no icon stroke.
+      const ink = getComputedStyle(document.querySelector("#phone-qr path"));
+      return { code: document.getElementById("phone-code").textContent, boxes: document.querySelectorAll("#phone-panel textarea").length, ink: `${ink.fill} ${ink.stroke}` };
     });
     await saveShot(sidebar, "settings-phone-qr");
     const url = await readQr(sidebar);
@@ -60,8 +62,8 @@ export default async function phoneCheck({ session, check, record, scripted, fin
     await saveShot(sidebar, "settings-phone");
     await sidebar.evaluate(() => window.foxmate.show("chat"));
     check("F1 the QR code opens the hosted phone page, and the sidebar links through the relay", {
-      url: true, code: desk.code, boxes: 0, status: "Paired. Approvals go to the phone too.", linked: "linked to foxmate",
-    }, { url: url.startsWith(`${PHONE_URL}#fsy1.q.`), code: asked, boxes: desk.boxes, status, linked });
+      url: true, ink: "rgb(0, 0, 0) none", code: desk.code, boxes: 0, status: "Paired. Approvals go to the phone too.", linked: "linked to foxmate",
+    }, { url: url.startsWith(`${PHONE_URL}#fsy1.q.`), ink: desk.ink, code: asked, boxes: desk.boxes, status, linked });
 
     // The phone's user taps the button that window.tap names on each new request.
     await phone.evaluate(() => {
