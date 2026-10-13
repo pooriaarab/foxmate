@@ -32,9 +32,15 @@ vi.mock("../src/brain.js", async (original) => {
         }
         return real0.mind.chat(messages, options);
       } } };
-      const settled = helper.settle === undefined ? brain : { ...brain, settle: async (messages: unknown[]) => { helper.settled.push(JSON.stringify(messages)); return { text: helper.settle!, provider: "scout" }; } };
-      if (helper.reply === undefined) return settled;
-      return { ...settled, check: async (messages: unknown[]) => { helper.seen.push(JSON.stringify(messages)); return { text: helper.reply!, provider: "scout" }; } };
+      if (helper.reply === undefined && helper.settle === undefined) return brain;
+      // One helper check; the settle check (G47) is the one that says a form was just sent.
+      return { ...brain, check: async (messages: unknown[]) => {
+        const text = JSON.stringify(messages);
+        const settling = text.includes("It just sent a form");
+        (settling ? helper.settled : helper.seen).push(text);
+        const reply = settling ? helper.settle : helper.reply;
+        return reply === undefined ? undefined : { text: reply, provider: "scout" };
+      } };
     },
   };
 });
