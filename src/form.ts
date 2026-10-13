@@ -10,6 +10,21 @@ const MAX_TEXT = 240;
  * "The form holds: To: "x"; ..." for the form of the control, or "" when it
  * sends no form. The field the planner typed last (`typedId`) is shown in full (G21).
  */
+/** The page with a fill_and_send call's own values put in, for its approval's form detail (UI12). */
+export function withFields(page: Snapshot | undefined, targets: readonly { id: string; request: { op: string; value?: string } }[]): Snapshot | undefined {
+  if (!page) return undefined;
+  const given = new Map(targets.map((t) => [t.id, t.request]));
+  return {
+    ...page,
+    controls: page.controls.map((c) => {
+      const r = given.get(c.id);
+      if (!r) return c;
+      if (r.op === "check" || r.op === "uncheck") return { ...c, checked: r.op === "check" };
+      return r.value === undefined ? c : { ...c, value: r.value };
+    }),
+  };
+}
+
 export function formDetail(page: Snapshot | undefined, controlId: string, typedId?: string): string {
   const button = page?.controls.find((c) => c.id === controlId);
   if (!page || !button?.submit || button.form === undefined) return "";

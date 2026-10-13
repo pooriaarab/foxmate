@@ -1,4 +1,4 @@
-// Tests for docs/failure-modes.md BN1-BN3 and BN5: the bench command's suite flag,
+// Tests for docs/failure-modes.md BN1-BN3, BN5 and BN6: the bench command's suite flag,
 // the metrics that the adapter reports, and the Ask Sam answers. None needs Firefox.
 import { spawnSync } from "node:child_process";
 import { sites, startServer, taskById } from "foxbench";
@@ -27,6 +27,12 @@ describe("bench", () => {
     const run = spawnSync(process.execPath, ["cli/foxmate.mjs", "bench", "--replay", "maybe"], { encoding: "utf8", timeout: 20_000 });
     expect(run.status).toBe(2);
     expect(run.stderr).toContain("--replay must be on or off.");
+  });
+
+  it("BN6: --fixed-ports takes a port, before Firefox starts", () => {
+    const run = spawnSync(process.execPath, ["cli/foxmate.mjs", "bench", "--fixed-ports", "80"], { encoding: "utf8", timeout: 20_000 });
+    expect(run.status).toBe(2);
+    expect(run.stderr).toContain("--fixed-ports must be a port from 1024 to 65000.");
   });
 
   it("BN2: the metrics count planner calls, tool results and approvals from the trail", () => {

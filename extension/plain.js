@@ -67,7 +67,13 @@ const cut = (text) => {
   const s = String(text ?? "").replace(/\s+/g, " ").trim();
   return s.length > MAX_PART ? `${s.slice(0, MAX_PART - 1)}…` : s;
 };
-const formOf = (action) => (action?.tool === "browser_task" && action.args?.form && typeof action.args.form === "object" ? action.args.form : undefined);
+const formOf = (action) => {
+  if (action?.tool === "browser_task") return action.args?.form && typeof action.args.form === "object" ? action.args.form : undefined;
+  // fill_and_send: the pinned button's destination and the call's own fields (UI12).
+  if (action?.tool !== "fill_and_send" || !Array.isArray(action.args?.targets)) return undefined;
+  const fields = action.args.targets.map((t) => ({ label: t?.label, value: t?.request?.op === "check" ? "checked" : t?.request?.op === "uncheck" ? "unchecked" : t?.request?.value }));
+  return { sends: true, destination: action.args.sendTarget?.action ?? null, fields };
+};
 
 /** Where the form sends, as host and path: "shop.example/checkout/pay". Empty when it is not a web address. */
 function destinationOf(form) {
