@@ -354,16 +354,23 @@ const fileQuestion = (question: string, file: string) =>
 const fileAsk = (file: string) => `Do not ask yet: the goal names the file ${file}. Unless the Space holds it, it is a page on this site: open it through the site's links (such as Documents or Files), read it, and use what it says. Nothing was asked.`;
 
 // G51: a goal that needs arithmetic on amounts: run_python works it out, and a share is split by the people.
-const MATH = /\b(?:total|sum|difference|share|split|average|spending|percent)\b|\d%/i;
+// "share" and "split" count only with a number or "spent" ("share this page", "split view"); "20% off" is a price.
+const MATH = /\b(?:total|sum|difference|average|spending|percent)\b|\d%(?!\s*off\b)/i;
+const SPLIT = /\b(?:share|split)\b/i;
 /** "sum" for a goal that needs arithmetic on amounts, "share" when it names a share too, or false (G51). */
-export const asksMath = (goal: string): "sum" | "share" | false => (MATH.test(goal) ? (/\bshare\b/i.test(goal) ? "share" : "sum") : false);
+export const asksMath = (goal: string): "sum" | "share" | false => {
+  const split = SPLIT.test(goal) && /\d|\bspent\b/i.test(goal);
+  if (!split && !MATH.test(goal)) return false;
+  return split && /\bshare\b/i.test(goal) ? "share" : "sum";
+};
 const MATH_RULE = "The goal needs a sum, a difference or a share of amounts. Work the number out with run_python from the numbers on the page, and use its result.";
 const SHARE_RULE = "Someone's share of a total that people spent together is the total divided by the number of people (you and one friend: half).";
 // AQ12: "pay the bill" with no file, amount or account number: which bill is a choice the goal leaves out.
-const BILL = /\bpay\s+(?:the|my|this|that)\s+(?:bill|invoice|payment)\b/i;
+const BILL = /\bpay\s+(?:the|my|this|that|our)\s+(?:[\p{L}-]+\s+){0,2}?(?:bill|invoice|payment)\b/iu;
 /** A goal that pays a bill it does not name: no file, no amount, no account number (AQ12). */
 export const unnamedBill = (goal: string) => BILL.test(goal) && !goalFile(goal) && !/\d/.test(goal);
-const BILL_RULE = `The goal does not say which bill to pay, to whom or how much. Do not pick a payment from the history: call ${ASK_USER} first.`;
+/** With questions off, the run finishes and says what is missing, as AQ13 (AQ12). */
+const billRule = (canAsk: boolean) => `The goal does not say which bill to pay, to whom or how much. Do not pick a payment from the history: ${canAsk ? `call ${ASK_USER} first` : "finish and say what is missing"}.`;
 
 export function plannerRules({ canOpen = false, canAsk = false, days = false, file = false, math = false, bill = false }: { canOpen?: boolean; canAsk?: boolean; days?: boolean; file?: boolean; math?: "sum" | "share" | false; bill?: boolean } = {}): string {
   return [
@@ -376,8 +383,9 @@ export function plannerRules({ canOpen = false, canAsk = false, days = false, fi
     ...(file ? [FILE_RULE, fileGap(canAsk)] : []),
     // G51, AQ12: only goals that need them get these lines, as G44.
     ...(math ? [MATH_RULE, ...(math === "share" ? [SHARE_RULE] : [])] : []),
+    ...(bill && !canAsk ? [billRule(false)] : []),
     ...(days ? ["The goal allows several days. Search each day of the range, and check that the results show the day you searched. Note the best result of each day, then choose the best of all."] : []),
-    ...(canAsk ? [`Before you act, call ${ASK_USER} when the goal leaves out a choice that the page needs (for example a size or a color), when the page shows a cost over a limit that the goal sets (read the total before you pay or send), or when a page needs the user to sign in. Do not guess such a choice. Do not ask about what the goal already gives.`, TIE_RULE, ...(bill ? [BILL_RULE] : [])] : []),
+    ...(canAsk ? [`Before you act, call ${ASK_USER} when the goal leaves out a choice that the page needs (for example a size or a color), when the page shows a cost over a limit that the goal sets (read the total before you pay or send), or when a page needs the user to sign in. Do not guess such a choice. Do not ask about what the goal already gives.`, TIE_RULE, ...(bill ? [billRule(true)] : [])] : []),
   ].join("\n");
 }
 
@@ -887,7 +895,7 @@ export function createAgent(options: AgentOptions): Agent {
       // The system and goal messages stay as they are, and each request starts with the one before it,
       // so a model can reuse its prompt cache. A tab note goes at the end of the newest message only when the
       // tab or the sites change. `notes` maps a foxloop history index to the note after it (G31).
-      const rules = plannerRules({ canOpen: opens, canAsk: asks, days: allowsDays(input.goal), file: Boolean(goalFile(input.goal)), math: asksMath(input.goal), bill: unnamedBill(input.goal) });
+      const rules = plannerRules({ canOpen: opens, canAsk: asks, days: allowsDays(input.goal), file: Boolean(goalFile(input.goal)), math: visible.has("run_python") && asksMath(input.goal), bill: unnamedBill(input.goal) });
       choiceGuard = asks;
       const notes = new Map<number, string>();
       let lastTab: { url: string; sites: string[] } | undefined;

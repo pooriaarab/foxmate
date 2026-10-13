@@ -70,7 +70,7 @@ const wall = { fail: false, reads: 0 };
 
 const host = (tabId: () => number) => async () => new URL(TABS[tabId()]?.url ?? "").hostname;
 
-async function setup(options: { makeTools?: AgentOptions["makeTools"]; recall?: () => Promise<never>; publicSuffix?: { getDomain(host: string): string | null }; redirect?: Record<string, string>; loading?: boolean; workflows?: WorkflowStore; moreTabTools?: AgentOptions["moreTabTools"]; pay?: AgentOptions["pay"]; python?: LoopTool; pass?: AgentOptions["pass"] } = {}) {
+async function setup(options: { makeTools?: AgentOptions["makeTools"]; recall?: () => Promise<never>; publicSuffix?: { getDomain(host: string): string | null }; redirect?: Record<string, string>; loading?: boolean; workflows?: WorkflowStore; moreTabTools?: AgentOptions["moreTabTools"]; pay?: AgentOptions["pay"]; python?: LoopTool | null; pass?: AgentOptions["pass"] } = {}) {
   // Every request to the planner, as text: the redact hook sees each one before it goes out.
   const requests: string[] = [];
   const ran: { tool: string; args: Record<string, unknown>; domain?: string }[] = [];
@@ -144,7 +144,8 @@ async function setup(options: { makeTools?: AgentOptions["makeTools"]; recall?: 
     ...(options.moreTabTools ? { moreTabTools: options.moreTabTools } : {}),
     extraTools: [
       { tool: { name: "read_inbox", description: "Mail.", parameters: { type: "object", properties: {} }, scope: "read", domain: () => "www.googleapis.com", run: async () => ({ ok: true, summary: "Read 1 message.", untrusted: "Your code is 991177." }) }, domain: "www.googleapis.com", private: true, optIn: true },
-      { tool: options.python ?? { name: "run_python", description: "Python.", parameters: { type: "object", properties: {} }, scope: "fill", domain: () => "space.foxmate", run: async () => ({ ok: true, summary: "ran" }) }, domain: "space.foxmate", private: true },
+      // python: null leaves run_python out (G51).
+      ...(options.python === null ? [] : [{ tool: options.python ?? { name: "run_python", description: "Python.", parameters: { type: "object", properties: {} }, scope: "fill", domain: () => "space.foxmate", run: async () => ({ ok: true, summary: "ran" }) }, domain: "space.foxmate", private: true }]),
     ],
     loanFor: async (cookieStoreId: string) => {
       if (cookieStoreId === "firefox-container-9") return { cookieStoreId, scope: "read" as const, domain: "bank.test", site: "bank.test", state: "active" };
@@ -1350,15 +1351,26 @@ it("G51: a goal with a total, a difference or a share gets the run_python line; 
   expect(plannerRules({ math: "share" })).toMatch(/total divided by the number of people \(you and one friend: half\)/);
   expect(plannerRules({})).not.toMatch(/run_python/);
   expect(asksMath("They just sent me their share, but it seems to be too much. We spent 12.00 in total.")).toBe("share");
+  // Round 8 review: "share" and "split" count only with a number or "spent"; "20% off" is a price, not a sum to work out.
+  for (const goal of ["Share this page with Sam.", "Open the two docs in split view.", "Buy the blue kite if it is 20% off.", "Split the screen and share the link."]) {
+    expect(asksMath(goal)).toBe(false);
+  }
+  expect(asksMath("Split the 48.00 dinner with Ana and send her the rest.")).toBe("sum");
+  expect(asksMath("Send Ana her share of what we spent on the trip.")).toBe("share");
+  expect(asksMath("Send them 15% of the rent.")).toBe("sum");
 });
 
 it("AQ12: a goal that pays an unnamed bill gets the ask line, only when the run can ask", () => {
   expect(unnamedBill("Please pay the bill, like last month.")).toBe(true);
+  expect(unnamedBill("Pay my phone bill.")).toBe(true);
+  expect(unnamedBill("Can you pay our electricity bill for me?")).toBe(true);
   for (const goal of ["Can you please pay the bill 'bill-december-2023.txt' for me?", "Pay the bill of 98.70 to UK12345678901234567890.", "Please check and update my rent payment for the next month.", "Spotify sent me a note. Please send them the difference."]) {
     expect(unnamedBill(goal)).toBe(false);
   }
   expect(plannerRules({ canAsk: true, bill: true })).toMatch(/does not say which bill.*call ask_user first/);
-  expect(plannerRules({ canAsk: false, bill: true })).not.toMatch(/which bill/);
+  // With questions off, the run must not pick one either: it finishes and says what is missing (as AQ13).
+  expect(plannerRules({ canAsk: false, bill: true })).toMatch(/does not say which bill.*Do not pick a payment from the history: finish and say what is missing\./);
+  expect(plannerRules({ canAsk: false, bill: true })).not.toMatch(/call ask_user/);
   expect(plannerRules({ canAsk: true })).not.toMatch(/which bill/);
 });
 
@@ -1379,6 +1391,16 @@ it("G51: the run's system message holds the run_python line only for a goal that
   const plain = await questions();
   await plain.agent.run({ goal: "Please refund GB29NWBK60161331926819 for what they've sent me.", tabId: 1, settings: { planner: "scripted", script: JSON.stringify([finish]) } });
   expect(systemOf(plain.requests[0])).not.toContain("run_python from the numbers");
+  // A run with no run_python gets no line that names it.
+  const bare = await setup({ python: null });
+  await bare.agent.run({ goal: "What's my total spending in March 2022?", tabId: 1, settings: { planner: "scripted", script: JSON.stringify([finish]) } });
+  expect(systemOf(bare.requests[0])).not.toContain("run_python");
+});
+
+it("AQ12: with questions off, the run's system message tells the planner to finish and say what is missing", async () => {
+  const off = await questions();
+  await off.agent.run({ goal: "Pay my phone bill.", tabId: 1, settings: { planner: "scripted", ask: false, script: JSON.stringify([finish]) } });
+  expect(systemOf(off.requests[0])).toContain("Do not pick a payment from the history: finish and say what is missing.");
 });
 
 it("AQ13: a goal that names a file gets the lines to copy its values exactly and never to borrow a missing value", () => {
