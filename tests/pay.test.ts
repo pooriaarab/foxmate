@@ -9,6 +9,7 @@ import { Log, MemoryStore, generateKey } from "foxtrail";
 import { createVault } from "foxvault";
 import { describe, expect, it } from "vitest";
 import { createAgent, type AgentEvent, type RunInput } from "../src/agent.js";
+import { payTool } from "../src/pay.js";
 
 // A Base Sepolia test key and recipient, from foxpay's README. No real money.
 const WALLET = "0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318";
@@ -53,10 +54,12 @@ async function setup(cap = 50_000) {
 }
 
 describe("pay", () => {
-  it("PY1: with a cap of 0 the pay tool refuses, and foxpay fetches nothing", async () => {
+  it("PY1, PY13: with a cap of 0 the planner gets no pay tool, the tool refuses on its own, and foxpay fetches nothing", async () => {
     const { api, run, results } = await setup(0);
     await run([pay(), finish, finish]);
-    expect(results()).toEqual(["Payments are off. The user can set a spending cap in Settings."]);
+    expect(results()).toEqual(['There is no tool "pay". Tools: snapshot, ask_user, finish.']);
+    const off = payTool(() => { throw new Error("foxpay must not run"); }, () => ({ off: "Payments are off. The user can set a spending cap in Settings.", key: "k", ask: async () => null }));
+    expect(await off.run(pay().args, {} as never)).toEqual({ ok: false, summary: "Payments are off. The user can set a spending cap in Settings." });
     expect(api.log).toEqual([]);
   });
 
@@ -96,7 +99,7 @@ describe("pay", () => {
   it("PY7, PY8: a loan run, or a payment on another host, pays nothing", async () => {
     const { api, run, asks, results, events } = await setup();
     await run([pay(), finish, finish], { tabId: 2 });
-    expect(results()).toEqual(["foxmate does not pay on a lent login."]);
+    expect(results()).toEqual(['There is no tool "pay". Tools: snapshot, finish.']);
     await run([pay("0.01", "https://other.test/pay/42"), finish, finish]);
     expect(events.find((e) => e.type === "decision" && e.decision === "deny")).toMatchObject({ reason: "no-grant" });
     expect([asks().length, api.log.length]).toEqual([0, 0]);
