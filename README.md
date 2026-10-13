@@ -326,6 +326,31 @@ the same Firefox, where a goal that ran done before replays its kept calls,
 and writes that pass to `<out>/repeat` as repeat-run scores. `--replay off`
 turns the workflow cache off.
 
+#### The bench on Ichabod
+
+`FOXKIT_BROWSER=ichabod` with `ICHABOD_API_KEY` runs `foxmate bench` in
+Firefox on Ichabod, Mozilla's cloud browser. The model stays on this
+computer. Run it from a checkout with `cloudflared` installed:
+
+```sh
+pnpm build && node scripts/build-ext.mjs --bench-remote
+FOXKIT_BROWSER=ichabod node cli/foxmate.mjs bench --planner saluki
+```
+
+- Ichabod's Firefox cannot reach `127.0.0.1`. The bench mounts each task
+  site and each model server on create-foxkit's Cloudflare quick tunnel.
+  A model server sits behind a gate that forwards only under a random
+  path, and the scores show neither that path nor the tunnel host.
+- foxmate takes only models on this computer, so the release extension
+  refuses a tunnel address (`not-local`). Only `dist-ext-bench/`, which
+  npm and AMO never get, takes it.
+- Ichabod drops a session after about 12 minutes, so the bench starts a
+  new session between tasks after 6 minutes. `--repeat` then finds no
+  kept workflows from a lost session.
+- `<out>/ichabod-sessions-<date>.json` lists the session IDs, to find
+  each recording on the Ichabod console.
+- `--firefox` and `--headed` stop the run: Ichabod cannot set them.
+
 ### Library
 
 | Export | What it does |

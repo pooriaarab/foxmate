@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       create-foxkit:
-        specifier: ^0.1.0
-        version: 0.1.0(yauzl@3.4.0)
+        specifier: ^0.1.5
+        version: 0.1.5(yauzl@3.4.0)
       foxbench:
         specifier: ^0.1.7
         version: 0.1.7(zod@4.6.5)
@@ -30,8 +30,8 @@ importers:
         specifier: npm:foxlink-oauth@^0.1.2
         version: foxlink-oauth@0.1.2
       foxloop:
-        specifier: ^0.1.13
-        version: 0.1.13
+        specifier: ^0.1.14
+        version: 0.1.14
       foxmemory:
         specifier: ^0.1.2
         version: 0.1.2
@@ -42,8 +42,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0(foxsync@0.1.2)
       foxpass:
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.1.2
+        version: 0.1.2
       foxpaw:
         specifier: ^0.1.13
         version: 0.1.13
@@ -1250,8 +1250,8 @@ packages:
     resolution: {integrity: sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==}
     engines: {node: '>= 0.10'}
 
-  create-foxkit@0.1.0:
-    resolution: {integrity: sha512-kJyZJJC6vD7JOhvECrmOHQXQMnzwgjVmlN3rfDFp0v/DspwBd5DMPeSbOpgF8LLRQutqVr1jzs06K648W8rtaA==}
+  create-foxkit@0.1.5:
+    resolution: {integrity: sha512-Y/NeiNJK+nv4XAszj4M3Nie+yOPAFY6NkCrEgTldhRleVVU6pC5A+5q86slr7/t3HVBf3RJdjue1urgsfZ82HA==}
     engines: {node: '>=24'}
     hasBin: true
 
@@ -1640,8 +1640,8 @@ packages:
     resolution: {integrity: sha512-V9sxhOEmk9ls4E65W208ILr5NJbl23pu1/r0vipCgNaAaZ6DzbXYd5SMoK607XaSKWDv1Gr8OR6pyjnejzU69Q==}
     engines: {node: '>=24'}
 
-  foxloop@0.1.13:
-    resolution: {integrity: sha512-H7AIWUxKt2rxkqdnwFn7wZpD8XZuaYxq1bedWx6Y+/167TIfvEfEJvKNtguBXOLZDCLv7LQ5iRYyqAlunXtu8Q==}
+  foxloop@0.1.14:
+    resolution: {integrity: sha512-X8QJYTEh5oQ8vKWl6sxUZ2+Rv8QCMqmo1YpDAXppZTo+88K/GTcbpSR3PZXFk4teq5+XuZMHgtxd3y2FnUHcpg==}
     engines: {node: '>=24'}
 
   foxmemory@0.1.2:
@@ -1668,8 +1668,8 @@ packages:
       foxsync:
         optional: true
 
-  foxpass@0.1.0:
-    resolution: {integrity: sha512-aW/UeTirWctpce45g31OJo3q9e3CDnNm/wrOpSvA2F6mJlDzDpCdWdNw4262G6q7w+F6CTiBMG70Keg8yj+c5g==}
+  foxpass@0.1.2:
+    resolution: {integrity: sha512-SlrO4160dZ7uyvzzgQ6McBEiQofTV6ptJQ/L9VPoQuyuYHuMz/MGApIPH248hrLpjGyF7WrImdSttshnwXLVrw==}
     engines: {node: '>=24'}
 
   foxpaw@0.1.13:
@@ -3777,7 +3777,7 @@ snapshots:
       object-assign: 4.1.1
       vary: 1.1.2
 
-  create-foxkit@0.1.0(yauzl@3.4.0):
+  create-foxkit@0.1.5(yauzl@3.4.0):
     dependencies:
       puppeteer-core: 25.12.0(yauzl@3.4.0)
     transitivePeerDependencies:
@@ -4218,7 +4218,7 @@ snapshots:
       foxgate: 0.1.3
       foxvault: 0.1.2
 
-  foxloop@0.1.13:
+  foxloop@0.1.14:
     dependencies:
       foxgate: 0.1.3
       foxpaw: 0.1.13
@@ -4233,7 +4233,7 @@ snapshots:
     optionalDependencies:
       foxsync: 0.1.2
 
-  foxpass@0.1.0: {}
+  foxpass@0.1.2: {}
 
   foxpaw@0.1.13: {}
 

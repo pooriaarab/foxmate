@@ -5,6 +5,7 @@
 // the done check (foxmind's `check` role); planning stays on the planner.
 import { createMind, llamaServer, ollama, saluki, type Mind, type Provider } from "foxmind";
 import type { Message, MindLike } from "foxloop";
+import { modelTier } from "./model-tier.js";
 import { PLANNERS, type PlannerId } from "./planners.js";
 import { ScriptError, scriptMind } from "./scripted.js";
 
@@ -62,7 +63,7 @@ export class BrainError extends Error {
 async function provider(id: PlannerId, settings: BrainSettings, deps: BrainDeps): Promise<Provider> {
   const model = settings.model?.trim() || undefined;
   const baseURL = settings.baseURL?.trim() || undefined;
-  const at = baseURL ? { baseURL } : {};
+  const at = baseURL ? { baseURL, ...modelTier(baseURL) } : {};
   switch (id) {
     case "saluki": return saluki(at);
     case "llama-server": return llamaServer({ ...at, ...(model ? { model } : {}) });
@@ -92,7 +93,7 @@ export async function createBrain(settings: BrainSettings, deps: BrainDeps = {})
   const planner = await provider(id, settings, deps);
   const helperURL = settings.helper?.baseURL?.trim() || HELPER_URL;
   const scout = id !== "browser" && !settings.helper?.off
-    ? llamaServer({ name: "scout", baseURL: helperURL, body: { temperature: 0, chat_template_kwargs: { enable_thinking: false }, json_schema: VERDICT } })
+    ? llamaServer({ name: "scout", baseURL: helperURL, ...modelTier(helperURL), body: { temperature: 0, chat_template_kwargs: { enable_thinking: false }, json_schema: VERDICT } })
     : undefined;
   if (scout && scout.tier !== "local") throw new BrainError("not-local", `The fast helper at ${helperURL} does not run on this computer. foxmate uses only models on this computer.`);
   let mind: Mind;

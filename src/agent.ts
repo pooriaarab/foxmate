@@ -339,7 +339,10 @@ const shows = (tab: { url?: string; title?: string } | undefined, file: string) 
 };
 /** The file name that a goal names, or undefined (AQ11). */
 export const goalFile = (goal: string): string | undefined => GOAL_FILE.exec(goal)?.[0];
-const FILE_RULE = "The goal names a file. Unless the Space holds it, it is a page on this site: open it through the site's links (such as Documents or Files) and read it before you ask the user anything.";
+// AQ13: the file's values are copied as written.
+const FILE_RULE = "The goal names a file. Unless the Space holds it, it is a page on this site: open it through the site's links (such as Documents or Files) and read it before you ask the user anything. Copy the values it gives (an address, an amount, a name) exactly as written.";
+/** AQ13: a value the goal needs that the file does not give is never taken from another page. */
+const fileGap = (canAsk: boolean) => `If the file does not give a value that the goal needs, such as an amount or a payee, do not take one from another page: ${canAsk ? `call ${ASK_USER}` : "finish and say what is missing"}.`;
 /** A question about money: an amount, a total, a limit, or an OK to spend. It goes to the user, file or not (AQ11). */
 const SPEND_QUESTION = new RegExp(String.raw`[$€£]\s?\d|${AMOUNT.source}|\b(?:money|total|limits?|budget|max|maximum|cap|cost|price|fee|charge[sd]?|spend|pay|paid|payment|transfer|ok|okay|confirm|approve|proceed|go ahead)\b`, "i");
 /** A question that the goal's file may answer: it names the file, or asks where, what, which, who, when or how (AQ11). */
@@ -347,7 +350,19 @@ const fileQuestion = (question: string, file: string) =>
   !SPEND_QUESTION.test(question) && (question.toLowerCase().includes(file.toLowerCase()) || /\b(?:where|what|which|who|when|how|file|document|link|url|path)\b/i.test(question));
 const fileAsk = (file: string) => `Do not ask yet: the goal names the file ${file}. Unless the Space holds it, it is a page on this site: open it through the site's links (such as Documents or Files), read it, and use what it says. Nothing was asked.`;
 
-export function plannerRules({ canOpen = false, canAsk = false, days = false, file = false }: { canOpen?: boolean; canAsk?: boolean; days?: boolean; file?: boolean } = {}): string {
+// G51: a goal that needs arithmetic on amounts: run_python works it out, and a share is split by the people.
+const MATH = /\b(?:total|sum|difference|share|split|average|spending|percent)\b|\d%/i;
+/** "sum" for a goal that needs arithmetic on amounts, "share" when it names a share too, or false (G51). */
+export const asksMath = (goal: string): "sum" | "share" | false => (MATH.test(goal) ? (/\bshare\b/i.test(goal) ? "share" : "sum") : false);
+const MATH_RULE = "The goal needs a sum, a difference or a share of amounts. Work the number out with run_python from the numbers on the page, and use its result.";
+const SHARE_RULE = "Someone's share of a total that people spent together is the total divided by the number of people (you and one friend: half).";
+// AQ12: "pay the bill" with no file, amount or account number: which bill is a choice the goal leaves out.
+const BILL = /\bpay\s+(?:the|my|this|that)\s+(?:bill|invoice|payment)\b/i;
+/** A goal that pays a bill it does not name: no file, no amount, no account number (AQ12). */
+export const unnamedBill = (goal: string) => BILL.test(goal) && !goalFile(goal) && !/\d/.test(goal);
+const BILL_RULE = `The goal does not say which bill to pay, to whom or how much. Do not pick a payment from the history: call ${ASK_USER} first.`;
+
+export function plannerRules({ canOpen = false, canAsk = false, days = false, file = false, math = false, bill = false }: { canOpen?: boolean; canAsk?: boolean; days?: boolean; file?: boolean; math?: "sum" | "share" | false; bill?: boolean } = {}): string {
   return [
     "",
     "Work on the open page: read it with the tools, and use what it shows. Do not make up web addresses. Use open_url only for an address on a site that the tab note names.",
@@ -355,9 +370,11 @@ export function plannerRules({ canOpen = false, canAsk = false, days = false, fi
     // AQ6: a planner with ask_user still guesses unless the rules say when to ask.
     // G44: only a goal with a range of days gets this line, so other runs keep their cached prefix.
     // AQ11: only a goal that names a file gets this line, as G44.
-    ...(file ? [FILE_RULE] : []),
+    ...(file ? [FILE_RULE, fileGap(canAsk)] : []),
+    // G51, AQ12: only goals that need them get these lines, as G44.
+    ...(math ? [MATH_RULE, ...(math === "share" ? [SHARE_RULE] : [])] : []),
     ...(days ? ["The goal allows several days. Search each day of the range, and check that the results show the day you searched. Note the best result of each day, then choose the best of all."] : []),
-    ...(canAsk ? [`Before you act, call ${ASK_USER} when the goal leaves out a choice that the page needs (for example a size or a color), when the page shows a cost over a limit that the goal sets (read the total before you pay or send), or when a page needs the user to sign in. Do not guess such a choice. Do not ask about what the goal already gives.`, TIE_RULE] : []),
+    ...(canAsk ? [`Before you act, call ${ASK_USER} when the goal leaves out a choice that the page needs (for example a size or a color), when the page shows a cost over a limit that the goal sets (read the total before you pay or send), or when a page needs the user to sign in. Do not guess such a choice. Do not ask about what the goal already gives.`, TIE_RULE, ...(bill ? [BILL_RULE] : [])] : []),
   ].join("\n");
 }
 
@@ -848,7 +865,7 @@ export function createAgent(options: AgentOptions): Agent {
       // The system and goal messages stay as they are, and each request starts with the one before it,
       // so a model can reuse its prompt cache. A tab note goes at the end of the newest message only when the
       // tab or the sites change. `notes` maps a foxloop history index to the note after it (G31).
-      const rules = plannerRules({ canOpen: opens, canAsk: asks, days: allowsDays(input.goal), file: Boolean(goalFile(input.goal)) });
+      const rules = plannerRules({ canOpen: opens, canAsk: asks, days: allowsDays(input.goal), file: Boolean(goalFile(input.goal)), math: asksMath(input.goal), bill: unnamedBill(input.goal) });
       choiceGuard = asks;
       const notes = new Map<number, string>();
       let lastTab: { url: string; sites: string[] } | undefined;
@@ -856,7 +873,8 @@ export function createAgent(options: AgentOptions): Agent {
         if (!own) return messages;
         const open = target ? await browser.tabs.get(target).catch(() => undefined) : undefined;
         if (fileUnread && shows(open, fileUnread)) fileUnread = undefined;
-        const sites = [...new Set([...(domain ? [domain] : []), ...granted.map((e) => e.domain)])];
+        // Only web sites: a module tool's domain (space.foxmate, www.googleapis.com) is not a site to open (G52).
+        const sites = domain ? [domain] : [];
         const now = { url: open?.url ?? "", sites };
         // The first note is whole; a later one names only what changed (G38).
         const note = plannerContext({ ...now, title: open?.title ?? "" }, lastTab);
