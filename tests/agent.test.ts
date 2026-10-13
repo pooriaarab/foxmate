@@ -12,8 +12,8 @@ import { describe, expect, it, vi } from "vitest";
 // @ts-expect-error -- cli/ is plain JavaScript with no type declarations.
 import { askSam } from "../cli/bench.mjs";
 import { mountSite } from "./mount.js";
-import { HandoffError, maskSecrets } from "../src/pass.js";
-import { allowsDays, createAgent, goalFile, plannerRules, priceTie, SETTLED_SUMMARY, unnamedChoice, type AgentEvent, type AgentOptions, type RunInput } from "../src/agent.js";
+import { HandoffError, maskSecrets, type PassEvent } from "../src/pass.js";
+import { allowsDays, createAgent, goalFile, plannerRules, priceTie, SETTLED_SUMMARY, unnamedChoice, USER_DOMAIN, type AgentEvent, type AgentOptions, type RunInput } from "../src/agent.js";
 import type { Control, Snapshot } from "foxpaw";
 import type { Workflow, WorkflowStore } from "../src/workflow.js";
 
@@ -67,7 +67,7 @@ const wall = { fail: false, reads: 0 };
 
 const host = (tabId: () => number) => async () => new URL(TABS[tabId()]?.url ?? "").hostname;
 
-async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { getDomain(host: string): string | null }; redirect?: Record<string, string>; loading?: boolean; workflows?: WorkflowStore; moreTabTools?: AgentOptions["moreTabTools"]; pay?: AgentOptions["pay"]; python?: LoopTool } = {}) {
+async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { getDomain(host: string): string | null }; redirect?: Record<string, string>; loading?: boolean; workflows?: WorkflowStore; moreTabTools?: AgentOptions["moreTabTools"]; pay?: AgentOptions["pay"]; python?: LoopTool; pass?: AgentOptions["pass"] } = {}) {
   // Every request to the planner, as text: the redact hook sees each one before it goes out.
   const requests: string[] = [];
   const ran: { tool: string; args: Record<string, unknown>; domain?: string }[] = [];
@@ -157,6 +157,7 @@ async function setup(options: { recall?: () => Promise<never>; publicSuffix?: { 
     ...(options.publicSuffix ? { publicSuffix: options.publicSuffix } : {}),
     ...(options.workflows ? { workflows: options.workflows } : {}),
     ...(options.pay ? { pay: options.pay } : {}),
+    ...(options.pass ? { pass: options.pass } : {}),
   });
   agentRef = agent;
   const events: AgentEvent[] = [];
@@ -188,6 +189,8 @@ const tabNote = (request: string | undefined) => {
   return content.slice(content.lastIndexOf(NOTE));
 };
 const openSite = (url: string) => ({ tool: "open_site", args: { url } });
+/** One ask_user step of a scripted plan (HP19). */
+const askStep = (question: string) => ({ tool: "ask_user", args: { question } });
 /** A scripted plan that asks one question, then clicks one button (BN7). */
 const askThenClick = (question: string, button: string) => JSON.stringify([{ tool: "ask_user", args: { question } }, { tool: "click", args: { button } }, finish]);
 const open = (n: number) => ({ tool: "open_url", args: { url: `https://site${n}.test/` } });
@@ -980,6 +983,31 @@ describe("agent", () => {
     expect(goalFile("Can you please pay the bill 'bill-december-2023.txt' for me?")).toBe("bill-december-2023.txt");
     expect(goalFile("Read 'address-change.txt' and update my account information accordingly.")).toBe("address-change.txt");
     for (const other of ["Book the 8.30 flight", "Open example.com and buy the mug", "Pay $12.50 to Sam", "Email sam@example.com"]) expect(goalFile(other), other).toBeUndefined();
+  });
+
+  it("HP19: a hand-off on a password question that the gate stops does not answer a later question", async () => {
+    // A stand-in for foxpass: each wait finds a wall, and the user signs in.
+    const pass = { hints: [], beforeRead: async (_tab: number, ctx: { emit: (event: PassEvent) => void }) => {
+      ctx.emit({ type: "handoff", host: "shop.test", kind: "password", message: "Sign in on the tab.", fill: false });
+      ctx.emit({ type: "handoff-end", status: "signed-in" });
+    } } as unknown as AgentOptions["pass"];
+    const { agent, run, events } = await setup({ pass, publicSuffix: { getDomain: (h) => h } });
+    const rule = await agent.host.addRule({ site: USER_DOMAIN, scope: "read", effect: "ask" });
+    // Run 1: the password question hands the wall to the user, then the human denies the ask: the call never runs.
+    const first = await run({ script: [askStep("What is your password?"), finish] }, "deny");
+    expect(first).toMatchObject({ status: "blocked", reason: "approval-denied" });
+    await agent.host.removeRule(rule.id);
+    // Run 2: a real question reaches the user, and the planner gets the answer, not "the user signed in".
+    const second = agent.run({ goal: "Buy the mug", tabId: 1, settings: { planner: "scripted", script: JSON.stringify([askStep("Which size, S or M?"), finish]) },
+      onEvent: (event) => {
+        events.push(event);
+        if (event.type === "question") setTimeout(() => void agent.reply(event.id, "Size M."), 5);
+        if (event.type === "approval-needed") void agent.approvals.answer(event.requestId, "approve", "sidebar");
+      } });
+    await second;
+    expect(events.filter((e) => e.type === "question").map((e) => e.type === "question" && e.question)).toEqual(["Which size, S or M?"]);
+    const result = events.findLast((e) => e.type === "tool-result" && e.name === "ask_user");
+    expect(result && "summary" in result && result.summary).not.toMatch(/signed in/);
   });
 
   it("AQ2: a question that waits ends with the run; a late or second reply changes nothing", async () => {
