@@ -44,23 +44,31 @@ const WITHHELD = "[foxshield could not scan this page, so foxmate withheld its t
 
 /**
  * Runs in the page. The foxpaw nodes that sit inside an element that a
- * selector matches. Self-contained, for scripting.executeScript.
+ * selector matches. For an `offscreen` finding the control's own box decides:
+ * a box on the page stays, as an icon button whose word text-indent moves out
+ * (S15). Self-contained, for scripting.executeScript.
  */
-export function hiddenNodes(selectors: string[], nodes: number[]): number[] {
+export function hiddenNodes(findings: { selector: string; kind: string }[], nodes: number[]): number[] {
   // oxlint-disable-next-line no-underscore-dangle -- foxpaw keeps its node map at window.__foxpaw.
   const cache = (window as unknown as { __foxpaw?: { nodes: Map<number, Element> } }).__foxpaw;
   if (!cache) throw new Error("foxpaw has not read this page.");
-  const boxes: Element[] = [];
-  for (const selector of selectors) {
+  const boxes: { box: Element; moved: boolean }[] = [];
+  for (const { selector, kind } of findings) {
     try {
-      boxes.push(...document.querySelectorAll(selector));
+      for (const box of document.querySelectorAll(selector)) boxes.push({ box, moved: kind === "offscreen" });
     } catch {
       // A selector that this document cannot parse matches nothing.
     }
   }
+  // foxshield's own test for off the page: left of or above it, or 5000 px or more to the right.
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- the page runs this function alone, so it keeps its helpers inside.
+  const offPage = (element: Element) => {
+    const r = element.getBoundingClientRect();
+    return r.right + window.scrollX <= 0 || r.bottom + window.scrollY <= 0 || r.left + window.scrollX >= 5000;
+  };
   return nodes.filter((node) => {
     const element = cache.nodes.get(node);
-    return Boolean(element && boxes.some((box) => box === element || box.contains(element)));
+    return Boolean(element && boxes.some(({ box, moved }) => (box === element || box.contains(element)) && (!moved || offPage(element))));
   });
 }
 const cut = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
@@ -96,7 +104,7 @@ async function shieldRead(options: ShieldOptions, paw: PawLike, tabId: number, b
   const threshold = options.threshold ?? 0.5;
   // Ask the page which controls sit inside an element that foxshield found hidden. A word
   // match is not enough: trap text often names real fields, such as "password".
-  const selectors = report.findings.filter((f) => HIDDEN.has(f.kind) && !f.selector.includes(">>>")).map((f) => f.selector);
+  const selectors = report.findings.filter((f) => HIDDEN.has(f.kind) && !f.selector.includes(">>>")).map((f) => ({ selector: f.selector, kind: f.kind }));
   let hiddenSet = new Set<number>();
   if (selectors.length) {
     try {
