@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { writeArtifact } from "create-foxkit/e2e";
 import { sites, startServer } from "foxbench";
 import activity from "./checks/activity.mjs";
+import answer from "./checks/answer.mjs";
 import app from "./checks/app.mjs";
 import bridge from "./checks/bridge.mjs";
 import details from "./checks/details.mjs";
@@ -37,7 +38,7 @@ import { runGoal, startFox } from "./lib.mjs";
 // and modules go after activity: Activity shows the newest 300 entries, and their runs would
 // push the older kinds out. settle goes last: it sets a stand-in fast helper, then puts the
 // settings back.
-const CHECKS = { app, notify, signup, pass, vault, local, traps, details, memory, lend, space, phone, activity, modules, rules, open, pay, bridge, voice, tasks, keepalive, settle };
+const CHECKS = { app, notify, signup, pass, vault, local, traps, details, memory, lend, space, phone, activity, modules, rules, open, pay, bridge, voice, tasks, keepalive, answer, settle };
 
 const record = { startedAt: new Date().toISOString(), checks: [], runs: {} };
 const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });

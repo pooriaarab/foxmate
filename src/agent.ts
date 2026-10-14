@@ -287,6 +287,20 @@ export const mayEndOnSettle = (goal: string) => {
   const words = text.toLowerCase().replace(/^please\s+/, "").match(/[a-z]+/g) ?? [];
   return VERBS.has(words[0] ?? "") && words.filter((w) => VERBS.has(w)).length === 1;
 };
+/** A goal that asks for an answer: a "?", a question word at its start, or a word that asks to read (G53). */
+const ANSWER = /\?|^\s*(?:what|what's|which|who|whose|when|where|why|how|is|are|does|do|did|can|could)\b|\b(?:summari[sz]e|summary|list|tell me|show me|give me|explain|describe|find|count|how many|how much)\b/i;
+/** Words that change something wherever they stand (G53). */
+const ACTS = /\b(?:buy|pay|send|submit|subscribe|unsubscribe|click|tap|press|fill|delete|remove|donate|register|reserve|sign (?:up|in|out)|log ?(?:in|out))\b/i;
+/** Words that change something when they stand where a verb starts: "Book a table", "and order it", not "this book" or "the order total" (G53). */
+const VERB_AT = /(?:^|[,;:.!?]\s*|\b(?:and|then|or|also|to|next|first|finally|before|after|please|you|me)\s+)(?:add|apply|archive|ask|book|call|cancel|change|check ?out|close|confirm|contact|create|decline|download|edit|email|enter|follow|forward|go|install|invite|join|leave|like|mark|message|move|navigate|open|order|play|post|print|purchase|rate|refund|rename|rent|reply|request|return|save|schedule|scroll|search|select|sell|set|share|text|tip|transfer|type|update|upload|visit|vote|write|accept|approve|tell(?! me\b))\b/i;
+/**
+ * A goal that only asks for an answer about the page: foxloop's first read is its work (G53). An allow list, as
+ * G50: one line of plain ASCII that asks for an answer and holds no action word. When in doubt, G15 stands.
+ */
+export const answersOnly = (goal: string) => {
+  const text = goal.trim();
+  return /^[\x20-\x7e]+$/.test(text) && ANSWER.test(text) && !ACTS.test(text) && !VERB_AT.test(text);
+};
 /**
  * The only button labels a final page may show and still settle (G50): they leave the page or
  * keep a copy, and none of them is a step of a task. Every other label, an empty one, or one
@@ -664,6 +678,8 @@ export function createAgent(options: AgentOptions): Agent {
 
   // Good tool results in the current run (one run at a time).
   let worked = 0;
+  // The current run's goal only asks for an answer: the first read counts, and the helper does not judge (G53).
+  let answering = false;
   // The newest tool result was good (G22).
   let lastOk = false;
   // When the newest result has no check, a tool must have worked in this run (G15), and
@@ -676,7 +692,8 @@ export function createAgent(options: AgentOptions): Agent {
   const check = async ({ goal, summary, lastCheck }: { goal: string; summary: string; lastCheck?: CheckResult }): Promise<CheckResult> => {
     if (lastCheck) return lastCheck;
     const code = await codeCheck();
-    if (!code.ok || !judge) return code;
+    // The helper asks if the page shows the goal reached; for an answer the page never does (G53).
+    if (!code.ok || !judge || answering) return code;
     return (await judge(goal, summary).catch(() => undefined)) ?? code;
   };
   const codeCheck = async (): Promise<CheckResult> => {
@@ -996,6 +1013,7 @@ export function createAgent(options: AgentOptions): Agent {
       worked = 0;
       lastOk = false;
       lastTyped = undefined;
+      answering = answersOnly(input.goal);
       for await (const raw of loop.run(goal, input.signal ? { signal: input.signal } : {})) {
         // The planner's own words at the end may repeat a card number from the goal (G37).
         const event = raw.type === "done" ? { ...raw, summary: maskCards(raw.summary) } : raw.type === "blocked" && raw.message ? { ...raw, message: maskCards(raw.message) } : raw;
@@ -1032,8 +1050,9 @@ export function createAgent(options: AgentOptions): Agent {
         }
         // Another answer to a kept question ends the replay (WF4).
         if (replay?.live && event.type === "tool-result" && event.name === ASK_USER && event.summary !== replay.steps[replay.at - 1]?.answer) replay.live = false;
-        // foxloop's first read is foxmate's, not the planner's: it does not count for G15 or G22 (G32).
-        const planned = event.type === "tool-result" && event.step > 0;
+        // foxloop's first read is foxmate's, not the planner's: it does not count for G15 or G22 (G32),
+        // unless the goal only asks for an answer, so the read is all the work (G53).
+        const planned = event.type === "tool-result" && (event.step > 0 || answering);
         if (planned) lastOk = event.ok;
         if (planned && event.ok) worked += 1;
         if (event.type === "tool-result") lastTool = event.summary;
@@ -1083,6 +1102,7 @@ export function createAgent(options: AgentOptions): Agent {
     } finally {
       ruleCtx = undefined;
       judge = undefined;
+      answering = false;
       settle = undefined;
       settledSummary = undefined;
       openRun = undefined;
