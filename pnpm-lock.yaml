@@ -54,8 +54,8 @@ importers:
         specifier: ^0.1.2
         version: 0.1.2(yauzl@3.4.0)
       foxshield:
-        specifier: ^0.1.5
-        version: 0.1.5
+        specifier: ^0.1.6
+        version: 0.1.6
       foxsync:
         specifier: ^0.1.2
         version: 0.1.2
@@ -1691,8 +1691,8 @@ packages:
     engines: {node: '>=24'}
     hasBin: true
 
-  foxshield@0.1.5:
-    resolution: {integrity: sha512-v+L5EGRB2xicjyndM/s5rdWV9DG0QpBe/WOu0/bnqzB0dhJe070wLxkz0M3/mdXoRbB4jQMPg446HQdhY72GXw==}
+  foxshield@0.1.6:
+    resolution: {integrity: sha512-fU6sCDZNdRsLyT4kFDHpaw+Y0Emq7CRTjIyGW+lM+XZ8rqfBoLPzuGdZ3inbFbTS4PbFhgW+Omr6Kei8cWqhOg==}
     engines: {node: '>=24'}
     hasBin: true
 
@@ -4265,7 +4265,7 @@ snapshots:
       - utf-8-validate
       - yauzl
 
-  foxshield@0.1.5:
+  foxshield@0.1.6:
     dependencies:
       linkedom: 0.18.13
     transitivePeerDependencies:
