@@ -545,6 +545,10 @@ Read these rows with care:
 - When the newest result carries no task check, foxmate passes `finish` if
   the newest step worked and the page shows no error. A model can still say
   "done" after a page read, with the task not done; the small models did.
+- A goal that only asks about the page ("Summarize this page") finishes
+  after the first read. The planner sees at most 4000 characters of the
+  page: on a long page, that is only the start. Nothing checks the answer
+  against the page.
 - foxgate limits where an action goes, not what its arguments hold. Before
   the run holds private data, typing and opening pages on the tab's host need
   no approval, so a page can make the planner type or send what the page
