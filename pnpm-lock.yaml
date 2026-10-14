@@ -45,8 +45,8 @@ importers:
         specifier: ^0.1.3
         version: 0.1.3
       foxpaw:
-        specifier: ^0.1.14
-        version: 0.1.14
+        specifier: ^0.1.15
+        version: 0.1.15
       foxpay-agent:
         specifier: ^0.1.2
         version: 0.1.2
@@ -1678,8 +1678,8 @@ packages:
     resolution: {integrity: sha512-G+b1oFE6sjiFKn1h9QRYIBW2RpdMwE3rmhRH1dr1sCxQVmyYiOc6/yvo2tlZT/x9nubfqg1f7wosopKIwNvGmQ==}
     engines: {node: '>=24'}
 
-  foxpaw@0.1.14:
-    resolution: {integrity: sha512-OjtOf0tHtNs8ba95mDltXqjT/xBg0dvDd8TYykUe1zJs2GhKDGKRvV4nw93Y6RxJUZBaXXzWLAAREZHet0M5EQ==}
+  foxpaw@0.1.15:
+    resolution: {integrity: sha512-rManIgYUPHvxYRCQoD8QZBvOADs7hkREi9/8M5Sm8p33/m9HbjpPy4adf3XFCoHIbj/NRWHVzSUtxRt0ruA8Cw==}
     engines: {node: '>=24'}
 
   foxpay-agent@0.1.2:
@@ -4233,7 +4233,7 @@ snapshots:
   foxloop@0.1.16:
     dependencies:
       foxgate: 0.1.3
-      foxpaw: 0.1.14
+      foxpaw: 0.1.15
 
   foxmemory@0.1.2: {}
 
@@ -4247,7 +4247,7 @@ snapshots:
 
   foxpass@0.1.3: {}
 
-  foxpaw@0.1.14: {}
+  foxpaw@0.1.15: {}
 
   foxpay-agent@0.1.2:
     dependencies:
