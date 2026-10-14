@@ -397,7 +397,8 @@ function end(result) {
   $("run").disabled = false;
   $("stop").disabled = true;
   $("status").textContent = "";
-  state(result.status === "done" ? "done" : "idle");
+  // A run that could not finish (blocked, refused) shows the error pose; a stop by the user does not.
+  state(result.status === "done" ? "success" : result.status === "blocked" || result.status === "refused" ? "error" : "idle");
 }
 
 /** The goal box grows with its text, up to a limit. */

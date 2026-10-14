@@ -74,7 +74,7 @@ async function look() {
     return;
   }
   $("ob-model-choice").textContent = `foxmate uses ${best.label} on ${SERVERS[best.id].name}. You can change it in Settings.`;
-  setFox(fox(), "done");
+  setFox(fox(), "success");
   if (chosen?.planner === best.planner && chosen?.model === best.model) return;
   chosen = best;
   const settings = await readSettings();
@@ -86,7 +86,7 @@ function demo() {
   $("ob-demo-result").textContent = "";
   const card = approvalCard(DEMO, {
     onAnswer: (answer) => {
-      setFox(fox(), answer === "deny" ? "idle" : "done");
+      setFox(fox(), answer === "deny" ? "idle" : "success");
       $("ob-demo-result").textContent = DEMO_WORDS[answer];
       // A real card waits for the rule after "Always allow"; the demo has none, so it ends here.
       if (answer === "always-allow") settle(card, "Always allowed.");
