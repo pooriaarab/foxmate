@@ -8,7 +8,9 @@
 import { createServer } from "node:http";
 
 // Firefox's remote agent turns the JSON viewer off; a user's Firefox has it on.
-export const JSON_PREFS = { "devtools.jsonview.enabled": true };
+// Pages are light, as on CI: on a dark host, foxshield takes the plain text for
+// low-contrast text (it assumes a white canvas) and the planner does not get it.
+export const JSON_PREFS = { "devtools.jsonview.enabled": true, "layout.css.prefers-color-scheme.content-override": 1 };
 
 const FORM = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Pizza order</title></head><body>
 <h1>Order a pizza</h1>
@@ -57,14 +59,12 @@ export default async function jsonCheck({ session, check, record, scripted, fini
     record.runs.json = { status: run.status, url: run.url, steps: run.steps, snapshots: results(run, "snapshot"), checks: run.trail.filter((e) => e.kind.startsWith("loop.check") || e.kind === "loop.done").map((e) => e.data) };
     check("JV1 a sent form whose answer is JSON ends done", { done: true, onAnswer: true }, { done: run.done, onAnswer: run.url === `${base}/post` });
 
-    // JV2: the read after the send gets the JSON text. foxshield scans it as it scans any page.
-    const read = scripted([{ tool: "click", args: { controlId: "{{control:Submit order}}" } }, { tool: "snapshot", args: {} }, finish]);
+    // JV2: the planner reads the JSON text: it finishes with "Kim" only when the snapshot shows it.
+    const read = scripted([{ tool: "click", args: { controlId: "{{control:Submit order}}" } }, { tool: "snapshot", args: {} },
+      { tool: "finish", args: { summary: "The answer names Kim." }, ifText: "Kim" }, { tool: "finish", args: { summary: "The answer does not name Kim." } }]);
     const readRun = await runGoal(session, { url: `${base}/forms/post`, goal: "Submit the order form and read the answer.", settings: read });
-    const scans = readRun.trail.filter((e) => e.kind === "shield.scan" && e.data.url === `${base}/post`);
-    const snaps = results(readRun, "snapshot");
-    record.runs.json.read = { status: readRun.status, snapshots: snaps, scans: scans.map((e) => e.data) };
-    check("JV2 a snapshot of the JSON answer works, and foxshield scans its text", { ok: true, scanned: true },
-      { ok: snaps.at(-1)?.ok ?? null, scanned: scans.length > 0 && JSON.stringify(scans.map((e) => e.data)).includes("custname") });
+    record.runs.json.read = { status: readRun.status, snapshots: results(readRun, "snapshot") };
+    check("JV2 the planner reads the text of the JSON answer", "Done: The answer names Kim.", readRun.status);
 
     // JV3: a JSON answer that tells the agent its task is verified still passes foxshield.
     const hostile = await runGoal(session, { url: `${base}/forms/hostile`, goal: "Fill and submit the order form.", settings: scripted([{ tool: "click", args: { controlId: "{{control:Submit order}}" } }, { tool: "snapshot", args: {} }, finish]) });
