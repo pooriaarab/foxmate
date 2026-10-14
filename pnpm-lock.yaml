@@ -30,8 +30,8 @@ importers:
         specifier: npm:foxlink-oauth@^0.1.2
         version: foxlink-oauth@0.1.2
       foxloop:
-        specifier: ^0.1.15
-        version: 0.1.15
+        specifier: ^0.1.16
+        version: 0.1.16
       foxmemory:
         specifier: ^0.1.2
         version: 0.1.2
@@ -42,11 +42,11 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0(foxsync@0.1.2)
       foxpass:
-        specifier: ^0.1.2
-        version: 0.1.2
+        specifier: ^0.1.3
+        version: 0.1.3
       foxpaw:
-        specifier: ^0.1.13
-        version: 0.1.13
+        specifier: ^0.1.14
+        version: 0.1.14
       foxpay-agent:
         specifier: ^0.1.2
         version: 0.1.2
@@ -1646,8 +1646,8 @@ packages:
     resolution: {integrity: sha512-V9sxhOEmk9ls4E65W208ILr5NJbl23pu1/r0vipCgNaAaZ6DzbXYd5SMoK607XaSKWDv1Gr8OR6pyjnejzU69Q==}
     engines: {node: '>=24'}
 
-  foxloop@0.1.15:
-    resolution: {integrity: sha512-qubfsoQxfgqiLU1HoYSD1UnkuwxHnaAEOBZLr9mYy+aOE8VlJVsCmv4bC3amKtX/KOJWXKT1rZ7Te1eurUMJ/A==}
+  foxloop@0.1.16:
+    resolution: {integrity: sha512-uCa23OrRMQWWR0OckKUVnXmxz1yH/B5Q244JMQjs/53t8BvLhNH7XBP0rWB6QOc2PUw5bjSim85+teKcgQ/5PA==}
     engines: {node: '>=24'}
 
   foxmemory@0.1.2:
@@ -1674,12 +1674,12 @@ packages:
       foxsync:
         optional: true
 
-  foxpass@0.1.2:
-    resolution: {integrity: sha512-SlrO4160dZ7uyvzzgQ6McBEiQofTV6ptJQ/L9VPoQuyuYHuMz/MGApIPH248hrLpjGyF7WrImdSttshnwXLVrw==}
+  foxpass@0.1.3:
+    resolution: {integrity: sha512-G+b1oFE6sjiFKn1h9QRYIBW2RpdMwE3rmhRH1dr1sCxQVmyYiOc6/yvo2tlZT/x9nubfqg1f7wosopKIwNvGmQ==}
     engines: {node: '>=24'}
 
-  foxpaw@0.1.13:
-    resolution: {integrity: sha512-IWuuimOk3Z+zELYSFeUrrSclgGdh5L/QpX/L3nlzVt1XlptC5y8aqn5++9K8bOpVA9GhFUa4kcNkdOe6wNSlnA==}
+  foxpaw@0.1.14:
+    resolution: {integrity: sha512-OjtOf0tHtNs8ba95mDltXqjT/xBg0dvDd8TYykUe1zJs2GhKDGKRvV4nw93Y6RxJUZBaXXzWLAAREZHet0M5EQ==}
     engines: {node: '>=24'}
 
   foxpay-agent@0.1.2:
@@ -4230,10 +4230,10 @@ snapshots:
       foxgate: 0.1.3
       foxvault: 0.1.2
 
-  foxloop@0.1.15:
+  foxloop@0.1.16:
     dependencies:
       foxgate: 0.1.3
-      foxpaw: 0.1.13
+      foxpaw: 0.1.14
 
   foxmemory@0.1.2: {}
 
@@ -4245,9 +4245,9 @@ snapshots:
     optionalDependencies:
       foxsync: 0.1.2
 
-  foxpass@0.1.2: {}
+  foxpass@0.1.3: {}
 
-  foxpaw@0.1.13: {}
+  foxpaw@0.1.14: {}
 
   foxpay-agent@0.1.2:
     dependencies:
