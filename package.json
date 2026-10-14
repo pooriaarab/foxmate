@@ -1,6 +1,6 @@
 {
   "name": "foxmate",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "description": "Firefox AI browser agent with local Ollama and llama.cpp planning, action approvals, editable memory, Claude Code bridge and task schedules.",
   "type": "module",
   "license": "MIT",
