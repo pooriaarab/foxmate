@@ -397,8 +397,11 @@ function end(result) {
   $("run").disabled = false;
   $("stop").disabled = true;
   $("status").textContent = "";
-  // A run that could not finish (blocked, refused) shows the error pose; a stop by the user does not.
-  state(result.status === "done" ? "success" : result.status === "blocked" || result.status === "refused" ? "error" : "idle");
+  // A run that waited for the user (an unanswered question, a sign-in not done) shows the
+  // needs-approval pose; one that could not finish shows error; a stop by the user shows neither.
+  const waited = result.status === "blocked" && (result.reason === "question" || result.reason === "sign-in");
+  const pose = result.status === "done" ? "success" : waited ? "needs-approval" : result.status === "blocked" || result.status === "refused" ? "error" : "idle";
+  setRunState(pose, pose !== "idle");
 }
 
 /** The goal box grows with its text, up to a limit. */

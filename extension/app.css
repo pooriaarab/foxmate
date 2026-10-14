@@ -491,8 +491,9 @@ body.solo .page { height: auto; }
   animation: fox-ring 1.8s 420ms var(--ease-out) infinite both;
 }
 .presence[data-state="needs-approval"] { color: var(--text); }
-/* A long run: the fox fades, but does not shrink, until something needs you. */
+/* A long run: the fox fades and goes quiet, but does not shrink, until something needs you. */
 .fox.stepped-back { opacity: 0.55; }
+.fox.stepped-back * { animation-play-state: paused; }
 /* The 30 px fox in the rail stays still; it is too small to read motion. */
 .fox[data-size="xs"] * { animation: none !important; }
 /* Needs approval: the ring fades out in place instead of growing. */

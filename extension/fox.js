@@ -1,13 +1,14 @@
 // The fox: the create-foxkit mascot (app.html #fox-art, fox.css). This file
 // only picks the state; fox.css moves the fox, and with
 // prefers-reduced-motion it shows a still pose per state. It shows up at the
-// moments that matter, then steps back: during a long run it fades.
+// moments that matter, then steps back: during a long run it fades and
+// pauses (app.css .stepped-back).
 //   idle            breathes, blinks, sways its tail, twitches an ear
 //   thinking        looks up and tilts its head, with slow nods
 //   working         reads from side to side, with quick nods
-//   needs-approval  leans in, ears up, looks down-right at the approval
+//   needs-approval  tilts its head, ears up, looks down-right at the approval
 //   success         happy eyes and one hop, then idle
-//   error           ears out, head and tail down, then idle
+//   error           ears out, head down, tail low, then idle
 // The list is FOX_STATES from create-foxkit/fox.
 export const STATES = ["idle", "thinking", "working", "success", "error", "needs-approval"];
 const STEP_BACK_MS = 8000;
@@ -25,8 +26,11 @@ export function draw(root = document) {
   }
 }
 
-/** Sets the state of the foxes that follow the run (all but the onboarding one). */
-export function setRunState(next) {
+/**
+ * Sets the state of the foxes that follow the run (all but the onboarding one).
+ * `ended`: the run is over, so the pose shows once and then the fox rests.
+ */
+export function setRunState(next, ended = next === "success" || next === "error") {
   if (!STATES.includes(next) || next === state) return;
   state = next;
   clearTimeout(stepBack);
@@ -40,8 +44,7 @@ export function setRunState(next) {
   if (next === "working" || next === "thinking") stepBack = setTimeout(() => {
     for (const el of document.querySelectorAll(".fox[data-follow]")) el.classList.add("stepped-back");
   }, STEP_BACK_MS);
-  // The end of a run shows once, then the fox rests.
-  if (next === "success" || next === "error") settle = setTimeout(() => setRunState("idle"), SETTLE_MS);
+  if (ended) settle = setTimeout(() => setRunState("idle"), SETTLE_MS);
 }
 
 export const runState = () => state;
