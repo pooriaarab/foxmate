@@ -131,6 +131,8 @@ export interface Agent {
   host: Host;
   approvals: Approvals;
   readonly busy: boolean;
+  /** The tab that the current run works on; undefined outside a run or with no web page (JV4). */
+  readonly tabId: number | undefined;
   run(input: RunInput): Promise<RunEnd>;
   /** The user's answer to an open question of the current run. False when no question has this id (AQ2). */
   reply(id: string, text: string | undefined): boolean;
@@ -1123,5 +1125,5 @@ export function createAgent(options: AgentOptions): Agent {
     }
   }
 
-  return { gate, host, approvals, get busy() { return busy; }, run, reply };
+  return { gate, host, approvals, get busy() { return busy; }, get tabId() { return busy && target ? target : undefined; }, run, reply };
 }
