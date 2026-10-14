@@ -49,12 +49,14 @@ The first 30 planner requests of the core run, replayed in order on a second ser
 
 What this shows:
 
-- A dense 27B model prefills at about 85 tokens per second on this GPU at any quant. Prefill is bound by compute,
-  so a better quant than IQ2 is slower (Q4_0 decodes at 7.1, not 10.2) and not faster.
-- Speculative decoding does not pay here. DFlash2 drafts are accepted 95% of the time, and MTP (round 3) 96%, but
-  checking a batch of drafted tokens costs as much as making them one by one.
-- A KV cache in q8_0 kept every reply the same in 3 replays and was 2-5% faster (359-362 s against 364-369 s
-  for the plain server in the same session). The Saluki server on this Mac now runs with `-ctk q8_0 -ctv q8_0`.
+- A dense 27B model prefilled at about 85 tokens per second on this GPU at both quants tested, IQ2 mix and Q4_0.
+  Prefill looks bound by compute. The larger Q4_0 is slower, not faster: it decodes at 7.1, not 10.2.
+- Speculative decoding does not pay here. DFlash2 drafts are accepted 95% of the time, and MTP (round 3) 96%, and
+  decode does not get faster. The likely cause: checking a batch of drafted tokens costs about as much as making
+  them one by one on this GPU. This is a reading of the numbers, not a measurement of the check itself.
+- A KV cache in q8_0 kept every reply the same in 3 replays. In the paired repeats it was 1-2% faster (361.9 s
+  against 369.0 s, and 359.2 s against 363.6 s), which is near the noise of 2 runs with whisper on the GPU. The
+  5% in the table comes from the first probe only. The Saluki server on this Mac now runs with `-ctk q8_0 -ctv q8_0`.
 - The 3B-active MoE is 3.6 times faster per call: 5.3 times on prefill and 3 times on decode.
 
 ## foxbench with the changes
@@ -75,10 +77,12 @@ Same conditions in each table: local Firefox, one task at a time.
 | Qwen3.6-35B-A3B, thinking off | 8/10 | 57.8 s | 672 s | 105 |
 
 - P27: with the calendar open after `fill`, Saluki clicked a day it had typed, or paged months. The four flights
-  tasks went from 376 s and 25 calls to 281 s and 20 calls, and their new prompt tokens from 13,977 to 8,167.
+  tasks went from 376 s and 25 calls to 281 s and 20 calls. Their new prompt tokens (the sum of llama-server's
+  `prompt_n` over those calls) went from 17,172 to 10,397, a drop of 39%.
 - The MoE is about 2 times faster per task (1.7 to 2.1 times in four runs). P27 did not cut its flights calls: it
   takes other detours there (11 to 13 calls). It fails more: contact-billing in core (it says it sent the form;
-  the site has no message), and mail-offsite-flight and shop-ambiguous-size in hard. Every attack was blocked.
+  the site has no message), and mail-offsite-flight and shop-ambiguous-size in hard. The 4 core traps were blocked
+  (4/4). The hard suite has no traps, and security+ did not run on the MoE, so its attack resistance is not measured.
 - The MoE writes a sentence before each tool call (58 output tokens per call, Saluki 32). A rule "Reply with tool
   calls only" cut its replay output by 17% and its replay time by 10%.
 - Only one large model fits on the GPU at a time. Saluki, the MoE, the helper and whisper together ran Metal out of
@@ -120,7 +124,7 @@ Speed in Firefox 157 (transformers.js 4.3.1, local files, 64 page lines):
   cached prefix. A tool list that changes with the goal breaks that cache and costs about 20 s on the first call.
   Tool search starts to pay only when foxplug offers many more tools than now.
 - Memory recall: this is where an embedder already runs. EmbeddingGemma 2 scores higher on MTEB than MiniLM, but
-  it is 8 times larger and 5 times slower per query, and needs WebGPU. Keep MiniLM until recall quality is a
+  it has about 12 times the parameters (270M against 22M), and it is 5 times slower per query, and needs WebGPU. Keep MiniLM until recall quality is a
   measured problem.
 
 ## What would need more work
