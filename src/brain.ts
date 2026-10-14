@@ -66,7 +66,8 @@ async function provider(id: PlannerId, settings: BrainSettings, deps: BrainDeps)
   const at = baseURL ? { baseURL, ...modelTier(baseURL) } : {};
   switch (id) {
     case "saluki": return saluki(at);
-    case "llama-server": return llamaServer({ ...at, ...(model ? { model } : {}) });
+    // B20: no thinking and temperature 0, as the Saluki preset, so a thinking model plans each step at once.
+    case "llama-server": return llamaServer({ ...at, ...(model ? { model } : {}), body: { temperature: 0, chat_template_kwargs: { enable_thinking: false } } });
     case "ollama": return ollama({ ...at, model: model ?? "qwen3:0.6b" });
     case "browser": {
       if (!deps.browserModel) throw new BrainError("no-browser-model", "The in-browser model runs only in the extension.");

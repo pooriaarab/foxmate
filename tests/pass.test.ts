@@ -188,7 +188,9 @@ describe("pass", () => {
   });
 
   it("HP20: the trail masks a password inside other words only from 6 characters; a shorter one at word edges", () => {
-    expect(maskPasswords({ a: "shop.test/contest", b: "testing" }, ["test"])).toEqual({ a: "shop.•••/contest", b: "testing" });
+    // A 4-5 character password that is a part of a host name stays: shop.test, test.shop.example (round 9 review).
+    expect(maskPasswords({ a: "shop.test/contest", b: "testing", c: "https://test.shop.example/x" }, ["test"])).toEqual({ a: "shop.test/contest", b: "testing", c: "https://test.shop.example/x" });
+    expect(maskPasswords({ a: "The password is test.", b: "typed test into 0:3", c: "?p=test&q=1", d: "(test)" }, ["test"])).toEqual({ a: "The password is •••.", b: "typed ••• into 0:3", c: "?p=•••&q=1", d: "(•••)" });
     expect(maskPasswords({ a: "xBlue-Kite-77!y" }, ["Blue-Kite-77!"])).toEqual({ a: "x•••y" });
   });
 
