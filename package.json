@@ -1,7 +1,7 @@
 {
   "name": "foxmate",
   "version": "0.1.21",
-  "description": "A private, open-source alternative to Meta Muse, ChatGPT Dots, Grok Bot and Instinct that runs only in your own Firefox, with a local model.",
+  "description": "Firefox AI browser agent with local Ollama and llama.cpp planning, action approvals, editable memory, Claude Code bridge and task schedules.",
   "type": "module",
   "license": "MIT",
   "author": "Pooria Arab",
@@ -74,5 +74,22 @@
   },
   "bin": {
     "foxmate": "cli/foxmate.mjs"
-  }
+  },
+  "keywords": [
+    "firefox",
+    "ai-browser-agent",
+    "browser-automation",
+    "ollama",
+    "llama-cpp",
+    "saluki",
+    "hugging-face",
+    "claude-code",
+    "gmail",
+    "google-calendar",
+    "ntfy",
+    "local-ai",
+    "typescript",
+    "agent-memory",
+    "x402"
+  ]
 }
