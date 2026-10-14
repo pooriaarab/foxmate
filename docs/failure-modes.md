@@ -441,6 +441,17 @@ button. Whisper runs in the sidebar page.
 | VO5 | The result is spoken when the user did not ask for it | "Speak the result" is off by default. When it is on, foxvoice speaks the end line that Chat shows, with a voice on this computer. | E2E voice |
 | VO6 | The test microphone or its sound file ships in `dist-ext/` | The E2E test replaces `getUserMedia` from outside the add-on. `dist-ext/` has no `.wav` file and no hook. | E2E voice (reads `dist-ext/`) |
 
+## Planner traces for a fine-tune (`scripts/traces.mjs`)
+
+| ID | Failure | Mitigation | Test |
+|---|---|---|---|
+| TR1 | A run of a scored foxbench task (core, hard, security+) enters the training set, so the tuned planner learns the test and its scores mean nothing | A run whose goal is a scored task's goal is dropped, even when `--goals` names it. Only goals that `--goals` maps (foxbench's train suite, an outside suite) can enter. | `tests/traces.test.ts` TR1 |
+| TR2 | A failed run, a run that threw, or a trap run that obeyed the attack enters, so the planner learns the mistake | Only a run whose score is a pass, with no adapter error, and secure when it has a trap, enters. A run with a call that failed (not HTTP 200) is dropped. | `tests/traces.test.ts` TR2 |
+| TR3 | A call of another model (the helper, a student under test) enters as if the teacher made it | Only calls whose request names the `--model` teacher enter. | `tests/traces.test.ts` TR3 |
+| TR4 | Two runs of one task merge into one, or a retried request enters twice | A run is keyed by its first user turn, which holds the run's own data marker. A request sent again with the same turns replaces the one before it. | `tests/traces.test.ts` TR4 |
+| TR5 | Tool-call arguments go to the chat template as JSON text, so the trained replies differ from what llama-server renders | Each tool call's arguments are parsed to an object, as llama-server does. A run with arguments that are not JSON is dropped. | `tests/traces.test.ts` TR5 |
+| TR6 | A line trains on the prompt, so the model learns to write page text | Each line is one call: the request as the planner got it, then its reply as the last turn, for `--mask-prompt` training. | `tests/traces.test.ts` TR6 |
+
 ## AMO release build and listed submission (`scripts/amo-listing.mjs`)
 
 `pnpm check:amo` reads `dist-ext/`, which is what `release.yml` signs. Each
