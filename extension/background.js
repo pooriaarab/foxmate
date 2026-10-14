@@ -206,6 +206,21 @@ const agent = createAgent({
     return loan ? { cookieStoreId, scope: loan.scope, domain: loan.domain, site: loan.match === "site" ? loan.site : undefined, state: loan.state } : undefined;
   },
   moreTabTools: (tabId) => [lookTool(tabId, { enabled: async () => Boolean((await modules()).lens), look, tabDomain: async (id) => new URL((await browser.tabs.get(id)).url).hostname })], browserModel: async () => (await browserModel()).transformers({ task: "chat" }) });
+// Firefox shows a JSON answer in its own JSON viewer, a privileged page where an
+// extension cannot run a script, so foxmate could not read the answer to a form it
+// sent (JV1). In the tab of a run only, a JSON page loads as plain text, with
+// nosniff: a normal page that every read, and foxshield, sees (JV2-JV5).
+const JSON_TYPE = /^\s*(application\/([\w.+-]+\+)?json|text\/json)\s*(;|$)/i;
+browser.webRequest.onHeadersReceived.addListener((details) => {
+  if (details.tabId !== agent.tabId) return {};
+  const type = details.responseHeaders.find((h) => h.name.toLowerCase() === "content-type");
+  if (!type || !JSON_TYPE.test(type.value ?? "")) return {};
+  const charset = /;\s*charset=([\w-]+)/i.exec(type.value)?.[1] ?? "utf-8";
+  const responseHeaders = details.responseHeaders.filter((h) => !["content-type", "x-content-type-options"].includes(h.name.toLowerCase()));
+  responseHeaders.push({ name: "Content-Type", value: `text/plain; charset=${charset}` }, { name: "X-Content-Type-Options", value: "nosniff" });
+  return { responseHeaders };
+}, { urls: ["http://*/*", "https://*/*"], types: ["main_frame", "sub_frame"] }, ["blocking", "responseHeaders"]);
+
 // Lend a login: foxlend copies one site's cookies into its own container,
 // blocks every request from it to a host off the allow list, and takes it
 // all back on revoke. Created at the top level, so Firefox can wake the page.

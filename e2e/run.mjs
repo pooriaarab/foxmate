@@ -12,6 +12,7 @@ import answer from "./checks/answer.mjs";
 import app from "./checks/app.mjs";
 import bridge from "./checks/bridge.mjs";
 import details from "./checks/details.mjs";
+import json, { JSON_PREFS } from "./checks/json.mjs";
 import keepalive from "./checks/keepalive.mjs";
 import lend from "./checks/lend.mjs";
 import local from "./checks/local.mjs";
@@ -38,7 +39,7 @@ import { runGoal, startFox } from "./lib.mjs";
 // and modules go after activity: Activity shows the newest 300 entries, and their runs would
 // push the older kinds out. settle goes last: it sets a stand-in fast helper, then puts the
 // settings back.
-const CHECKS = { app, notify, signup, pass, vault, local, traps, details, memory, lend, space, phone, activity, modules, rules, open, pay, bridge, voice, tasks, keepalive, answer, settle };
+const CHECKS = { app, notify, signup, pass, vault, local, traps, details, memory, lend, space, phone, activity, modules, rules, open, pay, bridge, voice, tasks, json, keepalive, answer, settle };
 
 const record = { startedAt: new Date().toISOString(), checks: [], runs: {} };
 const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });
@@ -49,7 +50,7 @@ const bench = await startServer({ sites, controlKey: randomUUID() });
 let session;
 try {
   const headless = !process.argv.includes("--headed");
-  session = { ...(await startFox({ headless, prefs: { "network.dns.localDomains": `${BANK_HOSTS},${RULE_HOSTS},${OPEN_HOSTS}`, "alerts.useSystemBackend": false, "media.navigator.streams.fake": true, "media.navigator.permission.disabled": true, ...PHONE_PREFS } })), headless };
+  session = { ...(await startFox({ headless, prefs: { "network.dns.localDomains": `${BANK_HOSTS},${RULE_HOSTS},${OPEN_HOSTS}`, "alerts.useSystemBackend": false, "media.navigator.streams.fake": true, "media.navigator.permission.disabled": true, ...JSON_PREFS, ...PHONE_PREFS } })), headless };
   record.firefox = await session.fox.browser.version();
 
   const only = process.env.E2E_ONLY?.split(",").map((n) => n.trim());
