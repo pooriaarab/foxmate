@@ -139,6 +139,13 @@ describe("brain", () => {
     expect(bodies[1]?.body.tools).toBeUndefined();
   });
 
+  it("B20: the llama-server planner asks for temperature 0 and no thinking, as Saluki does", async () => {
+    const bodies = servers('{"done": true, "sure": true, "why": "ok"}');
+    const brain = await createBrain({ planner: "llama-server", helper: { off: true } }, deps);
+    await brain.mind.chat(ask, { tools: [] });
+    expect(bodies[0]?.body).toMatchObject({ temperature: 0, chat_template_kwargs: { enable_thinking: false } });
+  });
+
   it("B18: the helper gets a schema for its verdict, so it cannot fence or pad its JSON", async () => {
     const bodies = servers('{"done": true, "sure": true, "why": "ok"}');
     const brain = await createBrain({ planner: "llama-server" }, deps);
