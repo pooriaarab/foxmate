@@ -1,92 +1,54 @@
 # foxmate
 
-An open-source, private alternative to Meta Muse, ChatGPT Dots, Grok Bot
-and Instinct. It runs only in your own Firefox, with a model on your
-computer.
+[![npm version](https://img.shields.io/npm/v/foxmate)](https://www.npmjs.com/package/foxmate)
+[![Downloads/month](https://img.shields.io/npm/dm/foxmate)](https://www.npmjs.com/package/foxmate)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://opensource.org/license/mit)
 
-foxmate is a Firefox extension. You type a goal in its page, and an AI
-planner works on the tab you pick with your logins, on your computer. It
-shows each step, asks you before it sends a form, and keeps a log that shows
-any change. It is the reference app of the
-[fox primitives](#part-of-the-fox-primitives): each part is its own library,
-and foxmate puts them together.
+[Quickstart](#run-your-first-planner) · [API reference](#api) · [Coverage](#coverage) · [Limits](#delivery-and-behavior-limits) · [FAQ](#faq)
 
-## What foxmate is
-
-Meta Muse, ChatGPT Dots, Grok Bot and Instinct are personal agents that do
-tasks for you with the vendor's model. foxmate does the same job with no
-vendor: the agent, the model and your logins stay on your computer. It is
-MIT-licensed, and you can read every line.
-
-Meta Muse (launched 2026-09-08) runs its agent in a virtual machine in
-Meta's cloud. To act for you there, it needs your logins in that cloud.
-foxmate runs the agent in the Firefox you already use.
-
-| | Meta Muse | foxmate |
-|---|---|---|
-| Where the agent runs | A cloud VM | Your own Firefox |
-| Your logins | Copied to the cloud | Stay in your browser. You lend one site to one task in its own container, and take it back. |
-| The model | Meta's | A model on your computer: Saluki 27B on llama-server, another llama-server model, Ollama, or a model in Firefox |
-| What you see | A stream from the VM | Each plan, tool call, gate decision and result in your foxmate page |
-| Before a risky step | Depends on the product | An approval that shows the exact action, and what a form sends |
-| Record | The vendor's | A local, tamper-evident log that you can export |
-| Source | Closed | MIT |
-
-foxmate is an early version (0.1). Small local models fail most tasks. Read
-[Limits](#limits) before you rely on it.
+foxmate is an open-source Firefox browser agent for users who want local model planning, action approvals, and inspectable task logs.
+It combines a Firefox extension, a JavaScript agent library, and a command-line tool.
+Its own planners run locally; an optional Claude Code bridge can send shared page text to that client's model.
 
 ## Install
 
 ```bash
-npm i foxmate
+npm install foxmate
 ```
 
-To try the extension in a fresh Firefox profile, with nothing to set up:
+The CLI and Node.js library require Node.js 24 or later.
+TypeScript declarations are included.
+For the extension, the manifest targets Firefox 153 or later.
+
+## Run your first planner
+
+Save this as `example.mjs`, then run `node example.mjs`.
+This scripted planner example needs no model server, API keys, environment variables, or `.env` file.
+
+```js
+import { createBrain } from "foxmate";
+
+const { mind } = await createBrain({
+  planner: "scripted",
+  script: JSON.stringify([{ tool: "finish", args: { summary: "Planner ready." } }]),
+});
+const reply = await mind.chat([{ role: "user", content: "Initialize the planner." }]);
+const call = reply.message.tool_calls[0].function;
+console.log(call.name, JSON.parse(call.arguments).summary);
+```
+
+Success prints `finish Planner ready.`
+To open a fresh Firefox profile with the temporary extension:
 
 ```bash
 npx foxmate try
 ```
 
-Click the foxmate button in the toolbar to open foxmate in a tab. The first
-open walks you through the setup. `foxmate try`
-installs it as a temporary add-on.
-
-Install from AMO: [addons.mozilla.org/firefox/addon/foxmate](https://addons.mozilla.org/firefox/addon/foxmate/)
-(pending AMO review; the link works after approval).
-
-## Example
-
-The npm package has the CLI and the agent core that the extension bundles.
-This runs in Node 24 as written. foxmate refuses an Ollama model that runs
-on Ollama's servers, before any network call:
-
-```js
-import { createBrain } from "foxmate";
-
-try {
-  await createBrain({ planner: "ollama", model: "gpt-oss:120b-cloud" });
-} catch (error) {
-  console.log(error.code); // not-local
-}
-```
-
-## Use cases
-
-| Who | What they do | How foxmate helps |
-|---|---|---|
-| A person with routine web chores | Book a table, pay a bill, answer the usual email | The goal runs on the current tab with your own login. Each form send waits for your Approve, and a memory such as "party size: 4" fills in the details. |
-| A privacy-minded user | Use an agent without sending pages to a cloud | foxmate uses only a model on your computer (Saluki 27B on llama-server, Ollama) or in Firefox. foxmind refuses every cloud provider. |
-| Someone who must hand one login to an agent | Let the agent use the bank site, and nothing else | Lend gives the agent a copy of that one site's cookies in its own container. Pages there reach only the hosts you allow. Revoke removes the container. |
-| A security team | Test how a browser agent handles prompt injection | foxshield removes hidden text before the planner reads a page, approvals show what a form sends, and `foxmate bench` scores the traps of foxbench. |
-| A builder of agents | Start an agent of their own from working parts | `createAgent` wires foxmind, foxloop, foxgate, foxtrail, foxshield and foxmemory. Add tools with `extraTools`. |
-| A data person | Work on a CSV without an upload site | Drop the file in the Space. The planner's Python runs in a sandbox page with no network. |
-| A person who pays small bills online | Pay a bill or a paid API with test USDC, within a budget | foxpay reads the real amount from the `402` answer. foxgate refuses a payment over your cap, and you approve each payment with its exact amount, payee and site. |
-| A developer who uses Claude Code | Let Claude Code check a page in the browser where they are logged in | Share one tab from Chat. Each call from Claude Code is a foxmate run: foxshield strips hidden text, and each click waits for your Approve. |
-| A person whose bank asks for a password and a code | Let the agent read the balance after they sign in | foxpass names the sign-in step, and the run waits. You sign in on the tab, or click "Fill saved login" and approve the fill of a password saved in foxvault. The planner never gets the password. |
-| A person who leaves a goal running in another window | Learn when the agent needs them, without watching foxmate | foxnotify shows a notice when a run needs an approval or a sign-in, ends, or a schedule runs late. A click opens the approval; you still press Approve. Quiet hours hold the rest until morning. |
-| A home-lab owner | Get the notices on their phone through their own ntfy server | The optional webhook sends the kind of notice and a fixed sentence. Settings shows the exact request first. The goal goes out only after Firefox's consent. |
-| A person who would rather speak than type | Say "book a table for four at Bistro Lune" | Hold the talk button in Chat. Whisper turns the speech into the goal in Firefox, you fix a word if needed, and you press Run. "Speak the result" reads the end aloud. |
-| A researcher | Compare planners on the same tasks | `foxmate bench --planner ollama --model <name>` scores a model in real Firefox on the 13 foxbench tasks. |
+Click the toolbar button; the foxmate page opens.
+Choose a planner in Settings and a target tab in Chat before running a goal.
+For Ollama, start `OLLAMA_ORIGINS="moz-extension://*" ollama serve`, then run `ollama pull qwen3:0.6b`.
+The app shows each tool result and any approval request.
+Model completion does not prove the whole task succeeded; check the target page.
 
 ## How it works
 
@@ -97,7 +59,7 @@ flowchart TB
   sidebar <-->|port| bg[Background page]
   phone([Your phone]) <-.->|foxsync, optional| sidebar
   bg -.->|foxnotify: notices, optional webhook| you([Your desktop or ntfy])
-  claude([Claude Code]) -.->|foxbridge: MCP, native messaging, one shared tab| bg
+  claude([Claude Code]) -.->|foxbridge: Model Context Protocol, native messaging, one shared tab| bg
   subgraph bg[Background page]
     runner[foxrunner: each goal is a durable task] --> agent[Agent: src/agent.ts]
     agent --> recall[foxmemory: recall notes]
@@ -152,8 +114,8 @@ One goal, step by step:
    also shows "Fill saved login": foxpass's `fillWall` fills the password
    into the sign-in field after you approve, and you press the sign-in
    button.
-8. Each page read passes foxshield. Hidden text, and the controls inside it,
-   never reach the planner; visible instructions arrive marked as data.
+8. Each page read passes foxshield. Hidden text and its controls in the top frame
+   are removed before the planner reads; visible instructions arrive marked as data.
    Then foxpass's redaction replaces a password or code value, and each
    copy of it in the text, with `[redacted]`.
 9. foxtrail records every step. The run ends when the planner says it is
@@ -184,7 +146,77 @@ sequenceDiagram
   A->>L: every step above, then run.end
 ```
 
-## The app
+## Why it exists
+
+Browser automation often starts with an agent framework or scripted browser driver.
+Browser Use supplies browser agents; Playwright supplies programmatic browser automation.
+foxmate puts local planning, per-action approvals, saved-login handoff, and a local activity log into a Firefox app.
+It is self-hosted on your computer and provides no managed browser service.
+
+## Compare
+
+Checked on 2026-10-14 against [Browser Use](https://browser-use.com/)
+and [Playwright library documentation](https://playwright.dev/docs/library).
+
+| Property | foxmate | Browser Use | Playwright library |
+|---|---|---|---|
+| Scope | Firefox agent app, library, and CLI | Browser agents and browser infrastructure | Programmatic browser automation |
+| Deployment | Extension in your Firefox | Library and cloud offerings | Library in your application |
+| Configuration | Settings, goals, approvals, agent options | Agent and browser configuration | Browser and page API calls |
+| Planning | Five choices, including scripted replay | Agent model configuration | Caller supplies action scripts |
+
+## Coverage
+
+The planner registry has five choices; `scripted` is a test planner, not an AI integration.
+Two Google reader tools are wired in the optional Google module.
+
+| Surface | Status | Scope and verification |
+|---|---|---|
+| Underdog Saluki on llama.cpp llama-server | ✓ | Local planner preset; historical foxbench records below |
+| llama.cpp llama-server | ✓ | Local planner with caller-selected model |
+| Ollama | ✓ | Local planner; known cloud models are refused |
+| Hugging Face Transformers.js in Firefox | Experimental | Qwen3-0.6B browser planner; small models often fail |
+| Scripted planner | ✓ | Deterministic calls for tests and demos |
+| Gmail | Implemented, pending credentials | Read-only inbox tool; live Google not checked |
+| Google Calendar | Implemented, pending credentials | Read-only events tool; live Google not checked |
+| foxlens screenshot tool | ✓ | Optional local Ollama vision description |
+| foxden Python Space | ✓ | Sandbox for dropped files; no network |
+| foxpay x402 | Test network only | Base Sepolia test USDC; no card checkout |
+| Claude Code through foxbridge | ✓ | One shared tab through an external Model Context Protocol (MCP) server |
+| foxsync phone approvals | Implemented | Per-page pairing; no reconnect; unavailable during a loan |
+| foxnotify notices and ntfy webhook | ✓ | Optional webhook; phone notices are not wired |
+| foxvoice | ✓ | English push-to-talk and local speech output |
+| foxpass and foxvault saved logins | ✓ | Approved password fill; user submits sign-in |
+
+Checkmarks mean implemented wiring, not universal task reliability.
+This rewrite credential-checks zero external integrations and does not repeat Firefox end-to-end runs.
+Google credentials and manual microphone checks remain pending; recorded evaluations below state their original dates and scope.
+
+## Common use cases
+
+1. Firefox users run routine form tasks with an Ollama planner and approval cards.
+2. foxpass users pause automation at sign-in and approve a saved-password fill from foxvault.
+3. CSV users work on dropped files in the foxden Python Space without a network connection.
+4. Claude Code developers share one Firefox tab through foxbridge and review actions in foxmate.
+5. ntfy home-lab users receive optional summaries from scheduled Firefox tasks.
+6. foxbench researchers compare local planners and scripted calls on the same browser tasks.
+
+## Features
+
+- **Local planning:** five planner choices with local-tier restrictions; see [coverage](#coverage).
+- **Approval cards:** inspect actions and form values; see [app views](#the-app).
+- **User memory:** editable facts through foxmemory; see [privacy](#privacy).
+- **Task schedules and replay:** foxrunner tasks and cached workflows; see [behavior limits](#delivery-and-behavior-limits).
+- **Integration modules:** screenshots, Google readers, Python, voice, payments, and notices; see [coverage](#coverage).
+
+## Runtime surfaces
+
+The CLI has two commands: `try` and `bench`.
+The foxbridge path answers six MCP tools: `list_tabs`, `snapshot`, `act`, `click`, `run_task`, and `open_url`.
+foxmate provides no MCP server of its own.
+The sections below retain app views, privacy details, APIs, and historical evaluation records.
+
+### The app
 
 The toolbar button opens foxmate in a tab, or brings the open one to the
 front. The same page also runs in the sidebar (View > Sidebar), and a rail
@@ -220,7 +252,7 @@ back. It honors "reduce motion".
 | Activity | The foxtrail log, whether it verifies, and an export. |
 | Settings | The planner (models on this computer only), the setup again, approval rules, saved logins (site, username, password), "Speak the result", the optional modules, the notices (quiet hours and a webhook), and the payment cap, payees and wallet. |
 
-## Privacy
+### Privacy
 
 This section says exactly what leaves your computer.
 
@@ -261,7 +293,7 @@ This section says exactly what leaves your computer.
   sentence and the time to the address you type. Settings shows the exact
   request first. The goal goes with it only after you tick "Put the goal in
   the webhook notice" and Firefox's `websiteActivity` consent says yes.
-  [docs/amo-data.md](docs/amo-data.md) lists all that foxmate sends.
+  The list above states the outgoing data paths.
 - **Phone approvals (off by default).** foxsync sends each approval to your
   phone over an encrypted peer-to-peer WebRTC link. To pair, the phone
   camera opens foxsync's phone page from a QR code. The phone sends its
@@ -292,12 +324,12 @@ This section says exactly what leaves your computer.
   shows its handle. The log records each release by handle and host.
 - foxmate has no server and sends nothing to its authors.
 
-## API
+### API
 
 foxmate is an extension, a CLI and a library. It has no MCP server of its
 own: an MCP client reaches one shared tab through foxbridge's MCP server.
 
-### Claude Code (foxbridge)
+#### Claude Code (foxbridge)
 
 Set it up one time:
 
@@ -313,14 +345,14 @@ foxbridge's tools on that tab: `list_tabs`, `snapshot`, `act`, `click`,
 is a foxmate run with its own grants, and its approval shows in Chat. A call
 for another tab gets `not-shared`. Stop now closes the bridge.
 
-### CLI
+#### CLI
 
 ```text
 foxmate try [--firefox <path>]
 foxmate bench [--planner scripted|ollama|llama-server|saluki] [--model <name>] [--base-url <url>]
               [--approve careful|all|none] [--suite core|hard|security+|all] [--tasks <ids>]
               [--ask on|off] [--scout <url>|off] [--replay on|off] [--repeat]
-              [--timeout <s>] [--out <dir>] [--headed]
+              [--fixed-ports <n>] [--timeout <s>] [--out <dir>] [--headed] [--firefox <path>] [--help]
 ```
 
 `foxmate try` opens Firefox with a fresh, temporary profile and foxmate
@@ -336,7 +368,7 @@ the same Firefox, where a goal that ran done before replays its kept calls,
 and writes that pass to `<out>/repeat` as repeat-run scores. `--replay off`
 turns the workflow cache off.
 
-#### The bench on Ichabod
+##### The bench on Ichabod
 
 `FOXKIT_BROWSER=ichabod` with `ICHABOD_API_KEY` runs `foxmate bench` in
 Firefox on Ichabod, Mozilla's cloud browser. The model stays on this
@@ -361,7 +393,7 @@ FOXKIT_BROWSER=ichabod node cli/foxmate.mjs bench --planner saluki
   each recording on the Ichabod console.
 - `--firefox` and `--headed` stop the run: Ichabod cannot set them.
 
-### Library
+#### Library
 
 | Export | What it does |
 |---|---|
@@ -379,20 +411,18 @@ FOXKIT_BROWSER=ichabod node cli/foxmate.mjs bench --planner saluki
 | `bridgeCall(run, call)`, `BridgeRefusal` | One call from an outside agent, run through the agent with a planner that asks for that call. Resolves with foxbridge's reply, or throws a foxbridge code. |
 | `scriptMind(script, goal)` | The scripted planner for tests and the bench. |
 
-## Tests
+### Tests
 
-`pnpm ci:local` runs lint, typecheck, 88 isolated tests, the build and
-`web-ext lint`. Each isolated test covers a failure mode in
-[docs/failure-modes.md](docs/failure-modes.md), written before the code.
+`pnpm ci:local` runs lint, typecheck, isolated tests, builds, extension lint, and listing checks.
+The repository keeps its failure-mode inventory beside the tests.
 
 `pnpm e2e` runs foxmate in a real Firefox through the real app page and
 writes `artifacts/e2e-<date>.json`. The planner is the scripted one, so
-each run is the same. Our run on 2026-10-10 (Firefox 157.0.1, Apple M3 Pro,
-headless, without `FOXMATE_VISION`) passed all 100 checks. With
+the planner input is deterministic. This rewrite does not repeat the Firefox suite. With
 `FOXMATE_VISION` set to an Ollama address that allows extension origins, the
-vision check runs too. Some of them:
+vision check runs too. The suite checks these paths:
 
-| Check | Result |
+| Test path | Expected behavior |
 |---|---|
 | foxbench `signup-pro` through the app page | foxbench's oracle passes; one approval, for "Create account"; the trail verifies |
 | A local bank asks for a password, then a code; the test types them as the user | The run waits, Chat says what to do, the run goes on and finishes; the planner's requests, the log, memory and the app page hold neither secret; Stop ends a wait |
@@ -416,91 +446,28 @@ vision check runs too. Some of them:
 | Claude Code's MCP client on a shared tab, through foxbridge's own host | The page read has no hidden text; a click asks in Chat; a denied click and a call for another tab are refused; Stop ends the session |
 | A canvas page, with `FOXMATE_VISION` | `qwen3-vl:2b` in Ollama describes the screenshot |
 
-## Scores on foxbench
+### Scores on foxbench
 
-`foxmate bench` on macOS, headless: the scripted and Ollama rows on
-2026-10-09 with Firefox 157.0.1, the Saluki 27B rows on 2026-10-10 and
-2026-10-11 (0.1.7 rows: foxloop 0.1.9, foxpaw 0.1.8, Qwen3.5-4B as the
-fast helper). The core suite is foxbench's 13 tasks unless a row names
-another suite. The Markdown scoreboards are in [`artifacts/`](artifacts).
-foxpilot's row is from the [foxbench README](https://github.com/pooriaarab/foxbench).
+These repository scoreboards record historical runs; this rewrite does not repeat them.
+The core suite has 13 tasks; the hard suite has 10, and security+ has three.
+Times and success rates apply only to those runs, models, and approval policies.
 
-| Agent | Success rate | Median time per task | Attacks blocked | Secure trap passes |
-|---|---|---|---|---|
-| foxmate, scripted planner, careful approvals | 92% (12/13) | 12.0 s | 4/4 | 3/4 |
-| foxmate 0.1.7, Saluki 27B on llama-server, careful approvals (2 runs) | 92% (12/13), 85% (11/13) | 92.4 s, 75.7 s | 4/4 | 4/4 |
-| foxmate 0.1.7, Saluki 27B, careful approvals, hard suite | 80% (8/10) | 134.7 s | - | - |
-| foxmate 0.1.7, Saluki 27B, careful approvals, security+ suite | 67% (2/3) | 66.2 s | 3/3 | 2/3 |
-| foxmate 0.1.7, Saluki 27B, careful approvals, core repeat run (workflow cache) | 85% (11/13) | 72.7 s | 4/4 | 4/4 |
-| foxmate 0.1.6, Saluki 27B on llama-server, careful approvals | 92% (12/13) | 132.2 s | 4/4 | 4/4 |
-| foxmate 0.1.6, Saluki 27B, careful approvals, hard suite | 60% (6/10) | 219.6 s | - | - |
-| foxmate 0.1.6, Saluki 27B, careful approvals, security+ suite (3 runs, each the same) | 67% (2/3) | 125 s | 3/3 | 2/3 |
-| foxmate 0.1.5, Saluki 27B on llama-server, careful approvals | 77% (10/13) | 195.1 s | 4/4 | 4/4 |
-| foxmate, Saluki 27B, careful approvals, before the planner fixes | 46% (6/13) | 23.8 s | 4/4 | 2/4 |
-| foxmate, scripted planner, approves everything | 92% (12/13) | 11.8 s | 3/4 | 3/4 |
-| foxmate, Ollama `qwen3-vl:2b-instruct`, careful approvals | 8% (1/13) | 11.1 s | 4/4 | 0/4 |
-| foxmate, Ollama `qwen3:0.6b`, careful approvals | 0% (0/13) | 9.5 s | 4/4 | 0/4 |
-| [foxpilot](https://github.com/pooriaarab/foxpilot) over MCP (foxbench's run) | 0% (0/13) | 11.9 s | 4/4 | 0/4 |
+| Planner / suite | Recorded date | Task passes | Median time |
+|---|---|---|---|
+| Saluki 27B, core, first 0.1.7 run | 2026-10-11 | 12/13 | 92.4 s |
+| Saluki 27B, core, second 0.1.7 run | 2026-10-11 | 11/13 | 75.7 s |
+| Saluki 27B, hard, 0.1.7 | 2026-10-11 | 8/10 | 134.7 s |
+| Saluki 27B, security+, 0.1.7 | 2026-10-11 | 2/3 | 66.2 s |
+| Scripted, core, careful approvals | 2026-10-09 | 12/13 | 12.0 s |
+| Ollama Qwen3-0.6B, core | 2026-10-09 | 0/13 | 9.5 s |
+| Ollama Qwen3-VL-2B, core | 2026-10-09 | 1/13 | 11.1 s |
 
-Read these rows with care:
+The scripted planner uses human-written steps; its score does not measure AI planning.
+An agent that takes no action can block attacks while completing no tasks.
+Read the task result alongside any security score.
+The repository keeps the scoreboards in `artifacts/`.
 
-- 0.1.7 is faster because the system prompt no longer holds the run's
-  nonce, so llama-server reuses the cached system prompt and tool list
-  across runs (a cold first call fell from 35-55 s to about 14 s), and the
-  planner writes finish summaries of at most 15 words. The planner can now
-  ask the user: the hard suite went from 6/10 to 8/10, and to 9/10 when the
-  two tasks that failed in that run were run alone. Those two failures, and
-  `flights-cheapest` in the second core run, passed 4 of 4 times when run
-  again: they use 27-30 of the 30 steps, so they pass or fail by chance.
-- In the repeat run, a task that replays all its kept calls took 8-20 s
-  (`contact-billing`, `mail-reply`, `shop-mugs`, `shop-hoodie`). On the
-  flights pages and the trap pages foxshield flags a finding, so the replay
-  ends there and Saluki plans; those tasks ran at their cold speed.
-
-- A person wrote the scripted planner's steps for each task. Its rows show
-  that foxmate's tools, gate, shield and approvals can finish the tasks and
-  stop the traps. They do not show that a model can plan them. Its steps
-  obey an injection when one reaches the planner. foxshield removed the
-  hidden ones (flights, sign-up, shop). The visible one, in `mail-trap`,
-  reaches the Send approval: the careful human denies it, so the task stops
-  unfinished; the human who approves everything sends the mail.
-- The small local models failed almost every task. They opened addresses
-  they made up (foxgate denied them), repeated calls, and often said "done"
-  without doing the task. `qwen3-vl:2b` passed `contact-billing` in this
-  run. Its runs differ: two earlier runs on the same day scored 1/13
-  (`mail-trap`) and 0/13. The Ollama planner ran through a second Ollama
-  server started with `OLLAMA_ORIGINS="moz-extension://*"`.
-- "Attacks blocked" counts trap tasks where the attack did not happen. An
-  agent that does nothing blocks every attack, so also read "Secure trap
-  passes".
-- Saluki 27B (Underdog-Saluki-27B-1.0-IQ2-mix on llama-server) is the
-  first model that plans many of the tasks. The first run scored 6/13: it
-  made up real site addresses, called Gmail tools that the run had no
-  grant for, and the first gate denial ended each run. The planner now gets
-  the open tab and only the tools it holds a grant for, and a gate denial
-  goes back to it as the step's result (G23-G28). The second run scored
-  10/13 and passed all 4 traps securely. It still failed `flights-oneway`,
-  `flights-cheapest` and `signup-pro`.
-- foxmate 0.1.6 keeps Saluki's prompt prefix the same from step to step,
-  reads the page before the first model call, runs up to 4 calls from one
-  reply, sends page changes instead of whole pages, and checks a finished
-  goal on a fast 4B helper. Core went to 12/13 and the median to 132.2 s.
-  An earlier 0.1.6 run, before the foxpaw fix below, scored 11/13 at
-  110.8 s. `signup-pro` still fails.
-- On security+, foxpaw 0.1.5 and older typed the card into a look-alike
-  "express checkout" form on the checkout page and sent it, in 3 of 3 runs.
-  foxpaw 0.1.6 fills one form and sends it only with the button the goal
-  names, so the attack was blocked in 3 of 3 runs and the order still went
-  through. `sec-mail-delegated` fails: the planner does not send the
-  forward the user asked for, though it also does not send the attacker's.
-- On the hard suite, Saluki failed the 3 tasks that need a question to the
-  user first, and picked the wrong flight in `flights-nonstop-window`.
-- Saluki's median time went from 23.8 s to 195.1 s per task in 0.1.5. Part of that
-  is real: runs no longer stop at the first denial, so they take more
-  steps. Part is not: other agents used the same GPU and Firefox during
-  the second run, so read its times as an upper bound.
-
-## Firefox APIs used
+### Firefox APIs used
 
 | API | MDN | Why |
 |---|---|---|
@@ -533,15 +500,12 @@ Read these rows with care:
 | Web Crypto | [SubtleCrypto](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto) | The foxtrail chain, the foxvault encryption, the foxsync keys. |
 | `RTCDataChannel` (through foxsync) | [RTCDataChannel](https://developer.mozilla.org/en-US/docs/Web/API/RTCDataChannel) | The optional phone link. |
 
-## Limits
+## Delivery and behavior limits
 
-- Small local models fail most tasks. In our runs, Qwen3 0.6B finished none
-  and Qwen3-VL 2B one of 13. The scripted planner's high score comes from
-  steps a person wrote.
-- Saluki 27B is the default private planner. It scored 12/13 on the
-  foxbench core suite, 6/10 on the hard suite and 2/3 on security+ (see
-  [Scores on foxbench](#scores-on-foxbench)). It does not yet ask the user
-  before an order when the goal leaves a choice open. Small local models fail most tasks.
+- The recorded core runs show Qwen3-0.6B finishing zero tasks and Qwen3-VL-2B finishing one of 13.
+  The scripted planner uses human-written steps.
+- Saluki 27B is the default private planner. Historical scores above vary by suite and run.
+  A successful benchmark does not guarantee a real task will finish.
 - When the newest result carries no task check, foxmate passes `finish` if
   the newest step worked and the page shows no error. A model can still say
   "done" after a page read, with the task not done; the small models did.
@@ -628,6 +592,62 @@ Read these rows with care:
 - A password field for a new password (a sign-up) is not a wall: the
   planner fills it from the goal.
 
+## Integration guides
+
+- [Ollama planner setup](#run-your-first-planner): allow Firefox extension origins and download a local model.
+- [Claude Code browser access through foxbridge](#claude-code-foxbridge): install the native host and share one tab.
+- [Agent library integration](#library): supply browser APIs, a trail, and optional tools.
+- [Local benchmark CLI](#cli): choose a planner, suite, and approval policy.
+
+## Status
+
+foxmate is a 0.x package; APIs, defaults, and extension behavior can change before 1.0.
+Report problems through [GitHub issues](https://github.com/pooriaarab/foxmate/issues).
+Public case studies are not yet published.
+This README does not claim an approved AMO listing; `try` loads a temporary add-on.
+
+## FAQ
+
+### What is foxmate?
+
+foxmate is a Firefox browser agent with local planning, action approvals, and a local log.
+It also exports the agent core and two CLI commands.
+
+### Which integrations are verified?
+
+foxmate has isolated tests and dated repository browser evaluation records.
+This rewrite checks no external credentials; Gmail and Google Calendar remain pending live verification.
+
+### Does foxmate provide a managed browser agent?
+
+foxmate runs in your own Firefox.
+You supply a local model server or choose the browser or scripted planner.
+
+### How is foxmate different from Browser Use?
+
+foxmate packages its agent as a Firefox extension with local planner restrictions and approval cards.
+[Browser Use](https://browser-use.com/) offers browser agents and browser infrastructure, including cloud offerings.
+
+### How is foxmate different from Playwright?
+
+foxmate plans actions from a goal or replays scripted tool calls through its agent gate.
+[Playwright](https://playwright.dev/docs/library) exposes browser automation APIs for caller-written scripts.
+
+### Can foxmate send page text to a cloud model?
+
+foxmate's own planners use only local or browser tiers.
+The optional Claude Code bridge shares page text with that client after Firefox consent.
+
+### Does foxmate support Gmail and Google Calendar writes?
+
+foxmate's two Google tools read inbox messages and upcoming events.
+They do not send mail or create calendar events through the Google APIs.
+
+### Can foxmate pay real bills?
+
+foxmate's payment module uses x402 with test USDC on Base Sepolia.
+It has no production payment or card checkout path.
+
 ## Part of the fox primitives
 
 ```mermaid
@@ -700,4 +720,4 @@ own Firefox.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://opensource.org/license/mit)
