@@ -35,10 +35,6 @@ FORM: chat-first agent app, dark first, light by prefers-color-scheme.
   --ok: oklch(0.77 0.14 152);
   --bad: oklch(0.7 0.17 25);
   --shadow: 0 10px 32px -14px oklch(0 0 0 / 0.7);
-  --fox-fur: oklch(0.7 0.17 48);
-  --fox-cream: oklch(0.96 0.02 80);
-  --fox-ink: oklch(0.2 0.02 40);
-  --fox-inner: oklch(0.47 0.12 38);
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --fast: 160ms;
   --med: 220ms;
@@ -67,9 +63,6 @@ FORM: chat-first agent app, dark first, light by prefers-color-scheme.
     --ok: oklch(0.52 0.13 152);
     --bad: oklch(0.53 0.19 25);
     --shadow: 0 10px 30px -16px oklch(0.3 0.02 60 / 0.35);
-    --fox-ink: oklch(0.22 0.02 40);
-    /* On a near-white page the cream needs more body, or the face and tail tip fade out. */
-    --fox-cream: oklch(0.9 0.045 72);
   }
 }
 
@@ -484,15 +477,10 @@ body.solo .page { height: auto; }
 #ob-phone-slot #phone-panel > .hint:first-child, #ob-phone-slot .row:has(> #phone-pair) { display: none; }
 #ob-ideas { justify-content: flex-start; margin-top: 20px; }
 
-/* The fox */
-.fox { --size: 30px; position: relative; display: inline-block; flex: none; width: var(--size); height: var(--size); transition: opacity 400ms var(--ease-out), scale 400ms var(--ease-out); }
+/* The fox: fox.css draws and moves it, and sets its colors. This sets its size. */
+.fox { --size: 30px; position: relative; display: inline-block; flex: none; width: var(--size); height: var(--size); transition: opacity 400ms var(--ease-out); }
 .fox[data-size="xs"] { --size: 30px; }
 .fox[data-size="l"] { --size: 96px; }
-.fox-fur { fill: var(--fox-fur); }
-.fox-cream { fill: var(--fox-cream); }
-.fox-ink { fill: var(--fox-ink); }
-.fox-inner { fill: var(--fox-inner); }
-.fox-line { fill: none; stroke: var(--fox-ink); stroke-width: 2.6; stroke-linecap: round; }
 
 .presence[data-state="needs-approval"] .fox::after {
   content: "";
@@ -500,12 +488,16 @@ body.solo .page { height: auto; }
   inset: -4px;
   border-radius: 50%;
   border: 1.5px solid var(--accent);
-  animation: fx-ring 1.8s 420ms var(--ease-out) infinite both;
+  animation: fox-ring 1.8s 420ms var(--ease-out) infinite both;
 }
 .presence[data-state="needs-approval"] { color: var(--text); }
-/* A long run: the fox steps back and goes quiet until something needs you. */
-.fox.stepped-back { opacity: 0.55; scale: 0.82; }
-.fox[data-size="xs"], .fox[data-size="xs"] * { animation: none !important; }
+/* A long run: the fox fades and goes quiet, but does not shrink, until something needs you. */
+.fox.stepped-back { opacity: 0.55; }
+.fox.stepped-back * { animation-play-state: paused; }
+/* The 30 px fox in the rail stays still; it is too small to read motion. */
+.fox[data-size="xs"] * { animation: none !important; }
+/* Needs approval: the ring fades out in place instead of growing. */
+@keyframes fox-ring { from { opacity: 0.6; } to { opacity: 0; } }
 
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
 @keyframes card-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
@@ -513,6 +505,7 @@ body.solo .page { height: auto; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; animation-delay: 0ms !important; transition-duration: 0.01ms !important; }
+  .presence[data-state="needs-approval"] .fox::after { animation: none; opacity: 0.5; }
 }
 
 /* Narrow: the sidebar, or a small window. The rail becomes a top bar of icons. */
