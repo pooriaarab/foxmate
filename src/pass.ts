@@ -86,7 +86,7 @@ const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * Every string in `value` with each password masked as "•••" (HP16), in any case, also URL-encoded: one of 6 or more
- * characters wherever it stands, also inside other words; one of 4 or 5 as a whole word; a shorter one only where a
+ * characters wherever it stands, also inside other words; one of 4 or 5 as a whole word that is no part of a host name; a shorter one only where a
  * string is that password, where it stands in double quotes, and in the goal.
  */
 export function maskPasswords<T>(value: T, passwords: readonly string[], goal?: string): T {
@@ -97,7 +97,8 @@ export function maskPasswords<T>(value: T, passwords: readonly string[], goal?: 
   if (!long.length && !short.size) return value;
   // From 6 characters also inside other words, so a call that hides it in "xPASSWORD" keeps it out of the trail (HP20);
   // a shorter one only as a whole word, so "test" leaves "testing" alone.
-  const parts = [...inside.map(escape), ...edged.map((p) => `(?<![\\p{L}\\p{N}])${escape(p)}(?![\\p{L}\\p{N}])`)];
+  // A dot joined to a letter or digit is no word edge: "shop.test" is a host name, not the password "test".
+  const parts = [...inside.map(escape), ...edged.map((p) => `(?<![\\p{L}\\p{N}]|[\\p{L}\\p{N}]\\.)${escape(p)}(?![\\p{L}\\p{N}]|\\.[\\p{L}\\p{N}])`)];
   const words = parts.length ? new RegExp(`(?:${parts.join("|")})`, "giu") : undefined;
   const text = (t: string) => {
     if (short.has(t)) return "•••";
