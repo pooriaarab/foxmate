@@ -246,11 +246,13 @@
             <label class="check"><input id="module-phone" type="checkbox" /> Phone approvals (foxsync)</label>
             <div id="phone-panel" class="sub" hidden>
               <p class="hint">Your phone gets each OK too, over an encrypted link. The first answer counts. Keep this page open.</p>
-              <p class="hint">Give the pairing text to the phone page. Paste its answer below. Then press Connect.</p>
               <div class="row"><button id="phone-pair" type="button" class="small">Pair a phone</button></div>
-              <label for="phone-offer">Pairing text for the phone page</label><textarea id="phone-offer" rows="3" readonly></textarea>
-              <label for="phone-answer">The phone's answer</label><textarea id="phone-answer" rows="3"></textarea>
-              <div class="row"><button id="phone-connect" type="button" class="small">Connect</button><span id="phone-status" class="muted" role="status">Not paired.</span></div>
+              <div id="phone-show" hidden>
+                <svg id="phone-qr" class="phone-qr" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="QR code that opens the phone page"></svg>
+                <p class="hint">Your phone must be on the same Wi-Fi as this computer. Scan this code with your phone camera. The phone page opens. Make sure it shows this code, then press Pair on the phone.</p>
+                <p id="phone-code" class="phone-code"></p>
+              </div>
+              <p id="phone-status" class="muted" role="status">Not paired.</p>
             </div>
             <label class="check"><input id="module-lens" type="checkbox" /> Screenshots for canvas pages (foxlens)</label>
             <div id="lens-panel" class="sub" hidden>
