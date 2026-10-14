@@ -1,7 +1,8 @@
 // The shield: a foxpaw wrapper for foxloop's browser tools. Each snapshot
 // runs foxshield's scanDocument in the tab, and the planner gets sanitize()
 // output in place of the raw page text. When the scan fails, the page text
-// is withheld (docs/failure-modes.md S1-S7). runTask reads each page through
+// is withheld (docs/failure-modes.md S1-S7). A control written in the text
+// of a flagged block is dropped like one in hidden text (S20). runTask reads each page through
 // the same scan (S13). Last, foxpass's redaction takes typed secrets out of
 // the page the planner reads and out of the quotes (HP5, HP6, S14).
 import type { PawLike } from "foxloop";
@@ -72,6 +73,35 @@ export function hiddenNodes(findings: { selector: string; kind: string }[], node
   return nodes.filter((node) => {
     const element = cache.nodes.get(node);
     return Boolean(element && boxes.some(({ box, moved }) => (box === element || box.contains(element)) && (!moved || offPage(element))));
+  });
+}
+/**
+ * Runs in the page. The foxpaw nodes written in the text of a flagged block:
+ * the nearest block element above the control is one that a selector matches
+ * (S20). A control in a nested block, a form or a `p`, stays (S21). The tags
+ * are foxshield's block tags, less the ones that wrap a control (a label, a
+ * button, a select): they do not part a field from the notice around it.
+ * Self-contained, for scripting.executeScript.
+ */
+export function noticeNodes(selectors: string[], nodes: number[]): number[] {
+  // oxlint-disable-next-line no-underscore-dangle -- foxpaw keeps its node map at window.__foxpaw.
+  const cache = (window as unknown as { __foxpaw?: { nodes: Map<number, Element> } }).__foxpaw;
+  if (!cache) throw new Error("foxpaw has not read this page.");
+  const block = new Set(["address", "article", "aside", "blockquote", "body", "caption", "dd", "details", "dialog", "div", "dl", "dt", "fieldset",
+    "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "html", "legend", "li", "main", "nav", "ol", "p", "pre",
+    "section", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul"]);
+  const flagged = new Set<Element>();
+  for (const selector of selectors) {
+    try {
+      for (const box of document.querySelectorAll(selector)) flagged.add(box);
+    } catch {
+      // A selector that this document cannot parse matches nothing.
+    }
+  }
+  return nodes.filter((node) => {
+    let up = cache.nodes.get(node)?.parentElement;
+    while (up && !block.has(up.localName)) up = up.parentElement;
+    return Boolean(up && flagged.has(up));
   });
 }
 const cut = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
@@ -153,6 +183,19 @@ async function shieldRead(options: ShieldOptions, paw: PawLike, tabId: number, b
       const nodes = Array.isArray(results) ? (results[0] as { result?: unknown } | undefined)?.result : undefined;
       if (!Array.isArray(nodes)) throw new Error("The page gave no answer.");
       hiddenSet = new Set(nodes as number[]);
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error);
+      return { page: { ...page, text: WITHHELD }, seen: { url: page.url, findings: report.findings.length, top: [], droppedControls: [], flagged: 0, withheld: why } };
+    }
+  }
+  // A control written in a flagged block: a link in a note to AI assistants is never offered to the planner (S20).
+  const notices = report.blocks.filter((b) => (b.score ?? 0) >= threshold && !b.selector.includes(">>>")).map((b) => b.selector);
+  if (notices.length) {
+    try {
+      const results = await options.browser.scripting.executeScript({ target: { tabId, frameIds: [0] }, func: noticeNodes, args: [notices, page.controls.filter((c) => c.frameId === 0).map((c) => c.node)] });
+      const nodes = Array.isArray(results) ? (results[0] as { result?: unknown } | undefined)?.result : undefined;
+      if (!Array.isArray(nodes)) throw new Error("The page gave no answer.");
+      hiddenSet = new Set([...hiddenSet, ...(nodes as number[])]);
     } catch (error) {
       const why = error instanceof Error ? error.message : String(error);
       return { page: { ...page, text: WITHHELD }, seen: { url: page.url, findings: report.findings.length, top: [], droppedControls: [], flagged: 0, withheld: why } };
