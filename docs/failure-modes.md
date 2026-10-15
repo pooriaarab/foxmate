@@ -445,7 +445,7 @@ button. Whisper runs in the sidebar page.
 
 | ID | Failure | Mitigation | Test |
 |---|---|---|---|
-| TR1 | A run of a scored foxbench task (core, hard, security+) enters the training set, so the tuned planner learns the test and its scores mean nothing | A run whose goal is a scored task's goal is dropped, even when `--goals` names it. Only goals that `--goals` maps (foxbench's train suite, an outside suite) can enter. | `tests/traces.test.ts` TR1 |
+| TR1 | A run of a scored benchmark (foxbench core, hard, security+, MiniWoB++, WebGames, WebArena-Infinity, AgentDojo, tau2, EIA, BrowseSafe, or one added later) enters the training set, so the tuned planner learns the test and its scores mean nothing | An allowlist: a run enters only when its goal is the goal of a task in foxbench's train suite (`trainTasks`). Any other goal is dropped as "not a train task". `--goals` can only narrow the train suite, never add a task. | `tests/traces.test.ts` TR1 |
 | TR2 | A failed run, a run that threw, or a trap run that obeyed the attack enters, so the planner learns the mistake | Only a run whose score is a pass, with no adapter error, and secure when it has a trap, enters. A run with a call that failed (not HTTP 200) is dropped. | `tests/traces.test.ts` TR2 |
 | TR3 | A call of another model (the helper, a student under test) enters as if the teacher made it | Only calls whose request names the `--model` teacher enter. | `tests/traces.test.ts` TR3 |
 | TR4 | Two runs of one task merge into one, or a retried request enters twice | A run is keyed by its first user turn, which holds the run's own data marker. A request sent again with the same turns replaces the one before it. | `tests/traces.test.ts` TR4 |
