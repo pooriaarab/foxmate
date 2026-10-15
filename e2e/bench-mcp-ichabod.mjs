@@ -72,6 +72,8 @@ try {
   const free = sleep(150_000).then(() => Promise.all(held.map(endSession)));
   const reply = await run(two.c, bench, "flights-oneway");
   record.callMs = Date.now() - asked;
+  record.reply = reply.isError ? reply.content.map((p) => p.text).join("\n").slice(0, 2000) : "ok";
+  record.serverLog = two.stderr().split("\n").filter((l) => /bench-mcp:|Ichabod/.test(l)).join("\n").replaceAll(process.env.ICHABOD_API_KEY || "\0", "<key>").slice(-3000);
   await free;
   check("BM9 run_task waits for a free session and works", false, reply.isError === true);
   check("BM9 it waited past the held sessions", true, record.callMs > 150_000);
