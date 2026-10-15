@@ -37,7 +37,14 @@ const lastUrl = (messages: readonly Message[]) => newestTool(messages).match(/ht
 const controlId = (messages: readonly Message[], label: string) => {
   const text = messages.findLast((m) => m.role === "tool" && m.content?.includes("Controls:"))?.content ?? "";
   const line = text.split("\n").find((l) => l.startsWith("[") && l.toLowerCase().includes(label.toLowerCase()));
-  return line?.match(/^\[([^\]]+)\]/)?.[1] ?? "";
+  const id = line?.match(/^\[([^\]]+)\]/)?.[1];
+  if (id) return id;
+  // A run of 5 or more short links is one `(N links: "a"=id, ...)` line.
+  const name = label.match(/^link "(.*)$/i)?.[1]?.toLowerCase();
+  if (!name) return "";
+  for (const folded of text.split("\n").filter((l) => l.startsWith("(")))
+    for (const [, linkName, linkId] of folded.matchAll(/"([^"]*)"=([^\s,)]+)/g)) if (linkId && linkName?.toLowerCase().includes(name)) return linkId;
+  return "";
 };
 
 /** Parses a script. Throws ScriptError when it is not a JSON array of steps. */
