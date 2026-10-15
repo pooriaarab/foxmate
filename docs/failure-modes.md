@@ -513,3 +513,21 @@ httpbin.org/forms/post) sends, and then foxmate cannot read the answer.
 | BN5 | A task hits foxbench's time limit. foxbench calls `abort()` and starts the next task, but the late task still runs; when it ends it closes the adapter's one shared tab, which is now the next task's tab, so that task fails "No tab at <url>" in 0.4 s (AgentDojo `user_task_15+injection_task_7`) | Each task closes only the tab it opened. `abort()` stops the run and closes the tab of the task that runs now. | `tests/bench.test.ts` BN5 |
 | BN6 | foxbench gives each task its own port, and the workflow cache keys a kept run by origin, so `--repeat` never replays and a cache win cannot be measured | `--fixed-ports <n>` asks foxbench for one port per site from port n (foxbench R6); a bad value exits with code 2 before Firefox starts. Off by default. | `tests/bench.test.ts` BN6 |
 | BN7 | The task site sits behind a path mount (the create-foxkit tunnel that a cloud browser such as Ichabod reaches: `https://<tunnel>/_foxkit/<n>/shop/`). Ask Sam is at `/user/` on the site, so the adapter posts to `https://<tunnel>/user/`, which has no mount; the tunnel answers 404, Sam never sees the question, the run reads "did not answer", and AQ9 ends it (bench r7c: `shop-cap-ask`, `shop-ambiguous-size`, `shop-signin-handoff`, `shop-receipt-forward` all "No answer", Sam got 0 questions) | The adapter posts to Ask Sam as the task page would: with the task page as the Referer, so a path mount sends the post to the site that the page is on. Sam gets the question, and the answer reaches the run, which goes on to the order. With no answer the run still ends (AQ9) and sends nothing. | `tests/bench.test.ts` BN7, `tests/agent.test.ts` BN7 |
+
+## Bench over MCP (`cli/bench-mcp.mjs`)
+
+`foxmate bench-mcp` is an MCP server on stdio for `foxbench run --agent mcp`.
+Its one tool, `run_task` {url, goal}, runs one task with the foxmate bench
+adapter (BN1-BN7), so every foxbench benchmark can score foxmate without
+foxbench importing foxmate.
+
+| # | Failure mode | Wanted behaviour | Test |
+|---|---|---|---|
+| BM1 | The server writes a line that is not MCP to stdout (a progress line, a tunnel note), so foxbench's client cannot read the reply and every task is an adapter error | stdout carries MCP messages only. Every console line of the server goes to stderr. | e2e `bench-mcp` |
+| BM2 | `run_task` gets no url or no goal, or a url that is not http(s), and the run opens a blank tab and reports a failed task as if foxmate had tried | The reply is an MCP tool error (foxbench counts an adapter error), and no tab opens. | e2e `bench-mcp` |
+| BM3 | Firefox, Ichabod or a model tunnel does not start, and the tool reply says done false, so a broken setup scores as foxmate failing every task | The reply is a tool error with the cause, so foxbench counts adapter errors. The next call tries to start Firefox again. | e2e `bench-mcp` |
+| BM4 | A tool reply or error holds `ICHABOD_API_KEY`, a model gate path or the tunnel host, and foxbench writes it to the score log | The key, each gate path and the tunnel host are taken out of every reply and error text. | e2e `bench-mcp` (Ichabod) |
+| BM5 | Two calls come at once and share one tab and one sidebar, so one run reads the other's end | Calls run one at a time, in order, in the one Firefox. | e2e `bench-mcp` |
+| BM6 | A benchmark scores the answer (BrowseComp, AssistantBench), and the reply holds only done, so every answer scores wrong | A done run returns its finish summary as `answer`. | e2e `bench-mcp` |
+| BM7 | foxbench stops the server at a task's time limit (SIGTERM to its process tree), and the Ichabod session or the tunnel stays open | On SIGTERM, SIGINT or a closed stdin, the server closes Firefox and the model gates, then exits. A close that waits on a lost session (seen: a server whose foxbench died hung for minutes) does not hold the exit past 10 s. | e2e `bench-mcp` (Ichabod) |
+| BM8 | The noop agent and foxmate get the same score on the train suite, so the E2E test cannot tell a server that works from one that does not | The E2E test runs foxbench's train suite twice: noop scores 0, and foxmate through `bench-mcp` scores above 0 with no adapter error but a time limit (foxbench counts a task over its time limit as one). | e2e `bench-mcp` |
