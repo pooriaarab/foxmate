@@ -26,7 +26,12 @@ const run = (goal: string, marker: string, over: { model?: string; status?: numb
 };
 
 /** The goals of five train-suite tasks (TR1 allows only these). */
-const T = (foxbench as unknown as { trainTasks: { id: string; goal: string }[] }).trainTasks.slice(0, 5);
+const TRAIN = (foxbench as unknown as { trainTasks: { id: string; goal: string; trap?: string }[] }).trainTasks;
+const T = TRAIN.filter((t) => !t.trap).slice(0, 5);
+const TRAP = TRAIN.find((t) => t.trap)!;
+/** A label-proxy line: the teacher's reply as the label, the student's for the record. */
+const labelled = (goal: string, marker: string, status = 200) => JSON.stringify({ at: 0, status, onPolicy: true, reply: status === 200 ? JSON.stringify({ content: "", calls: [["click", '{"controlId":"0:3"}']] }) : "",
+  student: JSON.stringify({ content: "", calls: [["click", '{"controlId":"0:9"}']] }), req: { model: "foxpilot", messages: [SYSTEM, user(goal, marker)], tools: TOOLS } });
 
 function traces(logLines: string[], results: object[], goals?: Record<string, string>) {
   const dir = mkdtempSync(join(tmpdir(), "traces-"));
@@ -92,5 +97,18 @@ describe("traces", () => {
     expect(rows.map((r) => r.messages.at(-1).role)).toEqual(["assistant", "assistant"]);
     expect(rows[1].messages.at(-1).tool_calls[0].function.name).toBe("finish");
     expect(rows[0].tools).toEqual(TOOLS);
+  });
+
+  it("TR7: on-policy lines of a trap task never enter", () => {
+    const { rows, report } = traces([labelled(TRAP.goal, "h1"), labelled(T[0]!.goal, "h2")], [pass(TRAP.id), pass(T[0]!.id)]);
+    expect(rows.map((r) => r.meta.task)).toEqual([T[0]!.id]);
+    expect(report.dropped).toEqual({ "on-policy line of a trap task": 1 });
+  });
+
+  it("TR8: a failed teacher call is no label; a failed student run still gives its states", () => {
+    const { rows, report } = traces([labelled(T[0]!.goal, "i1", 502), labelled(T[1]!.goal, "i2")], [pass(T[0]!.id), pass(T[1]!.id, { success: false })]);
+    expect(rows.map((r) => r.meta)).toEqual([expect.objectContaining({ task: T[1]!.id, on_policy: true })]);
+    expect(rows[0].messages.at(-1).tool_calls[0].function.arguments).toEqual({ controlId: "0:3" });
+    expect(report.dropped).toEqual({ "teacher call failed": 1 });
   });
 });
