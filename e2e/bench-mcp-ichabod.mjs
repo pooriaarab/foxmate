@@ -69,9 +69,18 @@ try {
   record.held = held.length;
   const two = await client();
   const asked = Date.now();
-  const free = sleep(150_000).then(() => Promise.all(held.map(endSession)));
+  // The key is shared: a slot that another client frees during the hold is taken too, so the server gets none.
+  const hold = (async () => {
+    while (Date.now() - asked < 150_000) {
+      const ws = await session();
+      if (ws) held.push(ws);
+      else await sleep(1000);
+    }
+  })();
+  const free = hold.then(() => Promise.all(held.map(endSession)));
   const reply = await run(two.c, bench, "flights-oneway");
   record.callMs = Date.now() - asked;
+  record.heldAtEnd = held.length;
   record.reply = reply.isError ? reply.content.map((p) => p.text).join("\n").slice(0, 2000) : "ok";
   record.serverLog = two.stderr().split("\n").filter((l) => /bench-mcp:|Ichabod/.test(l)).join("\n").replaceAll(process.env.ICHABOD_API_KEY || "\0", "<key>").slice(-3000);
   await free;
