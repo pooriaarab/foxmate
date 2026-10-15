@@ -13,13 +13,13 @@ const finish = { tool: "finish", args: { summary: "The task is done." } };
 const scroll = (label) => act(label, "scroll", "300");
 
 // The airport fields are autocompletes: type the code, then click the option with it.
-const airport = (label, code) => [type(label, code), click(`(${code})`)];
+const airport = (label, code) => [type(label, code), look, click(`(${code})`)];
 // A date field opens a calendar with 30 or more day buttons, and the planner
 // sees only the first 40 controls. Clicking the day sets it and closes the calendar.
 // `next` is how many times to page the calendar forward from the month it shows.
 const day = (label, iso, next = 0) => {
   const date = new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
-  return [act(label, "date", iso), ...Array.from({ length: next }, () => click("Next month")), click(date)];
+  return [act(label, "date", iso), look, ...Array.from({ length: next }, () => [click("Next month"), look]).flat(), click(date)];
 };
 const flight = ({ trip = "One way", from, to, depart, ret, pax = "1", next = 0 }, pick = []) => [
   look,
@@ -85,7 +85,7 @@ export const BENCH_SCRIPTS = {
   "contact-billing": [
     look, click("link \"Contact"), look,
     type("Your name", "Sam Park"), type("textbox \"Email", "sam.park@example.com"),
-    act("Topic", "select", "billing"),
+    act("Topic", "select", "billing"), look,
     type("Order number", "ORD-48213"),
     type("Message", "Hello, I was charged twice this month for order ORD-48213. Please refund one charge."),
     click("Send message"), finish,
