@@ -22,6 +22,18 @@ const replyOf = (text) => {
     return "";
   }
 };
+/** The teacher's answer. A tunnel to the teacher can drop for minutes, so a failed call is tried again before the line is lost. */
+const ask = async (call) => {
+  for (let wait = 5_000; ; wait *= 2) {
+    try {
+      const a = await call();
+      if (a.status < 500 || wait > 160_000) return { status: a.status, text: await a.text() };
+    } catch {
+      if (wait > 160_000) return { status: 502, text: "" };
+    }
+    await new Promise((r) => setTimeout(r, wait));
+  }
+};
 const server = createServer(async (req, res) => {
   const chunks = [];
   for await (const c of req) chunks.push(c);
@@ -29,7 +41,7 @@ const server = createServer(async (req, res) => {
   const send = (port) => fetch(`http://127.0.0.1:${port}${req.url}`, { method: req.method, headers: { "content-type": "application/json" }, body: req.method === "GET" || req.method === "HEAD" ? undefined : body });
   const chat = Boolean(req.url?.includes("chat"));
   // The teacher answers beside the student, so the run waits only for the student.
-  const label = chat ? send(teacher).then(async (a) => ({ status: a.status, text: await a.text() })).catch(() => ({ status: 502, text: "" })) : undefined;
+  const label = chat ? ask(() => send(teacher)) : undefined;
   let answer;
   try {
     answer = await send(student);
