@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.32.1
+        version: 1.32.1(zod@4.6.5)
       create-foxkit:
         specifier: ^0.1.5
         version: 0.1.5(yauzl@3.4.0)
@@ -75,9 +78,6 @@ importers:
       '@huggingface/transformers':
         specifier: ^4.3.1
         version: 4.3.1(@types/node@24.19.1)
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.32.1
-        version: 1.32.1(zod@4.6.5)
       '@types/node':
         specifier: ^24.19.1
         version: 24.19.1

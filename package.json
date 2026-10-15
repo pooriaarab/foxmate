@@ -40,7 +40,6 @@
   },
   "devDependencies": {
     "@huggingface/transformers": "^4.3.1",
-    "@modelcontextprotocol/sdk": "^1.32.1",
     "@types/node": "^24.19.1",
     "esbuild": "^0.28.2",
     "foxbridge": "^0.1.2",
@@ -51,6 +50,7 @@
     "web-ext": "^10.7.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "create-foxkit": "^0.1.5",
     "foxbench": "^0.1.9",
     "foxden": "npm:foxden-sandbox@^0.1.2",
