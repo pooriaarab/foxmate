@@ -24,9 +24,10 @@ export function policy(name, goal) {
 }
 
 /**
- * Asks foxbench's stand-in user: posts the question to the Ask Sam chat at
- * /user/ on the task's site and returns Sam's newest answer, or undefined
- * when the chat does not answer (BN3). It posts as the task page would, with
+ * Asks foxbench's stand-in user: posts the question to the chat at /user/
+ * on the task's site and returns the newest answer, or undefined when the
+ * chat does not answer (BN3). Ask Sam on the in-house sites answers as
+ * "Sam:"; the user channel of tau2 and Gaia2 answers as "User:" (BN8). It posts as the task page would, with
  * the page as the Referer: a site behind a path mount (the tunnel a cloud
  * browser reaches it through) has no /user/ at the root of the address, and
  * the mount finds the site by the Referer (BN7).
@@ -35,7 +36,7 @@ export async function askSam(url, question) {
   try {
     const res = await fetch(new URL("/user/", url), { method: "POST", headers: { referer: url }, body: new URLSearchParams({ q: question }), signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return undefined;
-    const answers = [...(await res.text()).matchAll(/<strong>Sam:<\/strong> ([^<]*)<\/p>/g)];
+    const answers = [...(await res.text()).matchAll(/<strong>(?:Sam|User):<\/strong>\s*(?:<p class="user">)?([^<]*)<\/p>/g)];
     // foxbench writes each special character as a numeric entity.
     return answers.at(-1)?.[1].replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))) || undefined;
   } catch {
