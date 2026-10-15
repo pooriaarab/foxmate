@@ -17,12 +17,32 @@ const TOOL = {
 };
 
 const TUNNEL_HOST = /[a-z0-9-]+\.trycloudflare\.com/g;
+/** Ichabod had no free session. Its slots free about a minute after a session ends, so the start waits and tries again (BM9). */
+const BUSY = /Cannot start an Ichabod session/;
+const WAITS = [15_000, 30_000, 60_000];
+const START_MS = 5 * 60_000;
+
+async function whenFree(start) {
+  const until = Date.now() + START_MS;
+  for (let i = 0; ; i++) {
+    try {
+      return await start();
+    } catch (error) {
+      const wait = WAITS[Math.min(i, WAITS.length - 1)];
+      if (!BUSY.test(error instanceof Error ? error.message : String(error)) || Date.now() + wait > until) throw error;
+      console.error(`foxmate bench-mcp: Ichabod has no free session; the next start is in ${wait / 1000} s.`);
+      await new Promise((done) => setTimeout(done, wait));
+    }
+  }
+}
 
 export async function serveBenchMcp({ planner, approve, timeoutMs, headless = true, firefox }) {
   // stdout carries MCP messages only (BM1).
   console.log = console.info = console.debug = console.error;
   const remote = isRemote();
-  const start = () => startFox({ headless, ...(remote ? { extension: benchExtension() } : {}), ...(firefox ? { firefox } : {}) });
+  const start = remote
+    ? () => whenFree(() => startFox({ headless, extension: benchExtension(), ...(firefox ? { firefox } : {}), connectTimeoutMs: 30_000 }))
+    : () => startFox({ headless, ...(firefox ? { firefox } : {}) });
   let opened;
   // A failed start is forgotten, so the next call tries again (BM3).
   const ready = () => (opened ??= start().then((session) => ({ session, adapter: foxmateAdapter(session, { planner, approve, timeoutMs, ...(remote ? { renew: start } : {}) }) }), (error) => {
@@ -64,8 +84,13 @@ export async function serveBenchMcp({ planner, approve, timeoutMs, headless = tr
   const stop = () => (stopping ??= (async () => {
     setTimeout(() => process.exit(0), 10_000).unref();
     const open = await opened?.catch(() => undefined);
+    // Firefox first: foxbench kills the process tree 2 s after its SIGTERM (BM10).
+    const closing = Date.now();
+    if (open) {
+      await open.session.fox.close().catch(() => undefined);
+      console.error(`foxmate bench-mcp: closed Firefox in ${Date.now() - closing} ms.`);
+    }
     await open?.adapter.close().catch(() => undefined);
-    await open?.session.fox.close().catch(() => undefined);
     process.exit(0);
   })());
   for (const signal of ["SIGTERM", "SIGINT"]) process.on(signal, stop);
