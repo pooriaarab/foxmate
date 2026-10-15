@@ -420,8 +420,21 @@ task itself. It takes the planner flags of `foxmate bench`, and
 foxbench run --agent foxmate --suite webgames --subset quick
 ```
 
+Each `foxbench run` starts a new Firefox with a temporary profile, so the
+workflows that foxmate keeps die with it and a second run replays nothing.
+`--workflows <file>` (for example `"bench-mcp", "--workflows",
+"/path/to/workflows.json"` in `args`) loads the file at start and writes it
+after each task. Use it with `--fixed-ports`, because a kept workflow is keyed
+on the origin and the goal. A file that is not a JSON object ends the command
+with an error, and a file that does not exist yet starts empty. The file holds
+typed values and URLs (never a password): keep it out of git and out of shared
+folders, and say on a score board that a run replayed. `metrics.replayed` of a
+reply counts the replayed steps.
+
 `pnpm e2e:mcp` runs foxbench's train suite with noop and with foxmate over
-MCP; noop must score 0 and foxmate above 0.
+MCP; noop must score 0 and foxmate above 0. `pnpm e2e:mcp-workflows` runs two
+`bench-mcp` processes with `--workflows`; the second must replay 10 or more
+steps of flights-oneway.
 
 #### Library
 

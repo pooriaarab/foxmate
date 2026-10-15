@@ -41,15 +41,19 @@ foxmate bench [options]
 
 foxmate bench-mcp [--planner, --model, --base-url, --approve, --ask, --scout,
                    --replay, --timeout, --headed, --firefox as for bench]
+                  [--workflows <file>]
   An MCP server on stdio with one tool, run_task {url, goal}, for
   foxbench run --agent mcp -- foxmate bench-mcp. Each call runs one task
-  in one Firefox, one call at a time. FOXKIT_BROWSER=ichabod as for bench.`;
+  in one Firefox, one call at a time. FOXKIT_BROWSER=ichabod as for bench.
+  --workflows <file> keeps the kept workflows in a file: it is loaded at start
+  and written after each task, so a second run replays (WF28). A file that
+  is not a JSON object ends the command with code 2.`;
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     planner: { type: "string", default: "scripted" }, model: { type: "string" }, "base-url": { type: "string" },
-    approve: { type: "string", default: "careful" }, ask: { type: "string", default: "on" }, scout: { type: "string" }, replay: { type: "string", default: "on" }, repeat: { type: "boolean", default: false }, "fixed-ports": { type: "string" }, suite: { type: "string", default: "core" }, tasks: { type: "string" }, timeout: { type: "string", default: "600" },
+    approve: { type: "string", default: "careful" }, ask: { type: "string", default: "on" }, scout: { type: "string" }, replay: { type: "string", default: "on" }, repeat: { type: "boolean", default: false }, "fixed-ports": { type: "string" }, workflows: { type: "string" }, suite: { type: "string", default: "core" }, tasks: { type: "string" }, timeout: { type: "string", default: "600" },
     out: { type: "string", default: "artifacts" }, headed: { type: "boolean", default: false }, firefox: { type: "string" }, help: { type: "boolean" },
   },
 });
@@ -85,7 +89,7 @@ if (values.help || !command) {
   process.on("SIGTERM", stop);
   session.fox.browser.on("disconnected", stop);
 } else if (command === "bench-mcp") {
-  await serveBenchMcp({ planner: benchPlanner(), approve: values.approve, timeoutMs: Number(values.timeout) * 1000, headless: !values.headed, ...(values.firefox ? { firefox: values.firefox } : {}) });
+  await serveBenchMcp({ planner: benchPlanner(), approve: values.approve, timeoutMs: Number(values.timeout) * 1000, headless: !values.headed, ...(values.workflows ? { workflows: values.workflows } : {}), ...(values.firefox ? { firefox: values.firefox } : {}) });
 } else if (command === "bench") {
   const planner = benchPlanner();
   const suites = [...SUITES, "all"];

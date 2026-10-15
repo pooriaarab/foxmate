@@ -59,7 +59,7 @@ export function runMetrics(run) {
   const count = (kind) => run.kinds.filter((k) => k === kind).length;
   // A replayed step of the workflow cache is a plan event with no model call (WF8).
   const replayed = (run.trail ?? []).filter((e) => e.kind === "run.route" && e.data?.by === "replay").length;
-  return { modelCalls: count("loop.plan") - replayed, steps: count("loop.tool-result"), approvals: run.approvals.length };
+  return { modelCalls: count("loop.plan") - replayed, replayed, steps: count("loop.tool-result"), approvals: run.approvals.length };
 }
 
 /**
