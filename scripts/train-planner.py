@@ -81,7 +81,10 @@ log = open(out / "train-log.jsonl", "w")
 
 
 def loss_of(ids, labels):
-    return model(input_ids=ids[None].cuda(), labels=labels[None].cuda()).loss
+    # Logits only where the reply is: a full-length logits tensor (16k tokens x a 248k vocabulary) does not fit.
+    k = int((labels != -100).sum()) + 1
+    logits = model(input_ids=ids[None].cuda(), logits_to_keep=k).logits[0, :-1].float()
+    return torch.nn.functional.cross_entropy(logits, labels[-(k - 1):].cuda())
 
 
 @torch.no_grad()

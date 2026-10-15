@@ -55,6 +55,17 @@ with open(sys.argv[3], "w") as out:
 "$LLAMA_CPP/build/bin/llama-quantize" --imatrix "$OUT/imatrix.gguf" "$OUT/$NAME-bf16.gguf" "$OUT/$NAME-Q4_K_M.gguf" Q4_K_M > /dev/null
 CALLS=$(wc -l < "$SET" | tr -d ' ')
 TASKS=$("$VENV/bin/python" -c 'import json,sys; print(len({json.loads(l)["meta"]["task"] for l in open(sys.argv[1]) if l.strip()}))' "$SET")
+# The training data, task by task, so anyone can check a release for contamination.
+DATA=$("$VENV/bin/python" -c '
+import collections, json, sys
+rows = [json.loads(l)["meta"] for l in open(sys.argv[1]) if l.strip()]
+teacher = collections.Counter(m["task"] for m in rows if not m.get("on_policy"))
+policy = collections.Counter(m["task"] for m in rows if m.get("on_policy"))
+print("| Task id (foxbench train suite) | Teacher-run calls | On-policy calls |")
+print("|---|---|---|")
+for t in sorted(set(teacher) | set(policy)):
+    print("| %s | %d | %d |" % (t, teacher[t], policy[t]))
+' "$SET")
 cat > "$OUT/README.md" <<EOF
 ---
 license: apache-2.0
@@ -66,10 +77,18 @@ tags: [gguf, llama.cpp, tool-calling, agents, foxmate]
 
 A foxmate browser-agent planner: $BASE_REPO fine-tuned with LoRA on the tool calls of $TEACHER.
 
-- Training data: $CALLS planner calls from passed, secure runs of $TASKS tasks (foxbench's train suite and
-  MiniWoB++ task types that foxbench does not score). No scored foxbench task (core, hard, security+) is in it.
+- Training data: $CALLS planner calls on $TASKS tasks of foxbench's train suite (listed below).
 - Training: LoRA ($*), prompt masked, merged into the base weights. Files: bf16, Q8_0 and Q4_K_M GGUF.
 - Serve: \`llama-server -m $NAME-Q4_K_M.gguf --jinja -fa on -c 32768\`, with foxmate's thinking off.
+
+## Training data
+
+Only foxbench's `train` suite: tasks on sites that no scored benchmark uses. No case or page of a scored
+benchmark (foxbench core, hard, security+, MiniWoB++, WebGames, WebArena-Infinity, EIA, BrowseSafe, AgentDojo,
+tau2 and the rest) is in it. Teacher-run calls come from passed, secure runs of the teacher; on-policy calls
+are states the student reached, labelled with the teacher's reply.
+
+$DATA
 
 ## Results
 
