@@ -1,11 +1,14 @@
 // Tests for docs/failure-modes.md BN1-BN3, BN5 and BN6: the bench command's suite flag,
 // the metrics that the adapter reports, and the Ask Sam answers. None needs Firefox.
 import { spawnSync } from "node:child_process";
+import { createServer } from "node:http";
 import { sites, startServer, taskById } from "foxbench";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error -- cli/ is plain JavaScript with no type declarations.
 import { askSam, foxmateAdapter, runMetrics } from "../cli/bench.mjs";
 import { mountSite } from "./mount.js";
+// foxbench's own user channel (tau2, Gaia2), which its index does not export.
+import { scriptedUser, serveUser } from "../node_modules/foxbench/dist/bench/user.js";
 
 /** A promise that waits until `fail` rejects it: one task's sidebar calls (BN5). */
 function gate() {
@@ -58,6 +61,18 @@ describe("bench", () => {
     expect(server.state.questions.length).toBe(2);
     await server.close();
     expect(await ask(url, "Are you there?")).toBeUndefined();
+  });
+
+  it("BN8: a question to foxbench's user channel comes back with the user's newest answer, not the opening line", async () => {
+    const user = scriptedUser({ opening: "Hi, I want to return my order.", answer: (q: string) => (q.includes("email") ? "It is sam.lee@example.com & thanks" : "Order #W123.") });
+    const server = createServer((req, res) => void serveUser(user, req, res));
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
+    const ask = askSam as (url: string, question: string) => Promise<string | undefined>;
+    expect(await ask(url, "What is your email address?")).toBe("It is sam.lee@example.com & thanks");
+    expect(await ask(url, "Which order?")).toBe("Order #W123.");
+    expect(user.turns.filter((t) => t.from === "agent").map((t) => t.text)).toEqual(["What is your email address?", "Which order?"]);
+    server.close();
   });
 
   it("BN7: a site behind a path mount (the tunnel a cloud browser uses) still gets the question, and Sam's answer comes back", async () => {
