@@ -211,9 +211,9 @@ Google credentials and manual microphone checks remain pending; recorded evaluat
 
 ## Runtime surfaces
 
-The CLI has two commands: `try` and `bench`.
+The CLI has three commands: `try`, `bench` and `bench-mcp`.
 The foxbridge path answers six MCP tools: `list_tabs`, `snapshot`, `act`, `click`, `run_task`, and `open_url`.
-foxmate provides no MCP server of its own.
+Beside the foxbridge path, `foxmate bench-mcp` is an MCP server for foxbench runs only.
 The sections below retain app views, privacy details, APIs, and historical evaluation records.
 
 ### The app
@@ -353,6 +353,7 @@ foxmate bench [--planner scripted|ollama|llama-server|saluki] [--model <name>] [
               [--approve careful|all|none] [--suite core|hard|security+|all] [--tasks <ids>]
               [--ask on|off] [--scout <url>|off] [--replay on|off] [--repeat]
               [--fixed-ports <n>] [--timeout <s>] [--out <dir>] [--headed] [--firefox <path>] [--help]
+foxmate bench-mcp [the planner options of bench]
 ```
 
 `foxmate try` opens Firefox with a fresh, temporary profile and foxmate
@@ -392,6 +393,33 @@ FOXKIT_BROWSER=ichabod node cli/foxmate.mjs bench --planner saluki
 - `<out>/ichabod-sessions-<date>.json` lists the session IDs, to find
   each recording on the Ichabod console.
 - `--firefox` and `--headed` stop the run: Ichabod cannot set them.
+
+##### Every foxbench benchmark over MCP
+
+`foxmate bench-mcp` is an MCP server on stdio with one tool, `run_task`
+{url, goal}, for `foxbench run --agent mcp`. Each call runs one task in one
+Firefox and returns `{ done, log, answer?, metrics? }`; foxbench scores the
+task itself. It takes the planner flags of `foxmate bench`, and
+`FOXKIT_BROWSER=ichabod` runs it on Ichabod as above. A preset in
+`foxbench.agents.json`, in the working directory or in
+`~/.config/foxbench/`:
+
+```json
+{
+  "foxmate": {
+    "command": "node",
+    "args": ["/path/to/foxmate/cli/foxmate.mjs", "bench-mcp", "--planner", "saluki"],
+    "name": "foxmate (saluki)"
+  }
+}
+```
+
+```sh
+foxbench run --agent foxmate --suite webgames --subset quick
+```
+
+`pnpm e2e:mcp` runs foxbench's train suite with noop and with foxmate over
+MCP; noop must score 0 and foxmate above 0.
 
 #### Library
 

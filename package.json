@@ -35,11 +35,11 @@
     "lint:ext": "node scripts/lint-ext.mjs",
     "check:amo": "node scripts/amo-listing.mjs check",
     "e2e": "pnpm build:ext && node e2e/run.mjs",
-    "bench": "pnpm build:ext && node cli/foxmate.mjs bench"
+    "bench": "pnpm build:ext && node cli/foxmate.mjs bench",
+    "e2e:mcp": "pnpm build && pnpm build:ext && node e2e/bench-mcp.mjs"
   },
   "devDependencies": {
     "@huggingface/transformers": "^4.3.1",
-    "@modelcontextprotocol/sdk": "^1.32.1",
     "@types/node": "^24.19.1",
     "esbuild": "^0.28.2",
     "foxbridge": "^0.1.2",
@@ -50,6 +50,7 @@
     "web-ext": "^10.7.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "create-foxkit": "^0.1.5",
     "foxbench": "^0.1.9",
     "foxden": "npm:foxden-sandbox@^0.1.2",

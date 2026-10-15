@@ -71,6 +71,8 @@ export function foxmateAdapter(session, { planner, approve = "careful", timeoutM
   let tab;
   let models;
   let started = Date.now();
+  /** Takes the model gate paths and the tunnel host out of a text. */
+  const redact = (text) => (models ? models.redact(text) : String(text));
   return {
     name: name ?? `foxmate (${planner.planner === "scripted" ? "scripted planner" : `${planner.planner}${planner.model ? ` ${planner.model}` : ""}`}, ${approve} approvals)`,
     async runTask({ url, goal }) {
@@ -92,13 +94,16 @@ export function foxmateAdapter(session, { planner, approve = "careful", timeoutM
         const approvals = run.approvals.map((a) => `${a.answer}: ${a.detail || a.text}`.slice(0, 160));
         const questions = run.questions.map((q) => `asked: ${q.text} -> ${q.answer || "(skipped)"}`.slice(0, 200));
         const log = [run.status, ...questions, ...approvals].join("\n");
-        return { done: run.done, log: models ? models.redact(log) : log, metrics: runMetrics(run) };
+        // A benchmark that scores the answer reads the finish summary (BM6).
+        const answer = run.done ? { answer: redact(run.status.replace(/^Done: /, "")) } : {};
+        return { done: run.done, log: redact(log), metrics: runMetrics(run), ...answer };
       } finally {
         await page.close().catch(() => undefined);
         if (tab === page) tab = undefined;
         await site?.close();
       }
     },
+    redact,
     async abort() {
       // A runtime port, not window.postMessage.
       // oxlint-disable-next-line unicorn/require-post-message-target-origin
