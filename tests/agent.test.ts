@@ -1306,6 +1306,35 @@ describe("agent", () => {
     expect(second.events.filter((e) => e.type === "plan").map((e) => (e as { provider?: string }).provider === "replay")).toEqual([true, true, false]);
   });
 
+  it("WF27: a run that replayed every kept step ends on the settle check, though its goal has two parts; an unsure helper or an answer does not", async () => {
+    const kept = new Map<string, Workflow>();
+    const workflows: WorkflowStore = { get: async (k) => kept.get(k), set: async (k, w) => { kept.set(k, w); } };
+    const send = [shopPage(1), { tool: "click", args: { button: "Send form" } }];
+    const replayed = async (goal: string, settle = '{"done": true, "sure": true, "why": "Mug and hat bought"}') => {
+      kept.clear();
+      helper.settle = undefined;
+      expect((await (await setup({ workflows })).run({ goal, script: [...send, finish] })).status).toBe("done");
+      Object.assign(helper, { settle, settled: [], planned: [], slowMs: 200 });
+      return (await setup({ workflows })).run({ goal, script: [finish] });
+    };
+    try {
+      // A cold first run has no settle check: G50 stands for it.
+      expect(helper.settled).toEqual([]);
+      const end = await replayed("Buy the mug and the hat");
+      expect(end).toMatchObject({ status: "done", summary: SETTLED_SUMMARY });
+      expect(helper.settled).toHaveLength(1);
+      // Nothing new is kept from a settled run (WF7): the first run's two entries stand.
+      expect(kept.size).toBe(2);
+      // An unsure helper, or a goal that asks for an answer, leaves the finish to the planner.
+      expect(await replayed("Buy the mug and the hat", '{"done": true, "sure": false, "why": "cannot tell"}')).toMatchObject({ status: "done", summary: "Done." });
+      expect(helper.settled).toHaveLength(1);
+      expect(await replayed("Buy the mug and tell me the price")).toMatchObject({ status: "done", summary: "Done." });
+      expect(helper.settled).toEqual([]);
+    } finally {
+      Object.assign(helper, { settle: undefined, reply: undefined, slowMs: 0 });
+    }
+  });
+
   it("WF12: a goal of the same shape replays with its own values, and the planner writes the summary", async () => {
     const kept = new Map<string, Workflow>();
     const workflows: WorkflowStore = { get: async (k) => kept.get(k), set: async (k, w) => { kept.set(k, w); } };
