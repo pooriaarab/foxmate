@@ -12,8 +12,9 @@ export const EXTENSION = join(dirname(dirname(fileURLToPath(import.meta.url))), 
  * Starts Firefox with dist-ext/ and opens the app page in a tab. The first
  * run shows the onboarding; `onboarding: false` (the default) marks it done.
  */
-export async function startFox({ extension = EXTENSION, headless = true, prefs, firefox, onboarding = false } = {}) {
-  const fox = await launch({ extension, headless, ...(prefs ? { prefs } : {}), ...(firefox ? { firefox } : {}) });
+export async function startFox({ extension = EXTENSION, headless = true, prefs, firefox, onboarding = false, connectTimeoutMs } = {}) {
+  // connectTimeoutMs: each Ichabod connect try, on a remote start (BM9).
+  const fox = await launch({ extension, headless, ...(prefs ? { prefs } : {}), ...(firefox ? { firefox } : {}), ...(connectTimeoutMs ? { connectTimeoutMs } : {}) });
   try {
     const sidebar = await fox.openExtensionPage("app.html");
     await poll(sidebar, () => Boolean(window.foxmate));
