@@ -3,6 +3,7 @@
 // one task with the foxmate bench adapter in one Firefox: local, or on
 // Ichabod with FOXKIT_BROWSER=ichabod. foxbench scores the task; the reply
 // is foxmate's own claim, log, answer and metrics.
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -36,7 +37,7 @@ async function whenFree(start) {
   }
 }
 
-export async function serveBenchMcp({ planner, approve, timeoutMs, headless = true, firefox }) {
+export async function serveBenchMcp({ planner, approve, timeoutMs, headless = true, firefox, workflows }) {
   // stdout carries MCP messages only (BM1).
   console.log = console.info = console.debug = console.error;
   const remote = isRemote();
@@ -45,7 +46,23 @@ export async function serveBenchMcp({ planner, approve, timeoutMs, headless = tr
     : () => startFox({ headless, ...(firefox ? { firefox } : {}) });
   let opened;
   // A failed start is forgotten, so the next call tries again (BM3).
-  const ready = () => (opened ??= start().then((session) => ({ session, adapter: foxmateAdapter(session, { planner, approve, timeoutMs, ...(remote ? { renew: start } : {}) }) }), (error) => {
+  // A temporary profile ends with Firefox, and the kept workflows with it. With a file, they outlive it, so a second run replays (WF28).
+  // A file that does not parse ends the command before Firefox starts: no empty start.
+  let kept;
+  if (workflows && existsSync(workflows)) {
+    try {
+      kept = JSON.parse(readFileSync(workflows, "utf8"));
+      if (!kept || typeof kept !== "object" || Array.isArray(kept)) throw new Error("not an object");
+    } catch (error) {
+      console.error(`foxmate bench-mcp: --workflows ${workflows} is not a JSON object of kept workflows (${error instanceof Error ? error.message : error}).`);
+      process.exit(2);
+    }
+  }
+  const loadKept = async (session) => {
+    if (kept) await session.sidebar.evaluate((value) => browser.storage.local.set({ workflows: value }), kept);
+    return session;
+  };
+  const ready = () => (opened ??= start().then(loadKept).then((session) => ({ session, adapter: foxmateAdapter(session, { planner, approve, timeoutMs, ...(remote ? { renew: start } : {}) }) }), (error) => {
     opened = undefined;
     throw error;
   }));
@@ -60,7 +77,12 @@ export async function serveBenchMcp({ planner, approve, timeoutMs, headless = tr
   // One call at a time, in order (BM5).
   let queue = Promise.resolve();
   const runTask = (url, goal) => {
-    const run = queue.then(async () => (await ready()).adapter.runTask({ url, goal }));
+    const run = queue.then(async () => {
+      const { session, adapter } = await ready();
+      const result = await adapter.runTask({ url, goal });
+      if (workflows) writeFileSync(workflows, JSON.stringify((await session.sidebar.evaluate(() => browser.storage.local.get("workflows"))).workflows ?? {}));
+      return result;
+    });
     queue = run.catch(() => undefined);
     return run;
   };
