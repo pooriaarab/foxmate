@@ -170,4 +170,16 @@ describe("brain", () => {
     const next = await brain.mind.chat([{ role: "user", content: "x" }], { tools: [] });
     expect(next.message.tool_calls?.map((c) => c.function.name)).toEqual(["snapshot"]);
   });
+
+  it("B21: a link in a folded links line has an id", async () => {
+    const script = JSON.stringify([{ tool: "click", args: { controlId: "{{control:link \"Trail Mug}}" } }, { tool: "click", args: { controlId: "{{control:link \"Nowhere}}" } }, { tool: "click", args: { controlId: "{{control:Add}}" } }]);
+    const brain = await createBrain({ planner: "scripted", script }, deps);
+    const page = "Controls:\n[0:9] button \"Add to cart\"\n(6 links: \"Hoodie\"=0:1, \"trail mug (blue)\"=0:3, \"Cap\"=0:4, \"Tee\"=0:5, \"Bag\"=0:6, \"Mat\"=0:7)";
+    const ids: string[] = [];
+    for (const n of [0, 1, 2]) {
+      const step = await brain.mind.chat([{ role: "user", content: "x" }, { role: "tool", content: page, tool_call_id: String(n) }], { tools: [] });
+      ids.push(JSON.parse(step.message.tool_calls?.[0]?.function.arguments ?? "{}").controlId);
+    }
+    expect(ids).toEqual(["0:3", "", "0:9"]);
+  });
 });
