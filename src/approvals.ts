@@ -4,7 +4,7 @@
 // JSON of the exact action, so what the human reads is what can run.
 // "Always allow" adds a foxgate user rule for the site, then approves
 // (docs/failure-modes.md RU1-RU10).
-import { parseSite, type Action, type Host, type PublicSuffix, type RuleScope } from "foxgate";
+import { canonicalJson, parseSite, type Action, type Host, type PublicSuffix, type RuleScope } from "foxgate";
 import type { ApprovalRequest } from "foxloop";
 
 export type Answer = "approve" | "deny" | "always-allow";
@@ -41,9 +41,32 @@ export function ruleOffer(action: Action, ctx: RuleContext): RuleOffer | undefin
   }
 }
 
+/**
+ * The exact text an ask shows: foxgate's canonical JSON of the action, but for
+ * fill_and_send without the guard of each field the call gives a value (UI13).
+ * The guard is foxpaw's fingerprint of the field as read, with the value the
+ * call replaces. The call still carries it and checks it; nothing in it is sent.
+ */
+export function askText(text: string): string {
+  let action: { tool?: unknown; args?: { targets?: unknown } };
+  try {
+    action = JSON.parse(text) as typeof action;
+  } catch {
+    return text;
+  }
+  const targets = action?.args?.targets;
+  if (action?.tool !== "fill_and_send" || !Array.isArray(targets)) return text;
+  const shown = targets.map((t: { guard?: unknown; request?: { value?: unknown } }) => {
+    if (typeof t?.request?.value !== "string") return t;
+    const { guard: _, ...rest } = t;
+    return rest;
+  });
+  return canonicalJson({ ...action, args: { ...action.args, targets: shown } });
+}
+
 export interface Waiting {
   requestId: string;
-  /** foxgate's canonical JSON of the action. */
+  /** foxgate's canonical JSON of the action, as askText shows it. */
   text: string;
   detail?: string;
   expiresAt: number;
@@ -127,7 +150,7 @@ export function createApprovals(options: ApprovalsOptions): Approvals {
       return new Promise((resolve) => {
         const timer = setTimeout(() => settle(request.requestId, null), Math.max(0, request.expiresAt - Date.now()));
         const offer = options.ruleFor?.(pending.action);
-        const waiting: Waiting = { requestId: request.requestId, text: pending.text, expiresAt: request.expiresAt, ...(request.detail ? { detail: request.detail } : {}), ...(offer ? { ruleOffer: offer } : {}) };
+        const waiting: Waiting = { requestId: request.requestId, text: askText(pending.text), expiresAt: request.expiresAt, ...(request.detail ? { detail: request.detail } : {}), ...(offer ? { ruleOffer: offer } : {}) };
         open.set(request.requestId, { waiting, resolve, timer });
         changed();
       });
