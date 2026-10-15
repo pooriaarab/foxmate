@@ -487,6 +487,15 @@ describe("agent", () => {
     expect(end).toMatchObject({ status: "blocked", reason: "check-failed" });
   });
 
+  it("G56: the planner is told that the finish summary is the full answer when the goal asks for information", async () => {
+    const { run, requests } = await setup();
+    helper.described = [];
+    await run({ goal: "Tell me the hotel's name, rating and price range.", script: [{ tool: "snapshot", args: {} }, finish] });
+    expect(systemOf(requests[0])).toContain("When the goal asks for information, your finish summary is the answer: give every fact the goal asks for");
+    expect(helper.described[0]?.finish).toMatch(/every fact the goal asks for/);
+    expect(helper.described[0]?.finish).not.toMatch(/8 words/);
+  });
+
   it("G23: each planner request names the open tab, the allowed sites, and says to work on the open page", async () => {
     const { run, requests } = await setup();
     await run({ script: [{ tool: "snapshot", args: {} }, finish] });
