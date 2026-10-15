@@ -4,18 +4,19 @@
 // the shape most SFT tools read. Training masks the prompt and trains
 // only the last turn: the reply (scripts/train-planner.py).
 //
-//   node scripts/traces.mjs --out set.jsonl --model Saluki --goals goals.json \
+//   node scripts/traces.mjs --out set.jsonl --model Saluki [--goals goals.json] \
 //     --log planner.jsonl --score score-train.json [--score ...] [--log ... --score ...]
 //
 // --log is a scripts/trace-proxy.mjs log of one bench run. --score is a foxbench
 // score file of the same run; a log takes the --score files after it. --model
 // keeps only the calls whose request names that model (the teacher). A run is
 // the calls with the same first user turn (the goal and the run's data marker).
-// --goals names the task of each goal, {"<goal>": "<task id>"}: foxbench's train
-// suite, or an outside suite such as MiniWoB. For the train suite:
-//   node -e 'import("foxbench").then((f) => console.log(JSON.stringify(Object.fromEntries(f.trainTasks.map((t) => [t.goal, t.id])))))' > goals.json
+// The goal names its task, and only foxbench's train suite counts (TR1): any
+// other goal (a scored foxbench task, MiniWoB, WebGames or any other benchmark)
+// is dropped as "not a train task". --goals ({"<goal>": "<task id>"}) can only
+// narrow the train suite to the tasks it names.
 //
-// A run is dropped when its task is in a scored foxbench suite, when it failed
+// A run is dropped when its task is not a train task, when it failed
 // or threw, when a trap task did not stay secure, when a call failed, or when a
 // tool call's arguments are not JSON. A request sent again with the same turns
 // counts once. The counts go to stderr.
@@ -33,15 +34,15 @@ for (const t of argv) {
   if (t.name === "log") pairs.push({ log: t.value, scores: [] });
   if (t.name === "score") pairs.at(-1)?.scores.push(t.value);
 }
-if (!values.out || !values.model || !values.goals || !pairs.length || pairs.some((p) => !p.scores.length)) {
-  console.error("usage: node scripts/traces.mjs --out <set.jsonl> --model <teacher> --goals <goals.json> --log <planner.jsonl> --score <score.json> [--score ...] [--log ...]");
+if (!values.out || !values.model || !pairs.length || pairs.some((p) => !p.scores.length)) {
+  console.error("usage: node scripts/traces.mjs --out <set.jsonl> --model <teacher> [--goals <goals.json>] --log <planner.jsonl> --score <score.json> [--score ...] [--log ...]");
   process.exit(2);
 }
 
-// TR1: the scored tasks never enter the set, whatever --goals says.
-const scored = new Set(foxbench.tasks.map((t) => t.id));
-const taskOf = new Map(Object.entries(JSON.parse(readFileSync(values.goals, "utf8"))));
-for (const t of foxbench.tasks) taskOf.delete(t.goal);
+// TR1: an allowlist. Only foxbench's train suite enters; --goals can only narrow it.
+if (!foxbench.trainTasks?.length) throw new Error("traces.mjs needs a foxbench with the train suite (trainTasks)");
+const only = values.goals ? new Map(Object.entries(JSON.parse(readFileSync(values.goals, "utf8")))) : undefined;
+const taskOf = new Map(foxbench.trainTasks.filter((t) => !only || only.get(t.goal) === t.id).map((t) => [t.goal, t.id]));
 const goalOf = (req) => /^Goal: (.*)$/m.exec(req.messages?.find((m) => m.role === "user")?.content ?? "")?.[1];
 
 // TR5: chat templates (Qwen, Llama, Hermes) read a tool call's arguments as an object, as llama-server passes them.
@@ -78,8 +79,7 @@ for (const { log, scores } of pairs) {
     retries += all.length - run.length;
     const goal = goalOf(run[0].req) ?? "";
     const id = taskOf.get(goal);
-    if (!id) { drop(foxbench.tasks.some((t) => t.goal === goal) ? "run of a scored task" : "task not known"); continue; }
-    if (scored.has(id)) { drop("run of a scored task"); continue; }
+    if (!id) { drop("not a train task"); continue; }
     const result = results.get(id);
     if (!result) { drop("task not in the score files"); continue; }
     // TR2: only a passed, secure run that did not throw.
