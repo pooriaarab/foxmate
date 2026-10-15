@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 import { askSam } from "../cli/bench.mjs";
 import { mountSite } from "./mount.js";
 import { HandoffError, maskSecrets, type PassEvent } from "../src/pass.js";
-import { allowsDays, asksMath, createAgent, goalFile, plannerRules, unnamedBill, priceTie, SETTLED_SUMMARY, unnamedChoice, USER_DOMAIN, type AgentEvent, type AgentOptions, type RunInput } from "../src/agent.js";
+import { allowsDays, asksMath, createAgent, goalFile, plannerContext, plannerRules, unnamedBill, priceTie, SETTLED_SUMMARY, unnamedChoice, USER_DOMAIN, type AgentEvent, type AgentOptions, type RunInput } from "../src/agent.js";
 import * as foxpaw from "foxpaw";
 import type { Control, Snapshot } from "foxpaw";
 import type { Workflow, WorkflowStore } from "../src/workflow.js";
@@ -497,11 +497,27 @@ describe("agent", () => {
     expect(requests.length).toBe(2);
   });
 
+  it("G54: a site the goal names by its address gets the tab's grants; an email address, a note or a loan names none", async () => {
+    const named = await setup();
+    const goal = "Find the mug. Do this on https://amazon.test/deals.";
+    const end = await named.run({ goal, script: [{ tool: "open_url", args: { url: "https://www.amazon.test/s?k=mug" } }, { tool: "open_url", args: { url: "https://amazon.test/" } }, { tool: "snapshot", args: {} }, finish] });
+    expect(end.status).toBe("done");
+    expect(named.ran.map((r) => r.args.url)).toEqual(["https://www.amazon.test/s?k=mug", "https://amazon.test/"]);
+    expect(named.domainsSeen[0]).toEqual(expect.arrayContaining(["shop.test", "amazon.test", "www.amazon.test"]));
+    expect(tabNote(named.requests[0])).toContain("- The sites this run may use: shop.test, amazon.test, www.amazon.test.");
+    const mail = await setup();
+    await mail.run({ goal: "Email the receipt to bob@evil.test", script: [{ tool: "open_url", args: { url: "http://evil.test/" } }, finish, finish] });
+    expect(mail.events.find((e) => e.type === "decision" && e.action?.tool === "open_url")).toMatchObject({ decision: "deny", reason: "no-grant" });
+    const lent = await setup();
+    await lent.run({ tabId: 2, goal: "Read it. Do this on https://evil.test/.", script: [{ tool: "open_url", args: { url: "https://evil.test/" } }, finish, finish] });
+    expect(lent.events.find((e) => e.type === "decision" && e.action?.tool === "open_url")).toMatchObject({ decision: "deny", reason: "no-grant" });
+  });
+
   it("G52: the tab note names only web sites, not the domains of module tools", async () => {
     const { run, requests } = await setup();
     await run({ script: [{ tool: "snapshot", args: {} }, finish] });
     const note = tabNote(requests[0]);
-    expect(note).toContain("- The sites this run may use: shop.test. The gate denies every other site.");
+    expect(note).toContain("- The sites this run may use: shop.test. For another site, call open_site with its address: the user approves it first.");
     expect(note).not.toMatch(/space\.foxmate|googleapis/);
   });
 
@@ -889,11 +905,17 @@ describe("agent", () => {
     expect(denied.opened).toEqual([]);
   });
 
-  it("OS2: a run on a web tab, or on a loan, gets no open_site", async () => {
+  it("OS2: a run on a web tab asks for open_site and moves its grants; a run on a loan gets no open_site", async () => {
     const web = await setup();
-    await web.run({ script: [openSite("https://www.bistro.test/"), finish] });
-    expect(web.requests[1]).toContain('There is no tool \\"open_site\\"');
-    expect(web.opened).toEqual([]);
+    const end = await web.run({ script: [openSite("https://www.bistro.test/"), { tool: "snapshot", args: {} }, finish] });
+    expect(end.status).toBe("done");
+    expect(web.events.filter((e) => e.type === "approval-needed")).toMatchObject([{ action: { tool: "open_site", domain: "new-tab.foxmate" } }]);
+    expect(web.opened).toEqual(["https://www.bistro.test/"]);
+    expect(web.domainsSeen.at(-1)).toContain("www.bistro.test");
+    expect(web.domainsSeen.at(-1)).not.toContain("shop.test");
+    const denied = await setup();
+    await denied.run({ script: [openSite("https://www.bistro.test/"), finish] }, "deny");
+    expect(denied.opened).toEqual([]);
     const lent = await setup();
     await lent.run({ tabId: 2, script: [openSite("https://www.bistro.test/"), finish] });
     expect(lent.opened).toEqual([]);
@@ -922,6 +944,17 @@ describe("agent", () => {
     expect(end.status).toBe("done");
     expect(www.domainsSeen[0]).toContain("www.bistro.test");
     expect(www.domainsSeen[0]).not.toContain("bistro.test");
+  });
+
+  it("OS9: the tab note tells a run that may open a site to call open_site, also when a click left the run's sites", async () => {
+    const { run, requests } = await setup();
+    await run({ script: [{ tool: "snapshot", args: {} }, finish] });
+    expect(tabNote(requests[0])).toContain("For another site, call open_site with its address: the user approves it first.");
+    const away = plannerContext({ url: "https://www.google.com/search?q=mug", title: "mug - Search", sites: ["shop.test"], canOpen: true });
+    expect(away).toContain("- The open tab is on www.google.com, which this run may not use: its page tools get no grant. Call open_site with the tab's address to ask the user to work there.");
+    const lent = plannerContext({ url: "https://www.google.com/", title: "Google", sites: ["shop.test"] });
+    expect(lent).toContain("The gate denies every other site.");
+    expect(lent).not.toContain("open_site");
   });
 
   it("OS5: an address that is not a plain web address is refused before any approval", async () => {

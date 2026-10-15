@@ -93,8 +93,10 @@ One goal, step by step:
    them under the goal as notes.
 3. The brain builds the planner from your settings. foxmind always gets
    `only: ["browser", "local"]`, so a cloud model is never called.
-4. foxmate grants the tab's host only, for this run. On a lent tab, the
-   grants stop at the scope you lent.
+4. foxmate grants the tab's host, and each site your goal names by its
+   address (`https://...`), for this run. On a lent tab, the grants stop
+   at the scope you lent and the lent site. To go to another site, the
+   planner asks you first, and the run moves there in a new tab.
 5. foxloop asks the planner for a tool call. On the tab's host, foxgate
    allows page reads, typing and opening pages with no approval. It asks
    you before each click and each foxpaw task, because they can send a
@@ -244,7 +246,7 @@ back. It honors "reduce motion".
 
 | View | What it does |
 |---|---|
-| Chat | A goal box for the target tab, ideas to start, and each run as a conversation: the planner, each plan, gate decision, approval card (the site, one line of what happens, where a form fill sends, and Deny, Always allow and Approve; the form's fields and the exact action sit behind Details), result and the final check. "Your turn" at a sign-in step. With no web page open, a goal still runs: it asks before it opens each site in a new tab. A mail or calendar read asks once per run. The microphone button fills the goal box from speech. The target menu shares the tab with Claude Code. |
+| Chat | A goal box for the target tab, ideas to start, and each run as a conversation: the planner, each plan, gate decision, approval card (the site, one line of what happens, where a form fill sends, and Deny, Always allow and Approve; the form's fields and the exact action sit behind Details), result and the final check. "Your turn" at a sign-in step. A goal still runs with no web page open, and a run can go to a site the goal does not name: it asks before it opens each site in a new tab. A mail or calendar read asks once per run. The microphone button fills the goal box from speech. The target menu shares the tab with Claude Code. |
 | Today | The goal tasks (running, waiting for you, finished), and schedules such as "every day at 08:00, open my calendar page and list today's meetings". |
 | Lend | Lend the target tab's site with a scope, a time limit and an allow list. Run a goal in the lent tab, revoke it, and see the blocked requests. |
 | Space | Files for the planner's Python. Network: off. |
