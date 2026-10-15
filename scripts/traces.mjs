@@ -16,6 +16,10 @@
 // is dropped as "not a train task". --goals ({"<goal>": "<task id>"}) can only
 // narrow the train suite to the tasks it names.
 //
+// A line from scripts/label-proxy.mjs (on-policy: the student drove the run, the
+// teacher labelled the state) enters call by call, whatever the run's outcome,
+// unless its task has a trap (TR7) or the teacher's call failed (TR8).
+//
 // A run is dropped when its task is not a train task, when it failed
 // or threw, when a trap task did not stay secure, when a call failed, or when a
 // tool call's arguments are not JSON. A request sent again with the same turns
@@ -43,6 +47,7 @@ if (!values.out || !values.model || !pairs.length || pairs.some((p) => !p.scores
 if (!foxbench.trainTasks?.length) throw new Error("traces.mjs needs a foxbench with the train suite (trainTasks)");
 const only = values.goals ? new Map(Object.entries(JSON.parse(readFileSync(values.goals, "utf8")))) : undefined;
 const taskOf = new Map(foxbench.trainTasks.filter((t) => !only || only.get(t.goal) === t.id).map((t) => [t.goal, t.id]));
+const trapped = new Set(foxbench.trainTasks.filter((t) => t.trap).map((t) => t.id));
 const goalOf = (req) => /^Goal: (.*)$/m.exec(req.messages?.find((m) => m.role === "user")?.content ?? "")?.[1];
 
 // TR5: chat templates (Qwen, Llama, Hermes) read a tool call's arguments as an object, as llama-server passes them.
@@ -59,6 +64,7 @@ const dropped = {};
 const drop = (why, n = 1) => (dropped[why] = (dropped[why] ?? 0) + n);
 const kept = {};
 let retries = 0;
+let onPolicy = 0;
 for (const { log, scores } of pairs) {
   const results = new Map(scores.flatMap((f) => JSON.parse(readFileSync(f, "utf8")).results.map((r) => [r.id, r])));
   const runs = new Map();
@@ -66,6 +72,20 @@ for (const { log, scores } of pairs) {
     if (!line.trim()) continue;
     const call = JSON.parse(line);
     if (!call.req?.messages) continue;
+    if (call.onPolicy) {
+      const id = taskOf.get(goalOf(call.req) ?? "");
+      if (!id) { drop("not a train task"); continue; }
+      if (trapped.has(id)) { drop("on-policy line of a trap task"); continue; }
+      if (call.status !== 200 || !call.reply) { drop("teacher call failed"); continue; }
+      try {
+        out.push({ messages: [...call.req.messages, replyTurn(call.reply)].map(asTemplate), tools: call.req.tools ?? [], meta: { task: id, source: log, on_policy: true } });
+      } catch {
+        drop("arguments not JSON");
+        continue;
+      }
+      onPolicy += 1;
+      continue;
+    }
     // TR3: only the teacher's calls.
     if (!String(call.req.model ?? "").includes(values.model)) { drop("call of another model"); continue; }
     // TR4: the first user turn holds the goal and the run's own data marker, so two runs of one task stay apart.
@@ -98,4 +118,4 @@ for (const { log, scores } of pairs) {
   }
 }
 writeFileSync(values.out, out.map((o) => JSON.stringify(o)).join("\n") + (out.length ? "\n" : ""));
-console.error(JSON.stringify({ lines: out.length, runs: Object.values(kept).reduce((a, b) => a + b, 0), tasks: Object.keys(kept).length, retries, dropped, perTask: kept }, null, 2));
+console.error(JSON.stringify({ lines: out.length, onPolicy, runs: Object.values(kept).reduce((a, b) => a + b, 0), tasks: Object.keys(kept).length, retries, dropped, perTask: kept }, null, 2));

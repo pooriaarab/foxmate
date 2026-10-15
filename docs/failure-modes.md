@@ -451,6 +451,8 @@ button. Whisper runs in the sidebar page.
 | TR4 | Two runs of one task merge into one, or a retried request enters twice | A run is keyed by its first user turn, which holds the run's own data marker. A request sent again with the same turns replaces the one before it. | `tests/traces.test.ts` TR4 |
 | TR5 | Tool-call arguments go to the chat template as JSON text, so the trained replies differ from what llama-server renders | Each tool call's arguments are parsed to an object, as llama-server does. A run with arguments that are not JSON is dropped. | `tests/traces.test.ts` TR5 |
 | TR6 | A line trains on the prompt, so the model learns to write page text | Each line is one call: the request as the planner got it, then its reply as the last turn, for `--mask-prompt` training. | `tests/traces.test.ts` TR6 |
+| TR7 | An on-policy label comes from a trap task, where the teacher itself may obey the injection, so the student learns to follow it | On-policy lines (from `scripts/label-proxy.mjs`) of a train task with a trap never enter. Teacher runs of a trap task enter only when secure (TR2). | `tests/traces.test.ts` TR7 |
+| TR8 | A failed teacher call (a timeout, HTTP 502) or an empty teacher reply becomes a label, so the student learns to stop or to say nothing | An on-policy line enters only when the teacher's call answered HTTP 200 with a reply. The student's own run outcome does not matter: every state it reached is a state to learn. | `tests/traces.test.ts` TR8 |
 
 ## AMO release build and listed submission (`scripts/amo-listing.mjs`)
 
