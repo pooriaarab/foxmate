@@ -93,8 +93,10 @@ One goal, step by step:
    them under the goal as notes.
 3. The brain builds the planner from your settings. foxmind always gets
    `only: ["browser", "local"]`, so a cloud model is never called.
-4. foxmate grants the tab's host only, for this run. On a lent tab, the
-   grants stop at the scope you lent.
+4. foxmate grants the tab's host, and each site your goal names by its
+   address (`https://...`), for this run. On a lent tab, the grants stop
+   at the scope you lent and the lent site. To go to another site, the
+   planner asks you first, and the run moves there in a new tab.
 5. foxloop asks the planner for a tool call. On the tab's host, foxgate
    allows page reads, typing and opening pages with no approval. It asks
    you before each click and each foxpaw task, because they can send a
@@ -211,9 +213,9 @@ Google credentials and manual microphone checks remain pending; recorded evaluat
 
 ## Runtime surfaces
 
-The CLI has two commands: `try` and `bench`.
+The CLI has three commands: `try`, `bench` and `bench-mcp`.
 The foxbridge path answers six MCP tools: `list_tabs`, `snapshot`, `act`, `click`, `run_task`, and `open_url`.
-foxmate provides no MCP server of its own.
+Beside the foxbridge path, `foxmate bench-mcp` is an MCP server for foxbench runs only.
 The sections below retain app views, privacy details, APIs, and historical evaluation records.
 
 ### The app
@@ -244,7 +246,7 @@ back. It honors "reduce motion".
 
 | View | What it does |
 |---|---|
-| Chat | A goal box for the target tab, ideas to start, and each run as a conversation: the planner, each plan, gate decision, approval card (the site, one line of what happens, where a form fill sends, and Deny, Always allow and Approve; the form's fields and the exact action sit behind Details), result and the final check. "Your turn" at a sign-in step. With no web page open, a goal still runs: it asks before it opens each site in a new tab. A mail or calendar read asks once per run. The microphone button fills the goal box from speech. The target menu shares the tab with Claude Code. |
+| Chat | A goal box for the target tab, ideas to start, and each run as a conversation: the planner, each plan, gate decision, approval card (the site, one line of what happens, where a form fill sends, and Deny, Always allow and Approve; the form's fields and the exact action sit behind Details), result and the final check. "Your turn" at a sign-in step. A goal still runs with no web page open, and a run can go to a site the goal does not name: it asks before it opens each site in a new tab. A mail or calendar read asks once per run. The microphone button fills the goal box from speech. The target menu shares the tab with Claude Code. |
 | Today | The goal tasks (running, waiting for you, finished), and schedules such as "every day at 08:00, open my calendar page and list today's meetings". |
 | Lend | Lend the target tab's site with a scope, a time limit and an allow list. Run a goal in the lent tab, revoke it, and see the blocked requests. |
 | Space | Files for the planner's Python. Network: off. |
@@ -353,6 +355,7 @@ foxmate bench [--planner scripted|ollama|llama-server|saluki] [--model <name>] [
               [--approve careful|all|none] [--suite core|hard|security+|all] [--tasks <ids>]
               [--ask on|off] [--scout <url>|off] [--replay on|off] [--repeat]
               [--fixed-ports <n>] [--timeout <s>] [--out <dir>] [--headed] [--firefox <path>] [--help]
+foxmate bench-mcp [the planner options of bench]
 ```
 
 `foxmate try` opens Firefox with a fresh, temporary profile and foxmate
@@ -392,6 +395,46 @@ FOXKIT_BROWSER=ichabod node cli/foxmate.mjs bench --planner saluki
 - `<out>/ichabod-sessions-<date>.json` lists the session IDs, to find
   each recording on the Ichabod console.
 - `--firefox` and `--headed` stop the run: Ichabod cannot set them.
+
+##### Every foxbench benchmark over MCP
+
+`foxmate bench-mcp` is an MCP server on stdio with one tool, `run_task`
+{url, goal}, for `foxbench run --agent mcp`. Each call runs one task in one
+Firefox and returns `{ done, log, answer?, metrics? }`; foxbench scores the
+task itself. It takes the planner flags of `foxmate bench`, and
+`FOXKIT_BROWSER=ichabod` runs it on Ichabod as above. A preset in
+`foxbench.agents.json`, in the working directory or in
+`~/.config/foxbench/`:
+
+```json
+{
+  "foxmate": {
+    "command": "node",
+    "args": ["/path/to/foxmate/cli/foxmate.mjs", "bench-mcp", "--planner", "saluki"],
+    "name": "foxmate (saluki)"
+  }
+}
+```
+
+```sh
+foxbench run --agent foxmate --suite webgames --subset quick
+```
+
+Each `foxbench run` starts a new Firefox with a temporary profile, so the
+workflows that foxmate keeps die with it and a second run replays nothing.
+`--workflows <file>` (for example `"bench-mcp", "--workflows",
+"/path/to/workflows.json"` in `args`) loads the file at start and writes it
+after each task. Use it with `--fixed-ports`, because a kept workflow is keyed
+on the origin and the goal. A file that is not a JSON object ends the command
+with an error, and a file that does not exist yet starts empty. The file holds
+typed values and URLs (never a password): keep it out of git and out of shared
+folders, and say on a score board that a run replayed. `metrics.replayed` of a
+reply counts the replayed steps.
+
+`pnpm e2e:mcp` runs foxbench's train suite with noop and with foxmate over
+MCP; noop must score 0 and foxmate above 0. `pnpm e2e:mcp-workflows` runs two
+`bench-mcp` processes with `--workflows`; the second must replay 10 or more
+steps of flights-oneway.
 
 #### Library
 

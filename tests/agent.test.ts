@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 import { askSam } from "../cli/bench.mjs";
 import { mountSite } from "./mount.js";
 import { HandoffError, maskSecrets, type PassEvent } from "../src/pass.js";
-import { allowsDays, asksMath, createAgent, goalFile, plannerRules, unnamedBill, priceTie, SETTLED_SUMMARY, unnamedChoice, USER_DOMAIN, type AgentEvent, type AgentOptions, type RunInput } from "../src/agent.js";
+import { allowsDays, asksMath, createAgent, goalFile, plannerContext, plannerRules, unnamedBill, priceTie, SETTLED_SUMMARY, unnamedChoice, USER_DOMAIN, type AgentEvent, type AgentOptions, type RunInput } from "../src/agent.js";
 import * as foxpaw from "foxpaw";
 import type { Control, Snapshot } from "foxpaw";
 import type { Workflow, WorkflowStore } from "../src/workflow.js";
@@ -196,6 +196,10 @@ const framedSignIn = () => {
   const p = signIn();
   return { ...p, frames: [...p.frames, { frameId: 4, url: "https://evil.test/frame", key: "k4" }], controls: p.controls.map((c) => (c.id === "0:2" ? { ...c, frameId: 4 } : c)) };
 };
+/** A page with three buttons and the given text, and a click on one of them (G55). */
+const fontButton = (node: number, label: string) => signInControl(node, label, { role: "button", tag: "button" });
+const fontPage = (text: string, base = 0): Snapshot => ({ url: "http://shop.test/cart", title: "Fonts", text, headings: [], frames: [{ frameId: 0, url: "http://shop.test/cart", key: "k" }], captcha: false, more: false, controls: [fontButton(base + 5, "Variable Font Demo"), fontButton(base + 6, "Cancel"), fontButton(base + 7, "+")] });
+const clickStep = (id: string) => ({ tool: "click", args: { controlId: id } });
 /** foxloop's own browser tools over a stand-in foxpaw that reads `page` and records each typed value (HP20). */
 function realTools(page: () => Snapshot, typed: string[], opened: string[] = []): NonNullable<AgentOptions["makeTools"]> {
   // What each field holds, as foxpaw reads it: a password field shows "•••".
@@ -483,6 +487,15 @@ describe("agent", () => {
     expect(end).toMatchObject({ status: "blocked", reason: "check-failed" });
   });
 
+  it("G56: the planner is told that the finish summary is the full answer when the goal asks for information", async () => {
+    const { run, requests } = await setup();
+    helper.described = [];
+    await run({ goal: "Tell me the hotel's name, rating and price range.", script: [{ tool: "snapshot", args: {} }, finish] });
+    expect(systemOf(requests[0])).toContain("When the goal asks for information, your finish summary is the answer: give every fact the goal asks for");
+    expect(helper.described[0]?.finish).toMatch(/every fact the goal asks for/);
+    expect(helper.described[0]?.finish).not.toMatch(/8 words/);
+  });
+
   it("G23: each planner request names the open tab, the allowed sites, and says to work on the open page", async () => {
     const { run, requests } = await setup();
     await run({ script: [{ tool: "snapshot", args: {} }, finish] });
@@ -497,11 +510,27 @@ describe("agent", () => {
     expect(requests.length).toBe(2);
   });
 
+  it("G54: a site the goal names by its address gets the tab's grants; an email address, a note or a loan names none", async () => {
+    const named = await setup();
+    const goal = "Find the mug. Do this on https://amazon.test/deals.";
+    const end = await named.run({ goal, script: [{ tool: "open_url", args: { url: "https://www.amazon.test/s?k=mug" } }, { tool: "open_url", args: { url: "https://amazon.test/" } }, { tool: "snapshot", args: {} }, finish] });
+    expect(end.status).toBe("done");
+    expect(named.ran.map((r) => r.args.url)).toEqual(["https://www.amazon.test/s?k=mug", "https://amazon.test/"]);
+    expect(named.domainsSeen[0]).toEqual(expect.arrayContaining(["shop.test", "amazon.test", "www.amazon.test"]));
+    expect(tabNote(named.requests[0])).toContain("- The sites this run may use: shop.test, amazon.test, www.amazon.test.");
+    const mail = await setup();
+    await mail.run({ goal: "Email the receipt to bob@evil.test", script: [{ tool: "open_url", args: { url: "http://evil.test/" } }, finish, finish] });
+    expect(mail.events.find((e) => e.type === "decision" && e.action?.tool === "open_url")).toMatchObject({ decision: "deny", reason: "no-grant" });
+    const lent = await setup();
+    await lent.run({ tabId: 2, goal: "Read it. Do this on https://evil.test/.", script: [{ tool: "open_url", args: { url: "https://evil.test/" } }, finish, finish] });
+    expect(lent.events.find((e) => e.type === "decision" && e.action?.tool === "open_url")).toMatchObject({ decision: "deny", reason: "no-grant" });
+  });
+
   it("G52: the tab note names only web sites, not the domains of module tools", async () => {
     const { run, requests } = await setup();
     await run({ script: [{ tool: "snapshot", args: {} }, finish] });
     const note = tabNote(requests[0]);
-    expect(note).toContain("- The sites this run may use: shop.test. The gate denies every other site.");
+    expect(note).toContain("- The sites this run may use: shop.test. For another site, call open_site with its address: the user approves it first.");
     expect(note).not.toMatch(/space\.foxmate|googleapis/);
   });
 
@@ -711,6 +740,34 @@ describe("agent", () => {
     for (const form of ["p@ss#Word9", "P@SS#WORD9", "p%40ss%23Word9"]) expect(longShown).not.toContain(form);
   });
 
+  it("G55: the third run of a step that twice returned the same on the same page does not run; a step whose result changes repeats", async () => {
+    const read = { tool: "snapshot", args: {} };
+    const typed: string[] = [];
+    const loop = await setup({ makeTools: realTools(() => fontPage("Fonts."), typed) });
+    await loop.run({ script: [clickStep("0:5"), read, clickStep("0:6"), read, clickStep("0:5"), read, clickStep("0:6"), read, clickStep("0:5"), read, finish, finish] });
+    expect(typed).toEqual(["0:5:click:", "0:6:click:", "0:5:click:", "0:6:click:"]);
+    expect(loop.events.filter((e) => e.type === "approval-needed")).toHaveLength(4);
+    const stopped = loop.events.filter((e) => e.type === "tool-result" && e.name === "click").at(-1) as { ok: boolean; summary: string };
+    expect(stopped.ok).toBe(false);
+    expect(loop.requests.some((r) => r.includes("This same step on this page returned the same result the last 2 times"))).toBe(true);
+    const counted: string[] = [];
+    const counter = await setup({ makeTools: realTools(() => fontPage(`Count: ${counted.length}.`), counted) });
+    const end = await counter.run({ script: [clickStep("0:7"), read, clickStep("0:7"), read, clickStep("0:7"), read, clickStep("0:7"), read, finish] });
+    expect(counted).toEqual(["0:7:click:", "0:7:click:", "0:7:click:", "0:7:click:"]);
+    expect(end.status).toBe("done");
+  });
+
+  it("G57: a loop on a page that renders its controls with new ids each time still stops at the third step", async () => {
+    const read = { tool: "snapshot", args: {} };
+    const typed: string[] = [];
+    const loop = await setup({ makeTools: realTools(() => fontPage("Fonts.", typed.length * 100), typed) });
+    const demo = { tool: "click", args: { controlId: "{{control:Variable Font Demo}}" } };
+    const cancel = { tool: "click", args: { controlId: "{{control:Cancel}}" } };
+    await loop.run({ script: [demo, read, cancel, read, demo, read, cancel, read, demo, read, finish, finish] });
+    expect(typed).toEqual(["0:5:click:", "0:106:click:", "0:205:click:", "0:306:click:"]);
+    expect(loop.requests.some((r) => r.includes("This same step on this page returned the same result the last 2 times"))).toBe(true);
+  });
+
   it("HP20: fill types the password the goal names into a password field on the run's site, in one call with the username", async () => {
     const typed: string[] = [];
     const { run, events, trail } = await setup({ makeTools: realTools(() => signIn(), typed) });
@@ -889,11 +946,17 @@ describe("agent", () => {
     expect(denied.opened).toEqual([]);
   });
 
-  it("OS2: a run on a web tab, or on a loan, gets no open_site", async () => {
+  it("OS2: a run on a web tab asks for open_site and moves its grants; a run on a loan gets no open_site", async () => {
     const web = await setup();
-    await web.run({ script: [openSite("https://www.bistro.test/"), finish] });
-    expect(web.requests[1]).toContain('There is no tool \\"open_site\\"');
-    expect(web.opened).toEqual([]);
+    const end = await web.run({ script: [openSite("https://www.bistro.test/"), { tool: "snapshot", args: {} }, finish] });
+    expect(end.status).toBe("done");
+    expect(web.events.filter((e) => e.type === "approval-needed")).toMatchObject([{ action: { tool: "open_site", domain: "new-tab.foxmate" } }]);
+    expect(web.opened).toEqual(["https://www.bistro.test/"]);
+    expect(web.domainsSeen.at(-1)).toContain("www.bistro.test");
+    expect(web.domainsSeen.at(-1)).not.toContain("shop.test");
+    const denied = await setup();
+    await denied.run({ script: [openSite("https://www.bistro.test/"), finish] }, "deny");
+    expect(denied.opened).toEqual([]);
     const lent = await setup();
     await lent.run({ tabId: 2, script: [openSite("https://www.bistro.test/"), finish] });
     expect(lent.opened).toEqual([]);
@@ -922,6 +985,17 @@ describe("agent", () => {
     expect(end.status).toBe("done");
     expect(www.domainsSeen[0]).toContain("www.bistro.test");
     expect(www.domainsSeen[0]).not.toContain("bistro.test");
+  });
+
+  it("OS9: the tab note tells a run that may open a site to call open_site, also when a click left the run's sites", async () => {
+    const { run, requests } = await setup();
+    await run({ script: [{ tool: "snapshot", args: {} }, finish] });
+    expect(tabNote(requests[0])).toContain("For another site, call open_site with its address: the user approves it first.");
+    const away = plannerContext({ url: "https://www.google.com/search?q=mug", title: "mug - Search", sites: ["shop.test"], canOpen: true });
+    expect(away).toContain("- The open tab is on www.google.com, which this run may not use: its page tools get no grant. Call open_site with the tab's address to ask the user to work there.");
+    const lent = plannerContext({ url: "https://www.google.com/", title: "Google", sites: ["shop.test"] });
+    expect(lent).toContain("The gate denies every other site.");
+    expect(lent).not.toContain("open_site");
   });
 
   it("OS5: an address that is not a plain web address is refused before any approval", async () => {
@@ -1230,6 +1304,35 @@ describe("agent", () => {
     expect(second.ran.map((r) => r.tool)).toEqual(["open_url", "click"]);
     expect(second.events.filter((e) => e.type === "approval-needed").length).toBe(1);
     expect(second.events.filter((e) => e.type === "plan").map((e) => (e as { provider?: string }).provider === "replay")).toEqual([true, true, false]);
+  });
+
+  it("WF27: a run that replayed every kept step ends on the settle check, though its goal has two parts; an unsure helper or an answer does not", async () => {
+    const kept = new Map<string, Workflow>();
+    const workflows: WorkflowStore = { get: async (k) => kept.get(k), set: async (k, w) => { kept.set(k, w); } };
+    const send = [shopPage(1), { tool: "click", args: { button: "Send form" } }];
+    const replayed = async (goal: string, settle = '{"done": true, "sure": true, "why": "Mug and hat bought"}') => {
+      kept.clear();
+      helper.settle = undefined;
+      expect((await (await setup({ workflows })).run({ goal, script: [...send, finish] })).status).toBe("done");
+      Object.assign(helper, { settle, settled: [], planned: [], slowMs: 200 });
+      return (await setup({ workflows })).run({ goal, script: [finish] });
+    };
+    try {
+      // A cold first run has no settle check: G50 stands for it.
+      expect(helper.settled).toEqual([]);
+      const end = await replayed("Buy the mug and the hat");
+      expect(end).toMatchObject({ status: "done", summary: SETTLED_SUMMARY });
+      expect(helper.settled).toHaveLength(1);
+      // Nothing new is kept from a settled run (WF7): the first run's two entries stand.
+      expect(kept.size).toBe(2);
+      // An unsure helper, or a goal that asks for an answer, leaves the finish to the planner.
+      expect(await replayed("Buy the mug and the hat", '{"done": true, "sure": false, "why": "cannot tell"}')).toMatchObject({ status: "done", summary: "Done." });
+      expect(helper.settled).toHaveLength(1);
+      expect(await replayed("Buy the mug and tell me the price")).toMatchObject({ status: "done", summary: "Done." });
+      expect(helper.settled).toEqual([]);
+    } finally {
+      Object.assign(helper, { settle: undefined, reply: undefined, slowMs: 0 });
+    }
   });
 
   it("WF12: a goal of the same shape replays with its own values, and the planner writes the summary", async () => {

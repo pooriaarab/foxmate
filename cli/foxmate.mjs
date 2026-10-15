@@ -2,11 +2,13 @@
 // The foxmate command.
 //   foxmate try     open a fresh Firefox profile with foxmate installed
 //   foxmate bench   score foxmate on foxbench in a real Firefox
+//   foxmate bench-mcp   an MCP server for foxbench run --agent mcp
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { writeArtifact } from "create-foxkit/e2e";
 import { SUITES, runSuite, taskById, tasksIn, toMarkdown, writeScore } from "foxbench";
 import { foxmateAdapter } from "./bench.mjs";
+import { serveBenchMcp } from "./bench-mcp.mjs";
 import { startFox } from "./driver.mjs";
 import { benchExtension, isRemote } from "./remote.mjs";
 
@@ -35,17 +37,43 @@ foxmate bench [options]
   --headed           show the Firefox window
   --firefox <path>   the Firefox binary
   FOXKIT_BROWSER=ichabod with ICHABOD_API_KEY runs the bench in Firefox on
-  Ichabod. Build dist-ext-bench/ first: node scripts/build-ext.mjs --bench-remote`;
+  Ichabod. Build dist-ext-bench/ first: node scripts/build-ext.mjs --bench-remote
+
+foxmate bench-mcp [--planner, --model, --base-url, --approve, --ask, --scout,
+                   --replay, --timeout, --headed, --firefox as for bench]
+                  [--workflows <file>]
+  An MCP server on stdio with one tool, run_task {url, goal}, for
+  foxbench run --agent mcp -- foxmate bench-mcp. Each call runs one task
+  in one Firefox, one call at a time. FOXKIT_BROWSER=ichabod as for bench.
+  --workflows <file> keeps the kept workflows in a file: it is loaded at start
+  and written after each task, so a second run replays (WF28). A file that
+  is not a JSON object ends the command with code 2.`;
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     planner: { type: "string", default: "scripted" }, model: { type: "string" }, "base-url": { type: "string" },
-    approve: { type: "string", default: "careful" }, ask: { type: "string", default: "on" }, scout: { type: "string" }, replay: { type: "string", default: "on" }, repeat: { type: "boolean", default: false }, "fixed-ports": { type: "string" }, suite: { type: "string", default: "core" }, tasks: { type: "string" }, timeout: { type: "string", default: "600" },
+    approve: { type: "string", default: "careful" }, ask: { type: "string", default: "on" }, scout: { type: "string" }, replay: { type: "string", default: "on" }, repeat: { type: "boolean", default: false }, "fixed-ports": { type: "string" }, workflows: { type: "string" }, suite: { type: "string", default: "core" }, tasks: { type: "string" }, timeout: { type: "string", default: "600" },
     out: { type: "string", default: "artifacts" }, headed: { type: "boolean", default: false }, firefox: { type: "string" }, help: { type: "boolean" },
   },
 });
 const command = positionals[0];
+
+/** The planner settings of bench and bench-mcp. A bad flag exits with code 2, before Firefox starts. */
+function benchPlanner() {
+  if (!["careful", "all", "none"].includes(values.approve)) {
+    console.error("--approve must be careful, all or none.");
+    process.exit(2);
+  }
+  for (const flag of ["ask", "replay"]) {
+    if (!["on", "off"].includes(values[flag])) {
+      console.error(`--${flag} must be on or off.`);
+      process.exit(2);
+    }
+  }
+  const scout = values.scout === undefined ? {} : { helper: values.scout === "off" ? { off: true } : { baseURL: values.scout } };
+  return { planner: values.planner, ...(values.model ? { model: values.model } : {}), ...(values["base-url"] ? { baseURL: values["base-url"] } : {}), ...(values.ask === "off" ? { ask: false } : {}), ...(values.replay === "off" ? { replay: false } : {}), ...scout };
+}
 
 if (values.help || !command) {
   console.log(HELP);
@@ -60,11 +88,10 @@ if (values.help || !command) {
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
   session.fox.browser.on("disconnected", stop);
+} else if (command === "bench-mcp") {
+  await serveBenchMcp({ planner: benchPlanner(), approve: values.approve, timeoutMs: Number(values.timeout) * 1000, headless: !values.headed, ...(values.workflows ? { workflows: values.workflows } : {}), ...(values.firefox ? { firefox: values.firefox } : {}) });
 } else if (command === "bench") {
-  if (!["careful", "all", "none"].includes(values.approve)) {
-    console.error("--approve must be careful, all or none.");
-    process.exit(2);
-  }
+  const planner = benchPlanner();
   const suites = [...SUITES, "all"];
   if (!suites.includes(values.suite)) {
     console.error(`--suite must be one of: ${suites.join(", ")}.`);
@@ -75,19 +102,11 @@ if (values.help || !command) {
     console.error(`--tasks names a task that foxbench does not have. Run "npx foxbench list".`);
     process.exit(2);
   }
-  for (const flag of ["ask", "replay"]) {
-    if (!["on", "off"].includes(values[flag])) {
-      console.error(`--${flag} must be on or off.`);
-      process.exit(2);
-    }
-  }
   const fixedPorts = values["fixed-ports"] === undefined ? undefined : Number(values["fixed-ports"]);
   if (fixedPorts !== undefined && !(Number.isInteger(fixedPorts) && fixedPorts >= 1024 && fixedPorts <= 65000)) {
     console.error("--fixed-ports must be a port from 1024 to 65000.");
     process.exit(2);
   }
-  const scout = values.scout === undefined ? {} : { helper: values.scout === "off" ? { off: true } : { baseURL: values.scout } };
-  const planner = { planner: values.planner, ...(values.model ? { model: values.model } : {}), ...(values["base-url"] ? { baseURL: values["base-url"] } : {}), ...(values.ask === "off" ? { ask: false } : {}), ...(values.replay === "off" ? { replay: false } : {}), ...scout };
   // FOXKIT_BROWSER=ichabod: Firefox on Ichabod, with the remote bench build.
   const remote = isRemote();
   const start = () => startFox({ headless: !values.headed, ...(remote ? { extension: benchExtension() } : {}), ...(values.firefox ? { firefox: values.firefox } : {}) });

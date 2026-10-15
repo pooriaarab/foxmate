@@ -24,9 +24,10 @@ export function policy(name, goal) {
 }
 
 /**
- * Asks foxbench's stand-in user: posts the question to the Ask Sam chat at
- * /user/ on the task's site and returns Sam's newest answer, or undefined
- * when the chat does not answer (BN3). It posts as the task page would, with
+ * Asks foxbench's stand-in user: posts the question to the chat at /user/
+ * on the task's site and returns the newest answer, or undefined when the
+ * chat does not answer (BN3). Ask Sam on the in-house sites answers as
+ * "Sam:"; the user channel of tau2 and Gaia2 answers as "User:" (BN8). It posts as the task page would, with
  * the page as the Referer: a site behind a path mount (the tunnel a cloud
  * browser reaches it through) has no /user/ at the root of the address, and
  * the mount finds the site by the Referer (BN7).
@@ -35,7 +36,7 @@ export async function askSam(url, question) {
   try {
     const res = await fetch(new URL("/user/", url), { method: "POST", headers: { referer: url }, body: new URLSearchParams({ q: question }), signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return undefined;
-    const answers = [...(await res.text()).matchAll(/<strong>Sam:<\/strong> ([^<]*)<\/p>/g)];
+    const answers = [...(await res.text()).matchAll(/<strong>(?:Sam|User):<\/strong>\s*(?:<p class="user">)?([^<]*)<\/p>/g)];
     // foxbench writes each special character as a numeric entity.
     return answers.at(-1)?.[1].replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))) || undefined;
   } catch {
@@ -58,7 +59,7 @@ export function runMetrics(run) {
   const count = (kind) => run.kinds.filter((k) => k === kind).length;
   // A replayed step of the workflow cache is a plan event with no model call (WF8).
   const replayed = (run.trail ?? []).filter((e) => e.kind === "run.route" && e.data?.by === "replay").length;
-  return { modelCalls: count("loop.plan") - replayed, steps: count("loop.tool-result"), approvals: run.approvals.length };
+  return { modelCalls: count("loop.plan") - replayed, replayed, steps: count("loop.tool-result"), approvals: run.approvals.length };
 }
 
 /**
@@ -71,6 +72,8 @@ export function foxmateAdapter(session, { planner, approve = "careful", timeoutM
   let tab;
   let models;
   let started = Date.now();
+  /** Takes the model gate paths and the tunnel host out of a text. */
+  const redact = (text) => (models ? models.redact(text) : String(text));
   return {
     name: name ?? `foxmate (${planner.planner === "scripted" ? "scripted planner" : `${planner.planner}${planner.model ? ` ${planner.model}` : ""}`}, ${approve} approvals)`,
     async runTask({ url, goal }) {
@@ -92,13 +95,16 @@ export function foxmateAdapter(session, { planner, approve = "careful", timeoutM
         const approvals = run.approvals.map((a) => `${a.answer}: ${a.detail || a.text}`.slice(0, 160));
         const questions = run.questions.map((q) => `asked: ${q.text} -> ${q.answer || "(skipped)"}`.slice(0, 200));
         const log = [run.status, ...questions, ...approvals].join("\n");
-        return { done: run.done, log: models ? models.redact(log) : log, metrics: runMetrics(run) };
+        // A benchmark that scores the answer reads the finish summary (BM6).
+        const answer = run.done ? { answer: redact(run.status.replace(/^Done: /, "")) } : {};
+        return { done: run.done, log: redact(log), metrics: runMetrics(run), ...answer };
       } finally {
         await page.close().catch(() => undefined);
         if (tab === page) tab = undefined;
         await site?.close();
       }
     },
+    redact,
     async abort() {
       // A runtime port, not window.postMessage.
       // oxlint-disable-next-line unicorn/require-post-message-target-origin
