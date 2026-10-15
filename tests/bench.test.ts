@@ -3,10 +3,23 @@
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { sites, startServer, taskById } from "foxbench";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 // @ts-expect-error -- cli/ is plain JavaScript with no type declarations.
 import { askSam, foxmateAdapter, runMetrics } from "../cli/bench.mjs";
 import { mountSite } from "./mount.js";
+// @ts-expect-error -- cli/ is plain JavaScript with no type declarations.
+import { publicSite } from "../cli/remote.mjs";
+
+// BN9: create-foxkit's tunnel, recorded: each mount's port and options, and which mounts are open.
+const mounts = vi.hoisted(() => ({ made: [] as { port: number; root: boolean; open: boolean }[] }));
+vi.mock("create-foxkit/e2e", async (original) => ({
+  ...(await original<object>()),
+  tunnel: async (port: number, options: { root?: boolean } = {}) => {
+    const m = { port, root: Boolean(options.root), open: true };
+    mounts.made.push(m);
+    return { url: options.root ? "https://t.trycloudflare.com" : `https://t.trycloudflare.com/_foxkit/${mounts.made.length}`, close: async () => { m.open = false; } };
+  },
+}));
 // foxbench's own user channel (tau2, Gaia2), which its index does not export.
 import { scriptedUser, serveUser } from "../node_modules/foxbench/dist/bench/user.js";
 
@@ -73,6 +86,18 @@ describe("bench", () => {
     expect(await ask(url, "Which order?")).toBe("Order #W123.");
     expect(user.turns.filter((t) => t.from === "agent").map((t) => t.text)).toEqual(["What is your email address?", "Which order?"]);
     server.close();
+  });
+
+  it("BN9: each task site is mounted at the root of the tunnel, and a site an earlier task still holds is unmounted first", async () => {
+    const first = await (publicSite as (url: string) => Promise<{ url: string; close: () => Promise<void> }>)("http://127.0.0.1:4101/towers-of-hanoi-hard?x=1");
+    expect(first.url).toBe("https://t.trycloudflare.com/towers-of-hanoi-hard?x=1");
+    const second = await (publicSite as (url: string) => Promise<{ url: string; close: () => Promise<void> }>)("http://127.0.0.1:4102/");
+    expect(second.url).toBe("https://t.trycloudflare.com/");
+    expect(mounts.made).toEqual([{ port: 4101, root: true, open: false }, { port: 4102, root: true, open: true }]);
+    await first.close();
+    expect(mounts.made[1]?.open).toBe(true);
+    await second.close();
+    expect(mounts.made[1]?.open).toBe(false);
   });
 
   it("BN7: a site behind a path mount (the tunnel a cloud browser uses) still gets the question, and Sam's answer comes back", async () => {

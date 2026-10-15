@@ -51,7 +51,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
-    "create-foxkit": "^0.1.5",
+    "create-foxkit": "^0.1.9",
     "foxbench": "^0.1.9",
     "foxden": "npm:foxden-sandbox@^0.1.2",
     "foxgate": "^0.1.3",
