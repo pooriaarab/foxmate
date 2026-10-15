@@ -35,7 +35,8 @@
     "lint:ext": "node scripts/lint-ext.mjs",
     "check:amo": "node scripts/amo-listing.mjs check",
     "e2e": "pnpm build:ext && node e2e/run.mjs",
-    "bench": "pnpm build:ext && node cli/foxmate.mjs bench"
+    "bench": "pnpm build:ext && node cli/foxmate.mjs bench",
+    "e2e:mcp": "pnpm build && pnpm build:ext && node e2e/bench-mcp.mjs"
   },
   "devDependencies": {
     "@huggingface/transformers": "^4.3.1",
