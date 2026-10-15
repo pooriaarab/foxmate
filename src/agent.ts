@@ -210,8 +210,12 @@ export function priceTie(question: string, goal = ""): boolean {
 
 /** How often a step may return the same before its next call does not run (G55). */
 const LOOP_REPEATS = 2;
-/** A step by its tool and arguments, with the control as foxloop pinned it but not the read it was pinned on (G55). Keys in order: the gate sorts them. */
-const stepKey = (name: string, args: Record<string, unknown>) => `${name} ${JSON.stringify(args, (k, v) => (["generation", "guard", "tabId"].includes(k) ? undefined
+/** What a read or a render changes in a step: the snapshot, and the control ids and DOM nodes; a fill keeps each field in its pinned targets (G55, G57). */
+const RENDERED = new Set(["generation", "guard", "tabId", "id", "node", "controlId", "send", "fields"]);
+/** The control ids in a text ("0:393"), which a render changes (G57). */
+const CONTROL_IDS = /\b\d+:\d+\b/g;
+/** A step by its tool and arguments, with the control as foxloop pinned it but not what a render changes (G55, G57). Keys in order: the gate sorts them. */
+const stepKey = (name: string, args: Record<string, unknown>) => `${name} ${JSON.stringify(args, (k, v) => (RENDERED.has(k) ? undefined
   : v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).toSorted(([a], [b]) => (a < b ? -1 : 1))) : v))}`;
 /** The finish tool with a summary that may hold the whole answer (G56). */
 const fullFinish = (d: ToolDef): ToolDef => (d.function.name !== FINISH ? d : {
@@ -600,7 +604,7 @@ export function createAgent(options: AgentOptions): Agent {
       run: async (args: Record<string, unknown>, ctx: ToolContext) => {
         const out = await tool.run(args, ctx);
         const key = stepKey(tool.name, args);
-        stepResults.set(key, [...(stepResults.get(key) ?? []), `${out.ok} ${out.summary} ${out.untrusted ?? ""}`]);
+        stepResults.set(key, [...(stepResults.get(key) ?? []), `${out.ok} ${out.summary} ${out.untrusted ?? ""}`.replace(CONTROL_IDS, "#")]);
         return out;
       },
     }))
