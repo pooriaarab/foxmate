@@ -34,12 +34,15 @@ fi
 for t in llama-quantize llama-imatrix; do
   [ -x "$LLAMA_CPP/build/bin/$t" ] || cmake --build "$LLAMA_CPP/build" --config Release -j"$(nproc)" --target $t
 done
-BASE=$OUT/base
+# One copy of each base model on the VM, for every run.
+BASE=$HOME/planner-bases/${BASE_REPO//\//_}
 "$VENV/bin/hf" download "$BASE_REPO" --local-dir "$BASE" > /dev/null
-"$VENV/bin/python" "$HERE/train-planner.py" --set "$SET" --base "$BASE" --out "$OUT" "$@" 2>&1 | tee "$OUT/train.log"
+# SKIP_TRAIN=1 rebuilds the GGUF files from an adapter already in $OUT/adapter.
+[ -n "${SKIP_TRAIN:-}" ] || "$VENV/bin/python" "$HERE/train-planner.py" --set "$SET" --base "$BASE" --out "$OUT" "$@" 2>&1 | tee "$OUT/train.log"
 "$VENV/bin/python" "$HERE/merge-lora.py" "$BASE" "$OUT/adapter" "$OUT/merged"
 NAME=$(basename "$OUT")
 "$CONVERT/bin/python" "$LLAMA_CPP/convert_hf_to_gguf.py" "$OUT/merged" --outtype bf16 --outfile "$OUT/$NAME-bf16.gguf"
+rm -rf "$OUT/merged"
 # An importance matrix from the planner's own chats keeps Q4_K_M close to bf16 on this work.
 "$VENV/bin/python" -c '
 import json, sys
