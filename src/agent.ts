@@ -9,7 +9,7 @@ import type { FoxMemory } from "foxmemory";
 import * as foxpaw from "foxpaw";
 import type { ScriptingApi, Snapshot } from "foxpaw";
 import type { Provider } from "foxmind";
-import { createApprovals, ruleOffer, type Approvals, type RuleContext, type RuleOffer } from "./approvals.js";
+import { askText, createApprovals, ruleOffer, type Approvals, type RuleContext, type RuleOffer } from "./approvals.js";
 import { formDetail, withFields } from "./form.js";
 import { BrainError, createBrain, type Brain, type BrainSettings } from "./brain.js";
 import { HandoffError, goalPasswords, maskCards, maskPasswords, maskSecrets, passwordElsewhere, passwordSite, type Pass, type PassEvent } from "./pass.js";
@@ -1083,9 +1083,9 @@ export function createAgent(options: AgentOptions): Agent {
         const event = raw.type === "done" ? { ...raw, summary: maskCards(raw.summary) } : raw.type === "blocked" && raw.message ? { ...raw, message: maskCards(raw.message) } : raw;
         if (event.type === "approval-needed") {
           approvals.expect(event.requestId);
-          // ask() reads foxgate's text when foxloop calls it; read it here too, for the event.
+          // ask() reads foxgate's text when foxloop calls it; read it here too, for the event, as the ask shows it (UI13).
           const text = (await host.pending()).find((r) => r.id === event.requestId)?.text;
-          emit({ ...event, ...(text ? { exactText: text } : {}), ...withOffer(event.action) });
+          emit({ ...event, ...(text ? { exactText: askText(text) } : {}), ...withOffer(event.action) });
         } else emit(event);
         if (event.type === "tool-call" && event.name === "act" && (event.args as { op?: string } | undefined)?.op === "type") lastTyped = String((event.args as { controlId?: unknown }).controlId);
         // The run asked the user: the AQ7 guard steps aside, whatever the answer was (AQ8).
