@@ -196,6 +196,10 @@ const framedSignIn = () => {
   const p = signIn();
   return { ...p, frames: [...p.frames, { frameId: 4, url: "https://evil.test/frame", key: "k4" }], controls: p.controls.map((c) => (c.id === "0:2" ? { ...c, frameId: 4 } : c)) };
 };
+/** A page with three buttons and the given text, and a click on one of them (G55). */
+const fontButton = (node: number, label: string) => signInControl(node, label, { role: "button", tag: "button" });
+const fontPage = (text: string): Snapshot => ({ url: "http://shop.test/cart", title: "Fonts", text, headings: [], frames: [{ frameId: 0, url: "http://shop.test/cart", key: "k" }], captcha: false, more: false, controls: [fontButton(5, "Variable Font Demo"), fontButton(6, "Cancel"), fontButton(7, "+")] });
+const clickStep = (id: string) => ({ tool: "click", args: { controlId: id } });
 /** foxloop's own browser tools over a stand-in foxpaw that reads `page` and records each typed value (HP20). */
 function realTools(page: () => Snapshot, typed: string[], opened: string[] = []): NonNullable<AgentOptions["makeTools"]> {
   // What each field holds, as foxpaw reads it: a password field shows "•••".
@@ -728,21 +732,18 @@ describe("agent", () => {
   });
 
   it("G55: the third run of a step that twice returned the same on the same page does not run; a step whose result changes repeats", async () => {
-    const button = (node: number, label: string) => signInControl(node, label, { role: "button", tag: "button" });
-    const page = (text: string): Snapshot => ({ url: "http://shop.test/cart", title: "Fonts", text, headings: [], frames: [{ frameId: 0, url: "http://shop.test/cart", key: "k" }], captcha: false, more: false, controls: [button(5, "Variable Font Demo"), button(6, "Cancel"), button(7, "+")] });
     const read = { tool: "snapshot", args: {} };
-    const click = (id: string) => ({ tool: "click", args: { controlId: id } });
     const typed: string[] = [];
-    const loop = await setup({ makeTools: realTools(() => page("Fonts."), typed) });
-    await loop.run({ script: [click("0:5"), read, click("0:6"), read, click("0:5"), read, click("0:6"), read, click("0:5"), read, finish, finish] });
+    const loop = await setup({ makeTools: realTools(() => fontPage("Fonts."), typed) });
+    await loop.run({ script: [clickStep("0:5"), read, clickStep("0:6"), read, clickStep("0:5"), read, clickStep("0:6"), read, clickStep("0:5"), read, finish, finish] });
     expect(typed).toEqual(["0:5:click:", "0:6:click:", "0:5:click:", "0:6:click:"]);
     expect(loop.events.filter((e) => e.type === "approval-needed")).toHaveLength(4);
     const stopped = loop.events.filter((e) => e.type === "tool-result" && e.name === "click").at(-1) as { ok: boolean; summary: string };
     expect(stopped.ok).toBe(false);
     expect(loop.requests.some((r) => r.includes("This same step on this page returned the same result the last 2 times"))).toBe(true);
     const counted: string[] = [];
-    const counter = await setup({ makeTools: realTools(() => page(`Count: ${counted.length}.`), counted) });
-    const end = await counter.run({ script: [click("0:7"), read, click("0:7"), read, click("0:7"), read, click("0:7"), read, finish] });
+    const counter = await setup({ makeTools: realTools(() => fontPage(`Count: ${counted.length}.`), counted) });
+    const end = await counter.run({ script: [clickStep("0:7"), read, clickStep("0:7"), read, clickStep("0:7"), read, clickStep("0:7"), read, finish] });
     expect(counted).toEqual(["0:7:click:", "0:7:click:", "0:7:click:", "0:7:click:"]);
     expect(end.status).toBe("done");
   });

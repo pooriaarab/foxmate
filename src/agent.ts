@@ -205,6 +205,12 @@ export function priceTie(question: string, goal = ""): boolean {
   return tied.some((a) => tied.every((b) => a === b || order(a, b) === -1));
 }
 
+/** How often a step may return the same before its next call does not run (G55). */
+const LOOP_REPEATS = 2;
+/** A step by its tool and arguments, with the control as foxloop pinned it but not the read it was pinned on (G55). Keys in order: the gate sorts them. */
+const stepKey = (name: string, args: Record<string, unknown>) => `${name} ${JSON.stringify(args, (k, v) => (["generation", "guard", "tabId"].includes(k) ? undefined
+  : v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).toSorted(([a], [b]) => (a < b ? -1 : 1))) : v))}`;
+
 /** The host of an http or https address, or undefined. */
 function webHost(url: string | undefined): string | undefined {
   try {
@@ -529,6 +535,8 @@ export function createAgent(options: AgentOptions): Agent {
     // Each read, also those inside a form fill, waits for a sign-in first (HP1, HP10).
     ...(options.pass ? { beforeRead: (tabId: number) => passWait(tabId) } : {}),
   });
+  // What each step that acts returned in this run, by stepKey (G55).
+  const stepResults = new Map<string, string[]>();
   const paw = {
     ...shielded,
     snapshot: async (tabId: number, api?: ScriptingApi) => (lastPage = await shielded.snapshot(tabId, api)),
@@ -567,6 +575,24 @@ export function createAgent(options: AgentOptions): Agent {
         const targets = (args.targets ?? []) as { id: string; request: { op: string; value?: string } }[];
         const typed = targets.filter((t) => t.request.op === "type").at(-1)?.id;
         return [await tool.describe?.(args, ctx), formDetail(withFields(lastPage, targets), String(args.send), typed)].filter(Boolean).join(" ");
+      },
+    }))
+    // G55: a step that returned the same on the same page the last two times does not run a third time.
+    .map((tool) => (tool.scope === "read" ? tool : {
+      ...tool,
+      prepare: async (args: Record<string, unknown>, ctx: ToolContext) => {
+        const prepared = tool.prepare ? await tool.prepare(args, ctx) : args;
+        const seen = stepResults.get(stepKey(tool.name, prepared)) ?? [];
+        if (seen.length >= LOOP_REPEATS && seen.slice(-LOOP_REPEATS).every((r) => r === seen.at(-1))) {
+          throw new Error(`This same step on this page returned the same result the last ${LOOP_REPEATS} times, so it did not run again. Try another way, or finish and say what stops you.`);
+        }
+        return prepared;
+      },
+      run: async (args: Record<string, unknown>, ctx: ToolContext) => {
+        const out = await tool.run(args, ctx);
+        const key = stepKey(tool.name, args);
+        stepResults.set(key, [...(stepResults.get(key) ?? []), `${out.ok} ${out.summary} ${out.untrusted ?? ""}`]);
+        return out;
       },
     }))
     // A read that failed on a sign-in wait ends the run (HP15).
@@ -746,6 +772,7 @@ export function createAgent(options: AgentOptions): Agent {
     signInEnded = undefined;
     unanswered = undefined;
     signedInByAsk = false;
+    stepResults.clear();
     fileUnread = goalFile(input.goal);
     // foxshield's flagged text is per run, and the goal's values are never refused (S16).
     shielded.newRun(input.goal);
