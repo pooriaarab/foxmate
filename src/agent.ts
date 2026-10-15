@@ -215,6 +215,20 @@ function webHost(url: string | undefined): string | undefined {
   }
 }
 
+/**
+ * The hosts that the user's goal names by an http(s) address, each with its
+ * `www.` twin (G54). An email address names no site.
+ */
+export function goalSites(goal: string): string[] {
+  const hosts = (goal.match(/\bhttps?:\/\/[^\s<>"'()]+/gi) ?? []).flatMap((raw) => {
+    const host = /@/.test(raw.split("/")[2] ?? "") ? undefined : webHost(raw);
+    if (!host) return [];
+    const twin = /^\d+(\.\d+){3}$|^\[/.test(host) || !host.includes(".") ? [] : [host.startsWith("www.") ? host.slice(4) : `www.${host}`];
+    return [host, ...twin];
+  });
+  return [...new Set(hosts)];
+}
+
 /** A plain web address for `open_site`: http or https, a host, and no login in it (OS5). Throws otherwise. */
 function siteAddress(raw: unknown): string {
   const u = new URL(String(raw ?? "").trim());
@@ -742,8 +756,8 @@ export function createAgent(options: AgentOptions): Agent {
       if (input.loan && tab.cookieStoreId !== input.loan.cookieStoreId) return await refuse("loan-mismatch", "The tab is not in the lent container.");
       // A goal from Chat on a lent tab names no loan, but it is a loan run all the same.
       const loan = input.loan ?? (tab.cookieStoreId ? await options.loanFor?.(tab.cookieStoreId) : undefined);
-      // Only foxmate's own planner, with no web page and no loan, may ask to open a site (OS2).
-      const opens = !input.mind && !domain && !loan && Boolean(browser.tabs.create);
+      // Only foxmate's own planner with no loan may ask to open a site (OS2).
+      const opens = !input.mind && !loan && Boolean(browser.tabs.create);
       if (!domain && !extra.length && !opens) return await refuse("no-page", "The tab shows no web page.");
       if (loan?.state && loan.state !== "active") return await refuse("loan-not-active", "The loan for this tab is not active.");
       const onLoan = (h: string) => h === loan?.domain || (loan?.site !== undefined && (h === loan.site || h.endsWith(`.${loan.site}`)));
@@ -821,6 +835,9 @@ export function createAgent(options: AgentOptions): Agent {
       // need an approval: their arguments can carry the data to the page (G16, G17).
       let tabGrants: string[] = [];
       let privateSource: string | undefined;
+      // The sites the user's goal names get the tab's grants for the whole run, but not on a loan (G54).
+      const named = own && !loan ? goalSites(input.goal) : [];
+      const runSites = () => (domain ? [...new Set([domain, ...named])] : []);
       const grantTab = async () => {
         if (!domain) return;
         for (const id of tabGrants) await host.revokeGrant(id).catch(() => undefined);
@@ -831,17 +848,18 @@ export function createAgent(options: AgentOptions): Agent {
           grants.push(id);
         };
         for (const scope of scopes) {
+          const domains = runSites();
           if (scope === "submit") {
             // Only a run with no private data and no loan lets an allow rule skip the human (RU1, RU8).
-            await add({ scope, domains: [domain], expiresAt, rules: !privateSource && !loan });
+            await add({ scope, domains, expiresAt, rules: !privateSource && !loan });
           } else if (!privateSource) {
-            await add({ scope, domains: [domain], expiresAt });
+            await add({ scope, domains, expiresAt });
           } else if (scope === "fill") {
-            await add({ scope, domains: [domain], expiresAt, approval: "always" });
+            await add({ scope, domains, expiresAt, approval: "always" });
           } else {
             const reads = tabTools.filter((t) => t.scope === "read" && t.name !== "open_url").map((t) => t.name);
-            if (reads.length) await add({ scope, domains: [domain], expiresAt, tools: reads });
-            if (tabTools.some((t) => t.name === "open_url")) await add({ scope, domains: [domain], expiresAt, tools: ["open_url"], approval: "always" });
+            if (reads.length) await add({ scope, domains, expiresAt, tools: reads });
+            if (tabTools.some((t) => t.name === "open_url")) await add({ scope, domains, expiresAt, tools: ["open_url"], approval: "always" });
           }
         }
       };
@@ -923,7 +941,7 @@ export function createAgent(options: AgentOptions): Agent {
         const open = target ? await browser.tabs.get(target).catch(() => undefined) : undefined;
         if (fileUnread && shows(open, fileUnread)) fileUnread = undefined;
         // Only web sites: a module tool's domain (space.foxmate, www.googleapis.com) is not a site to open (G52).
-        const sites = domain ? [domain] : [];
+        const sites = runSites();
         const now = { url: open?.url ?? "", sites };
         // The first note is whole; a later one names only what changed (G38).
         const note = plannerContext({ ...now, title: open?.title ?? "" }, lastTab);
