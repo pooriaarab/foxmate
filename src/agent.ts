@@ -860,7 +860,9 @@ export function createAgent(options: AgentOptions): Agent {
       } : undefined;
       // G47, G48, G50: after a sent form, the helper may end the run in place of the planner's last call.
       // Only for a goal of one part, and never on a page that foxshield flagged or that still has a step left.
-      settle = !input.mind && brainCheck && mayEndOnSettle(input.goal) ? async ({ goal: goalText, signal }) => {
+      // WF27: also for a run that replayed every kept step, whose cold planner finish costs seconds; never for an answer.
+      settle = !input.mind && brainCheck ? async ({ goal: goalText, signal }) => {
+        if (!mayEndOnSettle(goalText) && !(replayDone() && !ASKS.test(goalText) && !answersOnly(goalText))) return undefined;
         // No tool runs while settle runs, so these read the page the helper reads.
         if (!formSent || newestFlagged || stepLeft(lastPage)) return undefined;
         if (!(await codeCheck()).ok) return undefined;
@@ -1014,6 +1016,8 @@ export function createAgent(options: AgentOptions): Agent {
       // The calls of this run that worked, in order; null once one may not be kept (WF6).
       let record: WorkflowStep[] | null = caching ? [] : null;
       const pending = new Map<string, WorkflowStep | FillPage | null | undefined>();
+      // Every kept step ran and the last result is ok; the planner is not asked yet (WF27).
+      const replayDone = () => Boolean(replay?.live && replay.at === replay.steps.length && !handedOff);
       const replayNext = async (messages: Message[]): Promise<ChatReply | undefined> => {
         if (!replay?.live) return undefined;
         const next = replay.steps[replay.at];
