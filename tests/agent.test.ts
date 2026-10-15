@@ -198,7 +198,7 @@ const framedSignIn = () => {
 };
 /** A page with three buttons and the given text, and a click on one of them (G55). */
 const fontButton = (node: number, label: string) => signInControl(node, label, { role: "button", tag: "button" });
-const fontPage = (text: string): Snapshot => ({ url: "http://shop.test/cart", title: "Fonts", text, headings: [], frames: [{ frameId: 0, url: "http://shop.test/cart", key: "k" }], captcha: false, more: false, controls: [fontButton(5, "Variable Font Demo"), fontButton(6, "Cancel"), fontButton(7, "+")] });
+const fontPage = (text: string, base = 0): Snapshot => ({ url: "http://shop.test/cart", title: "Fonts", text, headings: [], frames: [{ frameId: 0, url: "http://shop.test/cart", key: "k" }], captcha: false, more: false, controls: [fontButton(base + 5, "Variable Font Demo"), fontButton(base + 6, "Cancel"), fontButton(base + 7, "+")] });
 const clickStep = (id: string) => ({ tool: "click", args: { controlId: id } });
 /** foxloop's own browser tools over a stand-in foxpaw that reads `page` and records each typed value (HP20). */
 function realTools(page: () => Snapshot, typed: string[], opened: string[] = []): NonNullable<AgentOptions["makeTools"]> {
@@ -755,6 +755,17 @@ describe("agent", () => {
     const end = await counter.run({ script: [clickStep("0:7"), read, clickStep("0:7"), read, clickStep("0:7"), read, clickStep("0:7"), read, finish] });
     expect(counted).toEqual(["0:7:click:", "0:7:click:", "0:7:click:", "0:7:click:"]);
     expect(end.status).toBe("done");
+  });
+
+  it("G57: a loop on a page that renders its controls with new ids each time still stops at the third step", async () => {
+    const read = { tool: "snapshot", args: {} };
+    const typed: string[] = [];
+    const loop = await setup({ makeTools: realTools(() => fontPage("Fonts.", typed.length * 100), typed) });
+    const demo = { tool: "click", args: { controlId: "{{control:Variable Font Demo}}" } };
+    const cancel = { tool: "click", args: { controlId: "{{control:Cancel}}" } };
+    await loop.run({ script: [demo, read, cancel, read, demo, read, cancel, read, demo, read, finish, finish] });
+    expect(typed).toEqual(["0:5:click:", "0:106:click:", "0:205:click:", "0:306:click:"]);
+    expect(loop.requests.some((r) => r.includes("This same step on this page returned the same result the last 2 times"))).toBe(true);
   });
 
   it("HP20: fill types the password the goal names into a password field on the run's site, in one call with the username", async () => {
