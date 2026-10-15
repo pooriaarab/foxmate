@@ -3,7 +3,7 @@
 // through foxgate, page text passes foxshield, approvals come from a human,
 // and foxtrail records each step (docs/failure-modes.md G1-G10).
 import { createFoxgate, type Gate, type Host, type PublicSuffix, type Scope, type Store } from "foxgate";
-import { ASK_USER, FINISH, askUserTool, browserTools, createLoop, toolSpecs, type ChatReply, type CheckResult, type LoopEvent, type LoopTool, type Message, type MindLike, type SettleInput, type ToolContext, type ToolOutput } from "foxloop";
+import { ASK_USER, FINISH, askUserTool, browserTools, createLoop, toolSpecs, type ChatReply, type CheckResult, type LoopEvent, type LoopTool, type Message, type MindLike, type SettleInput, type ToolContext, type ToolDef, type ToolOutput } from "foxloop";
 import { GATE_CURRENCY, PAY_TOOL, createFoxpay, payTools, type Foxpay } from "foxpay-agent";
 import type { FoxMemory } from "foxmemory";
 import * as foxpaw from "foxpaw";
@@ -152,6 +152,9 @@ export const USER_DOMAIN = "user.foxmate";
 const SECRET_QUESTION = /pass ?(?:word|code|phrase)|\bpin\b|card ?(?:number|no\b)|\bcv[cv]2?\b|security code|one[- ]time|\botp\b|2fa|verification code|login code/i;
 // AQ10: a choice between options at one price, decided by stops and times, with no money that moves or a limit.
 const TIE_PICK = "take the one with fewer stops, then the earlier time.";
+/** G56: foxloop's finish asks for 8 words; an answer needs every fact the goal asks for. */
+const ANSWER_RULE = "When the goal asks for information, your finish summary is the answer: give every fact the goal asks for (names, numbers, prices, dates, addresses, codes, links) as the page shows it, even past 8 words.";
+const FINISH_SUMMARY = "What you did, in a few words. When the goal asks for information: the answer, with every fact the goal asks for, as the page shows it.";
 const TIE_RULE = `When options cost the same and the goal gives no other rule, do not ask: ${TIE_PICK}`;
 const TIE_OPTIONS = /\bnon-?stop\b|\bdirect\b|\bstops?\b|\b\d{1,2}:\d{2}\b/i;
 /** An amount that is not a $, € or £ price: "800 dollars", "500 EUR". */
@@ -210,6 +213,11 @@ const LOOP_REPEATS = 2;
 /** A step by its tool and arguments, with the control as foxloop pinned it but not the read it was pinned on (G55). Keys in order: the gate sorts them. */
 const stepKey = (name: string, args: Record<string, unknown>) => `${name} ${JSON.stringify(args, (k, v) => (["generation", "guard", "tabId"].includes(k) ? undefined
   : v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).toSorted(([a], [b]) => (a < b ? -1 : 1))) : v))}`;
+/** The finish tool with a summary that may hold the whole answer (G56). */
+const fullFinish = (d: ToolDef): ToolDef => (d.function.name !== FINISH ? d : {
+  ...d,
+  function: { ...d.function, description: `${d.function.description} ${FINISH_SUMMARY.slice(FINISH_SUMMARY.indexOf("When"))}`, parameters: { type: "object", properties: { summary: { type: "string", description: FINISH_SUMMARY } }, required: ["summary"] } },
+});
 
 /** The host of an http or https address, or undefined. */
 function webHost(url: string | undefined): string | undefined {
@@ -412,6 +420,7 @@ export function plannerRules({ canOpen = false, canAsk = false, days = false, fi
   return [
     "",
     "Work on the open page: read it with the tools, and use what it shows. Do not make up web addresses. Use open_url only for an address on a site that the tab note names.",
+    ANSWER_RULE,
     ...(canOpen ? [`To go to another site, call ${OPEN_TOOL} with its address. The user approves each one first. Then foxmate opens it in a new tab, and you work there.`] : []),
     // AQ6: a planner with ask_user still guesses unless the rules say when to ask.
     // G44: only a goal with a range of days gets this line, so other runs keep their cached prefix.
@@ -1018,7 +1027,7 @@ export function createAgent(options: AgentOptions): Agent {
       const plannerMind: MindLike = {
         chat: async (messages, chatOptions) => {
           const framed = await withContext(messages);
-          const shown = own ? { ...chatOptions, tools: chatOptions.tools.filter((d) => d.function.name === FINISH || visible.has(d.function.name)) } : chatOptions;
+          const shown = own ? { ...chatOptions, tools: chatOptions.tools.filter((d) => d.function.name === FINISH || visible.has(d.function.name)).map(fullFinish) } : chatOptions;
           const sent = redact ? (JSON.parse(await redact(JSON.stringify(framed))) as Message[]) : framed;
           const replayed = await replayNext(sent);
           if (replayed) return replayed;
