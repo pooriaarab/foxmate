@@ -83,7 +83,7 @@ A foxmate browser-agent planner: $BASE_REPO fine-tuned with LoRA on the tool cal
 
 ## Training data
 
-Only foxbench's `train` suite: tasks on sites that no scored benchmark uses. No case or page of a scored
+Only foxbench's \`train\` suite: tasks on sites that no scored benchmark uses. No case or page of a scored
 benchmark (foxbench core, hard, security+, MiniWoB++, WebGames, WebArena-Infinity, EIA, BrowseSafe, AgentDojo,
 tau2 and the rest) is in it. Teacher-run calls come from passed, secure runs of the teacher; on-policy calls
 are states the student reached, labelled with the teacher's reply.
