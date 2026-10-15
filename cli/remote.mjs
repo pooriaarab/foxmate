@@ -1,7 +1,7 @@
 // `foxmate bench` on Ichabod, Mozilla's cloud browser (FOXKIT_BROWSER=ichabod).
 // The browser there cannot reach this computer's 127.0.0.1, so the bench
-// mounts the task sites and the model servers on create-foxkit's one
-// Cloudflare quick tunnel. Mount paths are numbered, so each model server
+// mounts the task site (at the root) and the model servers on create-foxkit's
+// one Cloudflare quick tunnel. Mount paths are numbered, so each model server
 // sits behind a gate that forwards only under a random path: that path is
 // the capability, and no log or score holds it. Only the remote bench build
 // (dist-ext-bench/) takes a tunnel address as a local model.
@@ -26,11 +26,22 @@ export function benchExtension() {
 /** Ichabod drops a session after about 12 minutes, so the bench starts a new one between tasks after this. */
 export const SESSION_MS = 6 * 60_000;
 
-/** The public URL of a task site on 127.0.0.1, and a close() for its mount. */
+let siteMount;
+/**
+ * The public URL of a task site on 127.0.0.1, at the root of the tunnel so the
+ * site sees its own paths, and a close() for its mount (BN9). One site at a
+ * time: a site that a task past its time limit still holds is unmounted first.
+ */
 export async function publicSite(url) {
   const local = new URL(url);
-  const mount = await tunnel(Number(local.port));
-  return { url: `${mount.url}${local.pathname}${local.search}${local.hash}`, close: mount.close };
+  await siteMount?.close();
+  const mount = await tunnel(Number(local.port), { root: true });
+  siteMount = mount;
+  const close = async () => {
+    if (siteMount === mount) siteMount = undefined;
+    await mount.close();
+  };
+  return { url: `${mount.url}${local.pathname}${local.search}${local.hash}`, close };
 }
 
 async function gate(target) {

@@ -12,8 +12,8 @@ importers:
         specifier: ^1.32.1
         version: 1.32.1(zod@4.6.5)
       create-foxkit:
-        specifier: ^0.1.5
-        version: 0.1.5(yauzl@3.4.0)
+        specifier: ^0.1.9
+        version: 0.1.9(yauzl@3.4.0)
       foxbench:
         specifier: ^0.1.9
         version: 0.1.9(zod@4.6.5)
@@ -1272,8 +1272,8 @@ packages:
     resolution: {integrity: sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==}
     engines: {node: '>= 0.10'}
 
-  create-foxkit@0.1.5:
-    resolution: {integrity: sha512-Y/NeiNJK+nv4XAszj4M3Nie+yOPAFY6NkCrEgTldhRleVVU6pC5A+5q86slr7/t3HVBf3RJdjue1urgsfZ82HA==}
+  create-foxkit@0.1.9:
+    resolution: {integrity: sha512-66uxlWPXqRnbfkNJdJmck39okMN5u3ubhIndr227PCQ6m1RXg3Om8btxqHLGNxk2AYUCTShxYz3xShC2LfQCGQ==}
     engines: {node: '>=24'}
     hasBin: true
 
@@ -3841,7 +3841,7 @@ snapshots:
       object-assign: 4.1.1
       vary: 1.1.2
 
-  create-foxkit@0.1.5(yauzl@3.4.0):
+  create-foxkit@0.1.9(yauzl@3.4.0):
     dependencies:
       puppeteer-core: 25.12.0(yauzl@3.4.0)
     transitivePeerDependencies:
