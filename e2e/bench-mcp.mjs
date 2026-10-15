@@ -23,8 +23,21 @@ const leaks = (text) => secrets.filter((s) => text.includes(s)).length;
 
 async function client(args) {
   const c = new Client({ name: "e2e", version: "0.0.0" });
-  await c.connect(new StdioClientTransport({ command: process.execPath, args: ["cli/foxmate.mjs", "bench-mcp", ...args], env, stderr: "inherit" }));
+  const transport = new StdioClientTransport({ command: process.execPath, args: ["cli/foxmate.mjs", "bench-mcp", ...args], env, stderr: "inherit" });
+  await c.connect(transport);
+  c.pid = transport.pid;
   return c;
+}
+/** Whether a process is still there `ms` after the check starts. */
+async function aliveAfter(pid, ms) {
+  for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 250))) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return false;
+    }
+  }
+  return true;
 }
 const call = (c, args) => c.callTool({ name: "run_task", arguments: args }, undefined, { timeout: 900_000 });
 const text = (reply) => reply.content.map((p) => p.text ?? "").join("\n");
@@ -42,6 +55,7 @@ try {
   check("BM6 a done reply has its finish summary as answer", true, typeof two.reply.answer === "string" && two.reply.answer.length > 0);
   check("BM6 metrics count the planner calls", true, one.reply.metrics.modelCalls > 0);
   await c.close();
+  check("BM7 the server exits within 15 s of a closed stdin", false, await aliveAfter(c.pid, 15_000));
 
   // BM3: a Firefox that does not start is a tool error, not a failed task.
   if (process.env.FOXKIT_BROWSER !== "ichabod") {

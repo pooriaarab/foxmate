@@ -60,7 +60,9 @@ export async function serveBenchMcp({ planner, approve, timeoutMs, headless = tr
 
   // A stop from foxbench closes Firefox, the Ichabod session and the gates (BM7).
   let stopping;
+  // A lost session can leave a close waiting forever, so the exit comes after 10 s at most.
   const stop = () => (stopping ??= (async () => {
+    setTimeout(() => process.exit(0), 10_000).unref();
     const open = await opened?.catch(() => undefined);
     await open?.adapter.close().catch(() => undefined);
     await open?.session.fox.close().catch(() => undefined);
