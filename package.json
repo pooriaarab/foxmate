@@ -60,7 +60,7 @@
     "foxlend": "^0.1.2",
     "foxlens": "^0.1.2",
     "foxlink": "npm:foxlink-oauth@^0.1.2",
-    "foxloop": "^0.1.17",
+    "foxloop": "^0.1.19",
     "foxmemory": "^0.1.2",
     "foxmind": "^0.1.5",
     "foxnotify": "^0.1.0",
