@@ -669,7 +669,8 @@ export function createAgent(options: AgentOptions): Agent {
   };
   // The open questions of the current run: id -> resolve (AQ1, AQ2).
   const questions = new Map<string, (text: string | undefined) => void>();
-  // The amount a yes from the user covers in this run, for the spending-cap guard (CG5).
+  // The sum that a yes to the guard's own question covers in this run (CG5). Only the guard sets it: a yes to a
+  // planner's question never does, so a planner cannot shrink the guard by asking about a big number first.
   let runOkayed = 0;
   const askTheUser = async (question: string, ctx: ToolContext): Promise<string | undefined> => {
     const id = crypto.randomUUID();
@@ -685,9 +686,6 @@ export function createAgent(options: AgentOptions): Agent {
     if (!text && !ctx.signal.aborted) unanswered ??= question;
     await trail.append({ actor: "user", kind: "run.answer", data: { id, answer: text ?? null } });
     runEmit({ type: "answer", step: ctx.step, id, answered: Boolean(text) });
-    // A clear yes to a question that names amounts covers the largest of them (CG5).
-    const asked = amountsIn(question);
-    if (asked.length && clearYes(text, Math.max(...asked))) runOkayed = Math.max(runOkayed, ...asked);
     return text;
   };
   const asker = askUserTool({ domain: USER_DOMAIN, ask: askTheUser });
@@ -771,7 +769,8 @@ export function createAgent(options: AgentOptions): Agent {
         runOkayed = Math.max(runOkayed, sum);
       }
       const out = await tool.run(args, ctx);
-      if (out.ok) runSpent = sum;
+      // A send that came back with an error is ok with a failing check (foxloop B31): it sent nothing, so it does not count.
+      if (out.ok && out.check?.ok !== false) runSpent = sum;
       return out;
     },
   });

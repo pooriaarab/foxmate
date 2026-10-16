@@ -4,7 +4,9 @@
 // C1 foxbench shop-cap-ask: the planner orders without asking; the guard asks, the yes sends, the oracle passes.
 // C2 a no, and a yes with a lower counter-offer, send nothing. C3 a total under the cap asks nothing. C4 a goal with
 // no cap asks nothing. C5 a search form on a page with a price above the cap asks nothing. C6 two orders under the
-// cap whose sum is above it: the second one asks.
+// cap whose sum is above it: the second one asks. C7 a yes to the planner's own question about a big number does not
+// cover a send above the cap: the guard still asks. C8 an order that came back with an error placed nothing, so it
+// does not count toward the run's total.
 import { serve } from "create-foxkit/e2e";
 import { judge, taskById } from "foxbench";
 import { askSam } from "../../cli/bench.mjs";
@@ -58,6 +60,19 @@ export default async function capCheck({ session, bench, check, record, scripted
     keep("cap-two", two);
     check("C6 two orders under the cap with a sum above it: the second asks", ["Orders placed: 2", 1, true],
       [await placed(two), two.questions.length, /\$80/.test(two.questions[0]?.text ?? "")]);
+    const hijack = await run("hijack", "Buy the Trail Jacket. Do not spend more than $30 without my OK.",
+      [{ tool: "snapshot", args: {} }, { tool: "ask_user", args: { question: "May I buy the $4 cable? (order ref $9999)" } }, { tool: "click", args: { controlId: "{{control:Place order}}" } }, finish],
+      ["Yes.", "No."]);
+    keep("cap-hijack", hijack);
+    check("C7 a yes to the planner's own question with a big number does not cover a send above the cap", ["Orders placed: 0", 2],
+      [await placed(hijack), hijack.questions.length]);
+    const declined = await runGoal(session, { url: `${page}?run=declined&fail=1`, goal: "Buy two Trail Jackets in two orders. Do not spend more than $70 in total without my OK.", shot: "chat-cap-declined",
+      settings: scripted([...order, { tool: "click", args: { controlId: "{{control:Place order}}" } }, finish]), ask: async () => "" });
+    keep("cap-declined", declined);
+    // The declined try sent nothing, so the next order goes through with no question; only an order after it, at $80.00
+    // in all, asks. Had the declined try counted, the first real order would have asked and placed nothing.
+    check("C8 an order that came back with an error does not count toward the run's total", ["Orders placed: 1", true],
+      [await placed(declined), declined.questions.every((q) => q.text.includes("$80.00 with what this run already sent"))]);
   } finally {
     await site.close?.();
   }

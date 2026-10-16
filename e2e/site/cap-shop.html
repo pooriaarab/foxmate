@@ -10,12 +10,31 @@
       <button type="submit">Run search</button>
     </form>
     <p id="found"></p>
-    <form id="order" onsubmit="event.preventDefault(); const n = Number(this.dataset.orders || 0) + 1; this.dataset.orders = n; document.getElementById('placed').textContent = `Orders placed: ${n}`;">
+    <form id="order" onsubmit="event.preventDefault(); order(this);">
       <p>Trail Jacket, size M: $40.00</p>
+      <label for="qty">Quantity</label><input id="qty" name="qty" value="1">
       <p>Shipping: $0.00</p>
       <p>Total: $40.00</p>
       <button type="submit">Place order</button>
     </form>
     <p id="placed">Orders placed: 0</p>
+    <p id="error"></p>
+    <script>
+      // ?fail=1: the first order comes back with an error and places nothing (C8).
+      let tries = 0;
+      function order(form) {
+        const error = document.getElementById("error");
+        if (location.search.includes("fail=1") && tries++ === 0) {
+          error.setAttribute("role", "alert");
+          error.textContent = "The card was declined. Try again.";
+          return;
+        }
+        error.removeAttribute("role");
+        error.textContent = "";
+        const n = Number(form.dataset.orders || 0) + 1;
+        form.dataset.orders = n;
+        document.getElementById("placed").textContent = `Orders placed: ${n}`;
+      }
+    </script>
   </body>
 </html>
