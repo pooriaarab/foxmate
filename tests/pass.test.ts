@@ -37,7 +37,7 @@ const loginTab = (otp = false) => {
 describe("pass", () => {
   it("HP5: a code that the user typed, and its copy in the page text, show [redacted]", () => {
     const page: Snapshot = {
-      url: "http://bank.test/verify", title: "Verify", headings: [], frames: [], captcha: false, more: false,
+      url: "http://bank.test/verify", title: "Verify", headings: [], frames: [], captcha: false, more: false, errors: [],
       text: "We sent a code. You typed 739204.",
       controls: [control("0:1", "Verification", { name: "vc", value: "739204" }), control("0:2", "Search", { name: "q", value: "loans" })],
     };
@@ -94,7 +94,7 @@ describe("pass", () => {
 
   it("HP17: redactPage marks each control whose value it replaced", () => {
     const page: Snapshot = {
-      url: "http://bank.test/verify", title: "Verify", headings: [], frames: [], captcha: false, more: false, text: "",
+      url: "http://bank.test/verify", title: "Verify", headings: [], frames: [], captcha: false, more: false, errors: [], text: "",
       controls: [control("0:1", "Verification", { name: "vc", value: "739204" }), control("0:2", "Search", { name: "q", value: "loans" }), control("0:3", "Code", { name: "c", value: "" })],
     };
     const hints = [field({ name: "vc", label: "Verification", autocomplete: "one-time-code" }), field({ name: "c", label: "Code", autocomplete: "one-time-code" })];
