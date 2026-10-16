@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Feedback</title></head>
+  <body>
+    <!-- U1-U4 (send.mjs): an alert that is on the page before the send, and a good send that draws a fresh, empty form. -->
+    <p role="alert">Scheduled maintenance tonight from 22:00.</p>
+    <h1>Send feedback</h1>
+    <form id="feedback" onsubmit="event.preventDefault(); document.getElementById('sent').textContent = 'Thanks, we got it.'; this.reset();">
+      <label for="note">Your note</label><textarea id="note" name="note"></textarea>
+      <button type="submit">Send feedback</button>
+    </form>
+    <p id="sent"></p>
+  </body>
+</html>

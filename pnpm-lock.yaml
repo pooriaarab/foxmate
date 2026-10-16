@@ -33,8 +33,8 @@ importers:
         specifier: npm:foxlink-oauth@^0.1.2
         version: foxlink-oauth@0.1.2
       foxloop:
-        specifier: ^0.1.19
-        version: 0.1.19
+        specifier: ^0.1.20
+        version: 0.1.20
       foxmemory:
         specifier: ^0.1.2
         version: 0.1.2
@@ -48,8 +48,8 @@ importers:
         specifier: ^0.1.3
         version: 0.1.3
       foxpaw:
-        specifier: ^0.1.15
-        version: 0.1.15
+        specifier: ^0.1.18
+        version: 0.1.18
       foxpay-agent:
         specifier: ^0.1.2
         version: 0.1.2
@@ -1665,8 +1665,8 @@ packages:
     resolution: {integrity: sha512-V9sxhOEmk9ls4E65W208ILr5NJbl23pu1/r0vipCgNaAaZ6DzbXYd5SMoK607XaSKWDv1Gr8OR6pyjnejzU69Q==}
     engines: {node: '>=24'}
 
-  foxloop@0.1.19:
-    resolution: {integrity: sha512-RNcMUFnJmPY6/wVJSebqelRXZ4mrG7V3i3UpCMO39ALIAxjsGDiSEK3oadvXrE3I09CdeBNIIFIkGOOiKSwzAQ==}
+  foxloop@0.1.20:
+    resolution: {integrity: sha512-FjJtEqemglebcC+T7dUhR3VoEq68lkvpjjdo+WvsMln23nVGJ2abdAYVWmdrrLk8Ho3LE93aqpEVmEibVKCJug==}
     engines: {node: '>=24'}
 
   foxmemory@0.1.2:
@@ -1697,12 +1697,8 @@ packages:
     resolution: {integrity: sha512-G+b1oFE6sjiFKn1h9QRYIBW2RpdMwE3rmhRH1dr1sCxQVmyYiOc6/yvo2tlZT/x9nubfqg1f7wosopKIwNvGmQ==}
     engines: {node: '>=24'}
 
-  foxpaw@0.1.15:
-    resolution: {integrity: sha512-rManIgYUPHvxYRCQoD8QZBvOADs7hkREi9/8M5Sm8p33/m9HbjpPy4adf3XFCoHIbj/NRWHVzSUtxRt0ruA8Cw==}
-    engines: {node: '>=24'}
-
-  foxpaw@0.1.17:
-    resolution: {integrity: sha512-gsyPuy8Kwb35PtW9UHkr1ZFFzZCJm6J3xkpC+YByYIIQ0/6fBMz2OUE2fe1l/H/9ty3Alu+MtbcgaxSaRuqb0Q==}
+  foxpaw@0.1.18:
+    resolution: {integrity: sha512-ZsYfXYihRnQ5OZgW0g+Zu4q5gYS5azES/SmxskWuHPkzany7JTVo7NJEAZ/vuykSYAJnmOdSKvSOhx/qumDbNQ==}
     engines: {node: '>=24'}
 
   foxpay-agent@0.1.2:
@@ -4293,10 +4289,10 @@ snapshots:
       foxgate: 0.1.3
       foxvault: 0.1.2
 
-  foxloop@0.1.19:
+  foxloop@0.1.20:
     dependencies:
       foxgate: 0.1.3
-      foxpaw: 0.1.17
+      foxpaw: 0.1.18
 
   foxmemory@0.1.2: {}
 
@@ -4310,9 +4306,7 @@ snapshots:
 
   foxpass@0.1.3: {}
 
-  foxpaw@0.1.15: {}
-
-  foxpaw@0.1.17: {}
+  foxpaw@0.1.18: {}
 
   foxpay-agent@0.1.2:
     dependencies:
