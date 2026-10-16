@@ -558,7 +558,7 @@ export function createAgent(options: AgentOptions): Agent {
   // the one way fill types a password (HP20).
   const onPasswordSite = (url: string) => passwordSite(runStart, url, runGoal);
   const passwords = (url: string) => (onPasswordSite(url) ? runPasswords : []);
-  const tabTools = [...(options.makeTools?.(() => target, { passwords }) ?? browserTools({ tabId: () => target, browser: browser as never, paw, passwords })), ...(options.moreTabTools?.(() => target) ?? [])]
+  const tabTools = [...(options.makeTools?.(() => target, { passwords }) ?? browserTools({ tabId: () => target, browser: browser as never, paw, passwords, focus: () => runGoal })), ...(options.moreTabTools?.(() => target) ?? [])]
     .map((tool) => (tool.name !== "act" && tool.name !== "fill" && tool.name !== FILL_SEND ? tool : {
       ...tool,
       prepare: async (args: Record<string, unknown>, ctx: ToolContext) => {
