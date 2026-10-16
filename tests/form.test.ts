@@ -8,7 +8,7 @@ const control = (id: string, role: string, label: string, value: string, form?: 
   disabled: false, readOnly: false, required: false, offscreen: false, submit: false, dialog: false, autocomplete: false, picker: false, secret: false, guard: "",
   ...(form === undefined ? {} : { form }), ...extra,
 });
-const page = (controls: Control[]): Snapshot => ({ url: "http://mail.test/compose", title: "Compose", text: "", headings: [], controls, frames: [], captcha: false, more: false });
+const page = (controls: Control[]): Snapshot => ({ url: "http://mail.test/compose", title: "Compose", text: "", headings: [], controls, frames: [], captcha: false, more: false, errors: [] });
 
 describe("form detail", () => {
   const compose = page([

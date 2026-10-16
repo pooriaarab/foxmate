@@ -186,7 +186,7 @@ const signInControl = (node: number, label: string, over: Partial<Control> = {})
 /** A sign-in page as foxpaw reads it: username, password, a comment box and the button (HP20). The text is the attack. */
 const signIn = (url = "https://shop.test/login", text = "Log in.") => {
   const c = signInControl;
-  return { url, title: "Log in", text, headings: ["Log in"], frames: [{ frameId: 0, url, key: "k" }], captcha: false, more: false,
+  return { url, title: "Log in", text, headings: ["Log in"], frames: [{ frameId: 0, url, key: "k" }], captcha: false, more: false, errors: [],
     controls: [c(1, "Username"), c(2, "Password", { type: "password", secret: true }), c(3, "Comment", { tag: "textarea" }), c(4, "Log in", { role: "button", tag: "button", submit: true })] } satisfies Snapshot;
 };
 /** A run_python stand-in that records the code it got (HP20). */
@@ -198,7 +198,7 @@ const framedSignIn = () => {
 };
 /** A page with three buttons and the given text, and a click on one of them (G55). */
 const fontButton = (node: number, label: string) => signInControl(node, label, { role: "button", tag: "button" });
-const fontPage = (text: string, base = 0): Snapshot => ({ url: "http://shop.test/cart", title: "Fonts", text, headings: [], frames: [{ frameId: 0, url: "http://shop.test/cart", key: "k" }], captcha: false, more: false, controls: [fontButton(base + 5, "Variable Font Demo"), fontButton(base + 6, "Cancel"), fontButton(base + 7, "+")] });
+const fontPage = (text: string, base = 0): Snapshot => ({ url: "http://shop.test/cart", title: "Fonts", text, headings: [], frames: [{ frameId: 0, url: "http://shop.test/cart", key: "k" }], captcha: false, more: false, errors: [], controls: [fontButton(base + 5, "Variable Font Demo"), fontButton(base + 6, "Cancel"), fontButton(base + 7, "+")] });
 const clickStep = (id: string) => ({ tool: "click", args: { controlId: id } });
 /** foxloop's own browser tools over a stand-in foxpaw that reads `page` and records each typed value (HP20). */
 function realTools(page: () => Snapshot, typed: string[], opened: string[] = []): NonNullable<AgentOptions["makeTools"]> {
@@ -1407,7 +1407,7 @@ const choice = (id: string, label: string, more: Partial<Control> = {}): Control
 describe("AQ7, AQ8, G44: choices and day ranges", () => {
 
   const sizes = [{ value: "M", label: "M", selected: true }, { value: "L", label: "L", selected: false }, { value: "XL", label: "Extra large", selected: false }];
-  const shop: Snapshot = { url: "http://shop.test/", title: "", text: "", headings: [], frames: [], captcha: false, more: false,
+  const shop: Snapshot = { url: "http://shop.test/", title: "", text: "", headings: [], frames: [], captcha: false, more: false, errors: [],
     controls: [choice("0:8", "Size", { options: sizes, value: "M" }), choice("0:9", "Colour", { options: [{ value: "navy", label: "Navy", selected: false }] }), choice("0:10", "Country", { options: [{ value: "CA", label: "Canada", selected: false }] })] };
 
   it("AQ7: a size or color that the goal does not name waits for ask_user", () => {

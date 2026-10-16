@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Profile</title></head>
+  <body>
+    <!-- U1-U4 (send.mjs): a good save draws the same form again with the saved values, as a settings page does. -->
+    <h1>Your profile</h1>
+    <form id="profile" onsubmit="event.preventDefault(); document.getElementById('saved').textContent = 'Profile saved.';">
+      <label for="display">Display name</label><input id="display" name="display" value="Sam P.">
+      <button type="submit">Save profile</button>
+    </form>
+    <p id="saved"></p>
+  </body>
+</html>
