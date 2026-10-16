@@ -9,7 +9,7 @@ const control = (id: string, role: string, label: string, more: Partial<Control>
   id, frameId: 0, node: Number(id.split(":")[1]), role, tag: "button", type: "", label, name: "", placeholder: "", section: "", value: "",
   disabled: false, readOnly: false, required: false, offscreen: false, submit: false, dialog: false, autocomplete: false, picker: false, secret: false, guard: "g", ...more,
 });
-const page = (...controls: Control[]): Snapshot => ({ url: "http://shop.test/", title: "Shop", text: "", headings: [], frames: [], captcha: false, more: false, controls });
+const page = (...controls: Control[]): Snapshot => ({ url: "http://shop.test/", title: "Shop", text: "", headings: [], frames: [], captcha: false, more: false, errors: [], controls });
 const ok: Message[] = [{ role: "assistant", content: null, tool_calls: [{ id: "a", type: "function", function: { name: "click", arguments: "{}" } }] }, { role: "tool", tool_call_id: "a", content: "click: ok\nDone." }];
 const failed: Message[] = [ok[0]!, { role: "tool", tool_call_id: "a", content: "click: failed\nstale" }];
 
