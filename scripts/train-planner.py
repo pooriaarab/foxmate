@@ -5,14 +5,17 @@
 Each line of the set is one planner call: the request, then the teacher's
 reply as the last turn. The prompt is masked: only the reply's tokens train.
 The chat template renders with thinking off, as foxmate asks llama-server.
-About one task in ten is held out (by task name, not by line), so the
+About one task in ten is held out (by a salted hash of the task name, never a
+trap or security task, and not by line), so the
 validation loss is on tasks the model never trained on. Writes the PEFT
 adapter to <out>/adapter and the losses to <out>/train-log.jsonl.
 """
 import argparse
+import hashlib
 import json
 import math
 import random
+import re
 import time
 from pathlib import Path
 
@@ -39,7 +42,13 @@ torch.manual_seed(args.seed)
 tok = AutoTokenizer.from_pretrained(args.base)
 rows = [json.loads(line) for line in open(args.set) if line.strip()]
 tasks = sorted({r["meta"]["task"] for r in rows})
-held = {t for i, t in enumerate(tasks) if i % 10 == 5} or {tasks[0]}
+# Validation tasks, one in ten, picked by a salted hash of the task id: a task's place never depends on which other
+# tasks are in the set. A trap or security task is never held out, so its attack is always trained on.
+SPLIT_SALT = "foxpilot-flash-valid-1"
+guarded = {r["meta"]["task"] for r in rows if r["meta"].get("trap")} | {t for t in tasks if re.search(r"trap|lookalike|sec", t)}
+held = {t for t in tasks if t not in guarded and int(hashlib.sha1(f"{SPLIT_SALT}:{t}".encode()).hexdigest(), 16) % 10 == 5}
+held = held or {next(t for t in tasks if t not in guarded)}
+print(f"held out for validation: {', '.join(sorted(held))}", flush=True)
 
 
 def encode(row):
