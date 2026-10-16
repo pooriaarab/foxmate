@@ -163,6 +163,36 @@ const TIE_STAKES = new RegExp(String.raw`\b(?:send|sent|pay|paid|payment|transfe
 /** A goal that names an amount or a limit: the user's own rule, so a tie goes to the user (AQ10). */
 const GOAL_LIMIT = new RegExp(String.raw`[$€£]\s?\d|${AMOUNT.source}|\b(?:under|below|max|maximum|at most|no more than|up to|less than|cheaper than|budget|limits?|cap)\b`, "i");
 const PRICE = /[$€£]\s?(\d[\d,]*(?:\.\d+)?)/g;
+
+// The spending-cap guard (CG1-CG6). A goal that tells foxmate not to pay more than a sum without the user's OK states
+// a cap. A send that commits money, with a page total above the cap (counting what this run already sent), asks the
+// user first through ask_user, and only a short clear yes sends it. The page total is page data, so a page can make it
+// read low: the guard only ADDS a question, it never removes one, and it never sends anything on its own. The
+// planner's own judgement and foxshield still apply.
+const CAP_SENTENCE = /[^.!?]*\b(?:more than|over|above|exceeds?|at most|no more than|up to)\b[^.!?]*[.!?]?/gi;
+const CAP_ASK = /\b(?:without (?:my|your) ok|my ok|ask me|check with me|my approval|my go-ahead|before you (?:pay|send|book|buy|spend))\b/i;
+const MONEY_SEND = /\b(?:place (?:the |my )?order|pay|buy|check ?out|purchase|book|reserve|confirm (?:the |my )?(?:order|purchase|booking|payment|transfer|reservation)|send (?:the )?(?:money|payment|transfer))\b/i;
+const NOT_YET = /\b(?:review|preview|continue|next|search|find|filter|apply|update|add to cart)\b/i;
+const amountsIn = (text: string, sign?: string) => [...text.matchAll(PRICE)].filter((m) => !sign || m[0].startsWith(sign)).map((m) => Number(m[1]!.replaceAll(",", "")));
+/** The cap a goal states, in its currency, or undefined (CG1). */
+export function goalCap(goal: string): { value: number; sign: string } | undefined {
+  const caps = [...goal.matchAll(CAP_SENTENCE)].map((m) => m[0]).filter((t) => CAP_ASK.test(t))
+    .flatMap((t) => [...t.matchAll(PRICE)].map((m) => ({ value: Number(m[1]!.replaceAll(",", "")), sign: m[0][0]! })));
+  return caps.length ? caps.reduce((a, b) => (b.value < a.value ? b : a)) : undefined;
+}
+/** The total a page shows: the largest amount on a line that says "total", else the largest amount on the page (CG3). */
+export function pageTotal(text: string, sign: string): number | undefined {
+  const totals = text.split("\n").filter((l) => /\btotal\b/i.test(l)).flatMap((l) => amountsIn(l, sign));
+  const all = totals.length ? totals : amountsIn(text, sign);
+  return all.length ? Math.max(...all) : undefined;
+}
+/** A short, clear yes to `sum`: no "no", "but", "only", question or counter-offer, and no amount below `sum` (CG4). */
+export function clearYes(answer: string | undefined, sum: number): boolean {
+  const a = (answer ?? "").trim();
+  if (!a || a.length > 80 || !/^(?:yes|yep|yeah|ok|okay|sure|fine|go ahead|approved?)\b/i.test(a)) return false;
+  if (/\?|\b(?:no|not|don'?t|but|only|instead|less|cheaper|wait|unless|except)\b/i.test(a)) return false;
+  return amountsIn(a).every((n) => n >= sum);
+}
 const TIE_DATE = /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b|\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b|\b(?:mon|tues|wednes|thurs|fri|satur|sun)day\b|\b(?:mon|tue|wed|thu|fri|sat|sun),/gi;
 const STOP_WORDS: Record<string, number> = { one: 1, two: 2, three: 3 };
 
@@ -639,25 +669,28 @@ export function createAgent(options: AgentOptions): Agent {
   };
   // The open questions of the current run: id -> resolve (AQ1, AQ2).
   const questions = new Map<string, (text: string | undefined) => void>();
-  const asker = askUserTool({
-    domain: USER_DOMAIN,
-    ask: async (question, ctx) => {
-      const id = crypto.randomUUID();
-      await trail.append({ actor: "foxmate", kind: "run.question", data: { id, question } });
-      const answer = await new Promise<string | undefined>((resolve) => {
-        if (ctx.signal.aborted) return resolve(undefined);
-        questions.set(id, resolve);
-        ctx.signal.addEventListener("abort", () => resolve(undefined), { once: true });
-        runEmit({ type: "question", step: ctx.step, id, question });
-      });
-      questions.delete(id);
-      const text = answer?.trim() || undefined;
-      if (!text && !ctx.signal.aborted) unanswered ??= question;
-      await trail.append({ actor: "user", kind: "run.answer", data: { id, answer: text ?? null } });
-      runEmit({ type: "answer", step: ctx.step, id, answered: Boolean(text) });
-      return text;
-    },
-  });
+  // The amount a yes from the user covers in this run, for the spending-cap guard (CG5).
+  let runOkayed = 0;
+  const askTheUser = async (question: string, ctx: ToolContext): Promise<string | undefined> => {
+    const id = crypto.randomUUID();
+    await trail.append({ actor: "foxmate", kind: "run.question", data: { id, question } });
+    const answer = await new Promise<string | undefined>((resolve) => {
+      if (ctx.signal.aborted) return resolve(undefined);
+      questions.set(id, resolve);
+      ctx.signal.addEventListener("abort", () => resolve(undefined), { once: true });
+      runEmit({ type: "question", step: ctx.step, id, question });
+    });
+    questions.delete(id);
+    const text = answer?.trim() || undefined;
+    if (!text && !ctx.signal.aborted) unanswered ??= question;
+    await trail.append({ actor: "user", kind: "run.answer", data: { id, answer: text ?? null } });
+    runEmit({ type: "answer", step: ctx.step, id, answered: Boolean(text) });
+    // A clear yes to a question that names amounts covers the largest of them (CG5).
+    const asked = amountsIn(question);
+    if (asked.length && clearYes(text, Math.max(...asked))) runOkayed = Math.max(runOkayed, ...asked);
+    return text;
+  };
+  const asker = askUserTool({ domain: USER_DOMAIN, ask: askTheUser });
   // A password question on a sign-in wall that the user then passed: the same ask_user call answers that, asks nothing (HP19).
   // Each prepare and each run start clear it, so a call that the gate denies or blocks after prepare leaves nothing behind.
   let signedInByAsk = false;
@@ -711,6 +744,35 @@ export function createAgent(options: AgentOptions): Agent {
         throw new Error(`A password from the goal goes only into a password field on ${runHost ?? "the run's own site"}. Nothing ran.`);
       }
       return prepared;
+    },
+  });
+  // The spending-cap guard (CG1-CG6): the run's cap, from the goal, and what its money sends already sent.
+  let runCap: { value: number; sign: string } | undefined;
+  let runSpent = 0;
+  const money = (n: number) => `${runCap?.sign ?? "$"}${n.toFixed(2)}`;
+  const capGuard = (tool: LoopTool): LoopTool => (tool.name !== "click" && tool.name !== "fill_and_send" ? tool : {
+    ...tool,
+    run: async (args: Record<string, unknown>, ctx: ToolContext) => {
+      const send = (tool.name === "click" ? args.target : args.sendTarget) as { label?: string; submit?: boolean } | undefined;
+      const page = runCap && target && send?.submit !== false ? await foxpaw.snapshot(target, browser as never).catch(() => undefined) : undefined;
+      // Only a send that commits money: its button, or the page, reads as an order, a payment or a booking (CG2).
+      const words = `${send?.label ?? ""}`;
+      const commits = page && !NOT_YET.test(words) && (MONEY_SEND.test(words) || (!words && MONEY_SEND.test(`${page.title} ${page.headings.join(" ")}`)));
+      const total = commits && runCap ? pageTotal(page.text, runCap.sign) : undefined;
+      if (total === undefined || !runCap) return tool.run(args, ctx);
+      const sum = runSpent + total;
+      if (sum > runCap.value && runOkayed < sum) {
+        // foxmate's own words and the two numbers: no page text goes into the question (CG6).
+        const question = `The total is ${money(total)}${runSpent ? `, ${money(sum)} with what this run already sent` : ""}, above your limit of ${money(runCap.value)}. May I go ahead?`;
+        const answer = await askTheUser(question, ctx);
+        if (!clearYes(answer, sum)) {
+          return { ok: false, summary: `Nothing was sent: your limit is ${money(runCap.value)}, and the user did not OK ${money(sum)}. The user said: ${JSON.stringify(answer ?? "(no answer)")}. Do what the user said.` };
+        }
+        runOkayed = Math.max(runOkayed, sum);
+      }
+      const out = await tool.run(args, ctx);
+      if (out.ok) runSpent = sum;
+      return out;
     },
   });
   const tools = [...tabTools, ...extra.map((e) => e.tool), ...(paying ? [paying] : []), openSite];
@@ -779,6 +841,9 @@ export function createAgent(options: AgentOptions): Agent {
     if (busy) return { status: "refused", reason: "busy", message: "A run is in progress." };
     busy = true;
     runPasswords = goalPasswords(input.goal);
+    runCap = goalCap(input.goal);
+    runSpent = 0;
+    runOkayed = 0;
     runEmit = emit;
     runSignal = input.signal;
     runGoal = input.goal;
@@ -973,7 +1038,7 @@ export function createAgent(options: AgentOptions): Agent {
       const payOn = paying && domain && !payRun.off ? [paying] : [];
       const offered = (own
         ? [...(domain || opens ? pageTools : []), ...grantedTools, ...payOn, ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])]
-        : tools).map((t) => (t === askUser ? t : keepPassword(t)));
+        : tools).map((t) => (t === askUser ? t : capGuard(keepPassword(t))));
       const visible = new Set([...(domain ? pageTools : []), ...grantedTools, ...payOn, ...(opens ? [openSite] : []), ...(asks ? [askUser] : [])].map((t) => t.name));
       // The system and goal messages stay as they are, and each request starts with the one before it,
       // so a model can reuse its prompt cache. A tab note goes at the end of the newest message only when the

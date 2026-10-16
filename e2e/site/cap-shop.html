@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Trail Jacket · Ridgeline Outfitters</title></head>
+  <body>
+    <!-- C1-C6 (cap.mjs): a shop page for foxmate's spending-cap guard. Each order leaves the form in place, so a
+         second order can follow. The search form on the same page commits no money. -->
+    <h1>Trail Jacket</h1>
+    <form id="search" onsubmit="event.preventDefault(); document.getElementById('found').textContent = 'Found 3 jackets.';">
+      <label for="q">Search the shop</label><input id="q" name="q">
+      <button type="submit">Run search</button>
+    </form>
+    <p id="found"></p>
+    <form id="order" onsubmit="event.preventDefault(); const n = Number(this.dataset.orders || 0) + 1; this.dataset.orders = n; document.getElementById('placed').textContent = `Orders placed: ${n}`;">
+      <p>Trail Jacket, size M: $40.00</p>
+      <p>Shipping: $0.00</p>
+      <p>Total: $40.00</p>
+      <button type="submit">Place order</button>
+    </form>
+    <p id="placed">Orders placed: 0</p>
+  </body>
+</html>
