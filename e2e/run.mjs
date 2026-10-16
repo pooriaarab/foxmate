@@ -11,6 +11,7 @@ import activity from "./checks/activity.mjs";
 import answer from "./checks/answer.mjs";
 import app from "./checks/app.mjs";
 import bridge from "./checks/bridge.mjs";
+import cap from "./checks/cap.mjs";
 import details from "./checks/details.mjs";
 import json, { JSON_PREFS } from "./checks/json.mjs";
 import keepalive from "./checks/keepalive.mjs";
@@ -40,7 +41,7 @@ import { runGoal, startFox } from "./lib.mjs";
 // and modules go after activity: Activity shows the newest 300 entries, and their runs would
 // push the older kinds out. settle goes last: it sets a stand-in fast helper, then puts the
 // settings back.
-const CHECKS = { app, notify, signup, pass, vault, local, traps, details, memory, lend, space, phone, activity, modules, rules, open, pay, bridge, voice, tasks, json, keepalive, answer, send, settle };
+const CHECKS = { app, notify, signup, pass, vault, local, traps, details, memory, lend, space, phone, activity, modules, rules, open, pay, bridge, voice, tasks, json, keepalive, answer, send, cap, settle };
 
 const record = { startedAt: new Date().toISOString(), checks: [], runs: {} };
 const check = (name, expected, actual) => record.checks.push({ name, expected, actual, ok: JSON.stringify(actual) === JSON.stringify(expected) });
